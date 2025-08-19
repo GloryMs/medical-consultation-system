@@ -1,11 +1,13 @@
 package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.CaseComplexity;
 import jakarta.persistence.*;
 import lombok.*;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "cases")
@@ -20,10 +22,11 @@ public class Case extends BaseEntity {
     @JoinColumn(name = "patient_id", nullable = false)
     private Patient patient;
 
-    @OneToMany(mappedBy = "medicalCase",fetch = FetchType.EAGER)
-    List<Document> documents;
+    @OneToMany(mappedBy = "medicalCase", fetch = FetchType.EAGER)
+    private List<Document> documents;
 
-    private Long assignedDoctorId;
+    @OneToMany(mappedBy = "caseEntity", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CaseAssignment> assignments = new ArrayList<>();
 
     @Column(nullable = false)
     private String caseTitle;
@@ -31,9 +34,36 @@ public class Case extends BaseEntity {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
-    private String category;
+    // Structured Medical Information
+    @Column(nullable = false)
+    private String primaryDiseaseCode; // Main disease ICD code
 
-    private String subCategory;
+    @ElementCollection
+    @CollectionTable(name = "case_secondary_diseases",
+            joinColumns = @JoinColumn(name = "case_id"))
+    @Column(name = "disease_code")
+    private Set<String> secondaryDiseaseCodes;
+
+    @ElementCollection
+    @CollectionTable(name = "case_symptoms",
+            joinColumns = @JoinColumn(name = "case_id"))
+    @Column(name = "symptom_code")
+    private Set<String> symptomCodes;
+
+    @ElementCollection
+    @CollectionTable(name = "case_current_medications",
+            joinColumns = @JoinColumn(name = "case_id"))
+    @Column(name = "medication_code")
+    private Set<String> currentMedicationCodes;
+
+    @Column(nullable = false)
+    private String requiredSpecialization; // Primary specialization needed
+
+    @ElementCollection
+    @CollectionTable(name = "case_secondary_specializations",
+            joinColumns = @JoinColumn(name = "case_id"))
+    @Column(name = "specialization")
+    private Set<String> secondarySpecializations;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -46,17 +76,24 @@ public class Case extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private PaymentStatus paymentStatus;
 
-    private BigDecimal consultationFee;
+    // Case characteristics for matching
+    @Enumerated(EnumType.STRING)
+    private CaseComplexity complexity;
 
-    private LocalDateTime acceptedAt;
+    @Column(nullable = false)
+    private Boolean requiresSecondOpinion = true;
 
-    private LocalDateTime scheduledAt;
+    @Column(nullable = false)
+    private Integer minDoctorsRequired = 2;
 
-    private LocalDateTime paymentCompletedAt;
+    @Column(nullable = false)
+    private Integer maxDoctorsAllowed = 3;
 
+    // Metadata
+    private LocalDateTime submittedAt;
+    private LocalDateTime firstAssignedAt;
+    private LocalDateTime lastAssignedAt;
     private LocalDateTime closedAt;
-
-    private String rejectionReason;
-
+    private Integer assignmentAttempts = 0;
     private Integer rejectionCount = 0;
 }

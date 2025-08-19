@@ -7,6 +7,7 @@ import com.adminservice.repository.ComplaintRepository;
 import com.adminservice.repository.SystemConfigRepository;
 import com.adminservice.repository.StaticContentRepository;
 import com.adminservice.repository.UserRepository;
+import com.doctorservice.entity.Doctor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -14,9 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import javax.print.Doc;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,11 +52,16 @@ public class AdminService {
     }
 
     public void verifyDoctor(VerifyDoctorDto dto) {
-        doctorServiceClient.updateDoctorVerification(
-                dto.getDoctorId(),
-                dto.getApproved() ? "VERIFIED" : "REJECTED",
-                dto.getReason()
-        );
+        try{
+            doctorServiceClient.updateDoctorVerification(
+                    dto.getDoctorId(),
+                    dto.getApproved() ? "VERIFIED" : "REJECTED",
+                    dto.getReason()
+            );
+        } catch (Exception e) {
+            log.error("Failed to verify doctor", e);
+            log.error(e.getMessage());
+        }
     }
 
     // 26. Get System Metrics Implementation
@@ -69,19 +78,28 @@ public class AdminService {
         metrics.setNewUsersThisMonth(Long.parseLong("10.0"));
 
         // Case metrics
-        metrics.setTotalCases(patientServiceClient.getTotalCasesCount());
-        metrics.setCasesInProgress(patientServiceClient.getCasesInProgressCount());
-        metrics.setAverageCaseResolutionTime(patientServiceClient.getAverageCaseResolutionTime());
+        Map<String,Long> metricsMap = new HashMap<>();
+        try{
+            metricsMap = patientServiceClient.getAllMetrics().getBody().getData();
+            metrics.setTotalCases(metricsMap.get("totalCasesCount"));
+            metrics.setCasesInProgress(metricsMap.get("inProgressCasesCunt"));
+            metrics.setAverageCaseResolutionTime(Double.valueOf(metricsMap.get("averageCaseResolutionTime").toString()));
+        } catch (Exception e) {
+            log.error("Failed to retrieve cases metrics", e);
+            log.error(e.getMessage());
+        }
 
+        /*TODO
+        *  Enable remaining metrics*/
         // Financial metrics
-        metrics.setTotalRevenue(paymentServiceClient.getTotalRevenue());
-        metrics.setRevenueThisMonth(paymentServiceClient.getMonthlyRevenue());
-        metrics.setAverageConsultationFee(paymentServiceClient.getAverageConsultationFee());
-
-        // System health
-        metrics.setSystemUptime(calculateSystemUptime());
-        metrics.setActiveServices(getActiveServicesCount());
-        metrics.setErrorRate(calculateErrorRate());
+//        metrics.setTotalRevenue(paymentServiceClient.getTotalRevenue());
+//        metrics.setRevenueThisMonth(paymentServiceClient.getMonthlyRevenue());
+//        metrics.setAverageConsultationFee(paymentServiceClient.getAverageConsultationFee());
+//
+//        // System health
+//        metrics.setSystemUptime(calculateSystemUptime());
+//        metrics.setActiveServices(getActiveServicesCount());
+//        metrics.setErrorRate(calculateErrorRate());
 
         return metrics;
     }
@@ -116,7 +134,27 @@ public class AdminService {
 
     // 25 & 28. Get Pending Verifications Implementation
     public List<PendingVerificationDto> getPendingVerifications() {
-        return doctorServiceClient.getPendingVerifications();
+        List<PendingVerificationDto> pendingVerifications = new ArrayList<>();
+        try{
+            pendingVerifications= doctorServiceClient.getPendingVerifications().getBody().getData().
+                    stream().map(this::convertToPendingVerificationDto).collect(Collectors.toList());
+        }
+        catch(Exception e){
+            log.error("Failed to get doctors with pending verification");
+            log.error(e.getMessage());
+        }
+        return pendingVerifications;
+    }
+
+    public PendingVerificationDto convertToPendingVerificationDto(Doctor doctor) {
+        PendingVerificationDto pendingVerificationDto = new PendingVerificationDto();
+        pendingVerificationDto.setDoctorId(doctor.getUserId());
+        pendingVerificationDto.setFullName(doctor.getFullName());
+        pendingVerificationDto.setLicenseNumber(doctor.getLicenseNumber());
+        pendingVerificationDto.setSpecialization(doctor.getPrimarySpecializationCode());
+        pendingVerificationDto.setSubmittedAt(doctor.getCreatedAt());
+        pendingVerificationDto.setDocumentsUrl("To be changed .. added by me :)");
+         return pendingVerificationDto;
     }
 
     // 29. Get All Users Implementation
@@ -138,33 +176,54 @@ public class AdminService {
         }
     }
 
+    public DoctorDetailsDto convertToDoctorDetailsDto(Doctor doctor){
+        DoctorDetailsDto doctorDetailsDto = new DoctorDetailsDto();
+        doctorDetailsDto.setId(doctor.getId());
+        doctorDetailsDto.setFullName(doctor.getFullName());
+        doctorDetailsDto.setLicenseNumber(doctor.getLicenseNumber());
+        doctorDetailsDto.setPrimarySpecialization(doctor.getPrimarySpecializationCode());
+        doctorDetailsDto.setSubSpecialization("Sub Specialization .. Added by me");
+        doctorDetailsDto.setAverageRating(doctor.getAverageRating());
+        doctorDetailsDto.setConsultationCount(doctor.getTotalConsultations());
+        return doctorDetailsDto;
+    }
+
     // 30. Generate Doctor Performance Report Implementation
     public DoctorPerformanceReportDto generateDoctorPerformanceReport(Long doctorId, LocalDate startDate, LocalDate endDate) {
         DoctorPerformanceReportDto report = new DoctorPerformanceReportDto();
 
-        // Get doctor details
-        DoctorDetailsDto doctor = doctorServiceClient.getDoctorDetails(doctorId);
-        report.setDoctorName(doctor.getFullName());
-        report.setSpecialization(doctor.getPrimarySpecialization());
+        try{
+            // Get doctor details
+            DoctorDetailsDto doctor =  convertToDoctorDetailsDto(doctorServiceClient.
+                    getDoctorDetails(doctorId).getBody().getData());
+            report.setDoctorName(doctor.getFullName());
+            report.setSpecialization(doctor.getPrimarySpecialization());
 
-        // Performance metrics
-        Map<String, Object> performance = doctorServiceClient.getDoctorPerformance(doctorId, startDate, endDate);
+            // Performance metrics
+            Map<String, Object> performance = doctorServiceClient.getDoctorPerformance
+                    (doctorId, startDate, endDate).getBody().getData();
 
-        report.setTotalConsultations((Integer) performance.get("totalConsultations"));
-        report.setCompletedConsultations((Integer) performance.get("completedConsultations"));
-        report.setCancelledAppointments((Integer) performance.get("cancelledAppointments"));
-        report.setAverageRating((Double) performance.get("averageRating"));
-        report.setTotalRevenue((Double) performance.get("totalRevenue"));
-        report.setAverageConsultationTime((Integer) performance.get("averageConsultationTime"));
-        report.setPatientSatisfactionScore((Double) performance.get("satisfactionScore"));
-        report.setResponseTime((Double) performance.get("averageResponseTime"));
+            report.setTotalConsultations((Integer) performance.get("totalConsultations"));
+            report.setCompletedConsultations((Integer) performance.get("completedConsultations"));
+            report.setCancelledAppointments((Integer) performance.get("cancelledAppointments"));
+            report.setAverageRating((Double) performance.get("averageRating"));
+            report.setTotalRevenue((Double) performance.get("totalRevenue"));
+            report.setAverageConsultationTime((Integer) performance.get("averageConsultationTime"));
+            report.setPatientSatisfactionScore((Double) performance.get("satisfactionScore"));
+            report.setResponseTime((Double) performance.get("averageResponseTime"));
 
-        // Cases breakdown
-        report.setCasesByCategory((Map<String, Integer>) performance.get("casesByCategory"));
-        report.setCasesByUrgency((Map<String, Integer>) performance.get("casesByUrgency"));
+            // Cases breakdown
+            report.setCasesByCategory((Map<String, Integer>) performance.get("casesByCategory"));
+            report.setCasesByUrgency((Map<String, Integer>) performance.get("casesByUrgency"));
 
-        // Monthly trend
-        report.setMonthlyTrend((List<MonthlyPerformanceDto>) performance.get("monthlyTrend"));
+            // Monthly trend
+            report.setMonthlyTrend((List<MonthlyPerformanceDto>) performance.get("monthlyTrend"));
+        } catch (Exception e) {
+            log.error("Failed to get doctors with pending performance");
+            log.error(e.getMessage());
+        }
+
+
 
         return report;
     }

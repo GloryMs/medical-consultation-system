@@ -2,7 +2,10 @@ package com.adminservice.feign;
 
 import com.adminservice.dto.DoctorDetailsDto;
 import com.adminservice.dto.PendingVerificationDto;
+import com.commonlibrary.dto.ApiResponse;
+import com.doctorservice.entity.Doctor;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -16,21 +19,21 @@ import java.util.Map;
 public interface DoctorServiceClient {
 
     @PutMapping("/api/doctors/{doctorId}/verification")
-    void updateDoctorVerification(@PathVariable Long doctorId,
-                                  @RequestParam String status,
-                                  @RequestParam String reason);
+    ResponseEntity<ApiResponse<Void>> updateDoctorVerification(@PathVariable Long doctorId,
+                                                               @RequestParam String status,
+                                                               @RequestParam String reason);
 
     @GetMapping("/api/doctors/pending-verifications")
-    List<PendingVerificationDto> getPendingVerifications();
+    ResponseEntity<ApiResponse<List<Doctor>>> getPendingVerifications();
 
     @GetMapping("/api/doctors/pending-verifications/count")
-    Long getPendingVerificationsCount();
+    ResponseEntity<ApiResponse<Long>> getPendingVerificationsCount();
 
     @GetMapping("/api/doctors/{doctorId}")
-    DoctorDetailsDto getDoctorDetails(@PathVariable Long doctorId);
+    ResponseEntity<ApiResponse<Doctor>> getDoctorDetails(@PathVariable Long doctorId);
 
     @GetMapping("/api/doctors/{doctorId}/performance")
-    Map<String, Object> getDoctorPerformance(@PathVariable Long doctorId,
+    ResponseEntity<ApiResponse<Map<String, Object>>> getDoctorPerformance(@PathVariable Long doctorId,
                                              @RequestParam LocalDate startDate,
                                              @RequestParam LocalDate endDate);
 }

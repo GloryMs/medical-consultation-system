@@ -1,10 +1,12 @@
 package com.doctorservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.entity.AssignmentStatus;
+import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
-import com.doctorservice.entity.Appointment;
-import com.doctorservice.entity.CalendarAvailability;
-import com.doctorservice.entity.ConsultationReport;
+import com.doctorservice.entity.*;
+import com.doctorservice.feign.PatientServiceClient;
+import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.service.DoctorService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +14,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/doctors")
@@ -20,6 +25,8 @@ import java.util.List;
 public class DoctorController {
 
     private final DoctorService doctorService;
+    private final DoctorRepository doctorRepository;
+    private final PatientServiceClient caseAssignmentRepo;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<DoctorProfileDto>> createProfile(
@@ -201,4 +208,93 @@ public class DoctorController {
         doctorService.updateVerificationStatus(doctorId, status, reason);
         return ResponseEntity.ok(ApiResponse.success(null, "Verification status updated"));
     }
+
+    /* TODO
+        1-After getting the assignments form case_assignments relation table
+    *     we must get the case details*/
+    @GetMapping("/assignments")
+    public ResponseEntity<ApiResponse<List<CaseAssignmentDto>>> getMyAssignments(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam(required = false) AssignmentStatus status) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        List<CaseAssignmentDto> assignments;
+        if (status != null) {
+            assignments = caseAssignmentRepo.findByDoctorIdAndStatus(doctor.getId(), status.name()).getBody().getData();
+        } else { // "NA case:"
+            assignments = caseAssignmentRepo.findByDoctorIdAndStatus(doctor.getId(), "NA").getBody().getData();
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(assignments));
+    }
+
+    @PostMapping("/assignments/{assignmentId}/accept")
+    public ResponseEntity<ApiResponse<Void>> acceptAssignment(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long assignmentId) {
+        doctorRepository.findByUserId(userId).orElseThrow(() ->
+                new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        caseAssignmentRepo.acceptAssignment(userId, assignmentId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Assignment accepted"));
+    }
+
+    @PostMapping("/assignments/{assignmentId}/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectAssignment(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long assignmentId,
+            @Valid @RequestBody RejectAssignmentDto dto) {
+
+        doctorRepository.findByUserId(userId).orElseThrow(() ->
+                new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        caseAssignmentRepo.rejectAssignment(userId, assignmentId, dto.getReason());
+        return ResponseEntity.ok(ApiResponse.success(null, "Assignment rejected"));
+    }
+
+    @GetMapping("/status/{status}/available/{isAvailable}")
+    public ResponseEntity<ApiResponse<List<Doctor>>> findbyVerificationStatusAndIsAvailable(
+            @PathVariable VerificationStatus status, @PathVariable Boolean isAvailable){
+        List<Doctor> doctors = doctorRepository.findbyVerificationStatusAndIsAvailable(status, isAvailable);
+        return ResponseEntity.ok(ApiResponse.success(doctors));
+    }
+
+    @PutMapping("/{doctorId}/update-load/{caseStatus}")
+    public ResponseEntity<ApiResponse<Void>> updateDoctorLoad(@PathVariable Long doctorId,
+                                                       @PathVariable CaseStatus caseStatus,
+                                                              @RequestParam int flag) // 1 -> increase | 0 -> decrease
+    {
+        doctorService.updateDoctorWorkLoad(doctorId, caseStatus, flag);
+        return ResponseEntity.ok(ApiResponse.success(null, "A new case assigned for the doctor: "+ doctorId));
+    }
+
+    @GetMapping("/status/pending-verifications")
+    public ResponseEntity<ApiResponse<List<Doctor>>> getPendingVerifications(){
+        List<Doctor> doctors = doctorRepository.findByVerificationStatus(VerificationStatus.PENDING);
+        return ResponseEntity.ok(ApiResponse.success(doctors));
+    }
+
+    @GetMapping("/status/pending-verifications/count")
+    public ResponseEntity<ApiResponse<Long>> getPendingVerificationsCount(){
+        Long count = doctorRepository.countByVerificationStatus(VerificationStatus.PENDING);
+        return ResponseEntity.ok(ApiResponse.success(count));
+    }
+
+    @GetMapping("/status/{doctorId}")
+    public ResponseEntity<ApiResponse<Doctor>> getDoctorDetails(@PathVariable Long doctorId){
+        Doctor doctor = doctorRepository.findByUserId(doctorId).orElse(null);
+        return ResponseEntity.ok(ApiResponse.success(doctor));
+    }
+
+
+    @GetMapping("/status/{doctorId}/performance")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDoctorPerformance(@PathVariable Long doctorId,
+                                                                                 @RequestParam LocalDate startDate,
+                                                                                 @RequestParam LocalDate endDate){
+        /*TODO
+        *  update code below to get doctor performance Map*/
+        Map<String, Object> doctorPerformance = new HashMap<>();
+        return ResponseEntity.ok(ApiResponse.success(doctorPerformance));
+    }
+
 }

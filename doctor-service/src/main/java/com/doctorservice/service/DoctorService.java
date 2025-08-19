@@ -37,25 +37,33 @@ public class DoctorService {
         if (doctorRepository.existsByLicenseNumber(dto.getLicenseNumber())) {
             throw new BusinessException("License number already registered", HttpStatus.CONFLICT);
         }
+        /* TODO
+        *   Set some default values for the new Created Profile*/
 
         Doctor doctor = Doctor.builder()
                 .userId(userId)
                 .fullName(dto.getFullName())
                 .licenseNumber(dto.getLicenseNumber())
-                .primarySpecialization(dto.getPrimarySpecialization())
-                .subSpecialization(dto.getSubSpecialization())
-                .hourlyRate(dto.getHourlyRate())
-                .caseRate(dto.getCaseRate())
+                .primarySpecializationCode(dto.getPrimarySpecializationCode())
+                .subSpecializationCodes(dto.getSubSpecializationCodes())
+                .baseConsultationFee(dto.getBaseConsultationFee())
                 .verificationStatus(VerificationStatus.PENDING)
-                .professionalSummary(dto.getProfessionalSummary())
+                .complexCaseFee(dto.getComplexCaseFee())
+                .maxComplexityLevel(dto.getMaxComplexityLevel())
                 .yearsOfExperience(dto.getYearsOfExperience())
+                .averageRating(0.0)
+                .acceptsComplexCases(dto.getAcceptsComplexCases())
+                .acceptsUrgentCases(dto.getAcceptsUrgentCases())
+                .acceptsSecondOpinions(dto.getAcceptsSecondOpinions())
+                .certifications(dto.getCertifications())
+                .diseaseExpertiseCodes(dto.getSymptomExpertiseCodes())
+                .preferredCaseTypes(dto.getPreferredCaseTypes())
+                .researchAreas(dto.getResearchAreas())
+                .symptomExpertiseCodes(dto.getSymptomExpertiseCodes())
+                .yearsOfExperience(dto.getYearsOfExperience())
+                .symptomExpertiseCodes(dto.getSymptomExpertiseCodes())
                 .phoneNumber(dto.getPhoneNumber())
                 .email(dto.getEmail())
-                .hospitalAffiliation(dto.getHospitalAffiliation())
-                .qualifications(dto.getQualifications())
-                .languages(dto.getLanguages())
-                .averageRating(0.0)
-                .consultationCount(0)
                 .isAvailable(true)
                 .build();
 
@@ -142,8 +150,11 @@ public class DoctorService {
         // Update case status to CONSULTATION_COMPLETE
         patientServiceClient.updateCaseStatus(dto.getCaseId(), "CONSULTATION_COMPLETE", doctor.getId());
 
+        /*TODO
+        *  Update doctor's consultation count*/
+
         // Update doctor's consultation count
-        doctor.setConsultationCount(doctor.getConsultationCount() + 1);
+        //doctor.setConsultationCount(doctor.getConsultationCount() + 1);
         doctorRepository.save(doctor);
 
         return report;
@@ -170,18 +181,18 @@ public class DoctorService {
         dto.setUserId(doctor.getUserId());
         dto.setFullName(doctor.getFullName());
         dto.setLicenseNumber(doctor.getLicenseNumber());
-        dto.setPrimarySpecialization(doctor.getPrimarySpecialization());
-        dto.setSubSpecialization(doctor.getSubSpecialization());
-        dto.setHourlyRate(doctor.getHourlyRate());
-        dto.setCaseRate(doctor.getCaseRate());
+//        dto.setPrimarySpecialization(doctor.getPrimarySpecialization());
+//        dto.setSubSpecialization(doctor.getSubSpecialization());
+//        dto.setHourlyRate(doctor.getHourlyRate());
+//        dto.setCaseRate(doctor.getCaseRate());
         dto.setVerificationStatus(doctor.getVerificationStatus());
-        dto.setProfessionalSummary(doctor.getProfessionalSummary());
+        //dto.setProfessionalSummary(doctor.getProfessionalSummary());
         dto.setYearsOfExperience(doctor.getYearsOfExperience());
-        dto.setPhoneNumber(doctor.getPhoneNumber());
-        dto.setEmail(doctor.getEmail());
-        dto.setHospitalAffiliation(doctor.getHospitalAffiliation());
-        dto.setQualifications(doctor.getQualifications());
-        dto.setLanguages(doctor.getLanguages());
+        //dto.setPhoneNumber(doctor.getPhoneNumber());
+        //dto.setEmail(doctor.getEmail());
+        //dto.setHospitalAffiliation(doctor.getHospitalAffiliation());
+        //dto.setQualifications(doctor.getQualifications());
+        //dto.setLanguages(doctor.getLanguages());
         return dto;
     }
 
@@ -192,13 +203,16 @@ public class DoctorService {
         return mapToDto(doctor);
     }
 
+    /*TODO
+    *  updateAvailability not works now, must be fixed*/
+
     // 11. Update Availability Implementation
     @Transactional
     public void updateAvailability(Long userId, AvailabilityDto dto) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        doctor.setAvailableTimeSlots(dto.getAvailableTimeSlots());
+        //doctor.setAvailableTimeSlots(dto.getAvailableTimeSlots());
         doctor.setIsAvailable(dto.getIsAvailable());
         doctorRepository.save(doctor);
     }
@@ -208,16 +222,20 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        return patientServiceClient.getCasesByDoctorId(doctor.getId());
+        return patientServiceClient.getCasesByDoctorId(doctor.getId()).getBody().getData();
     }
 
+
+    /*TODO
+    *  browseCasesPool now work now, must be fixed by getting the specialization from DB */
     // 13. Browse Cases Pool Implementation
     public List<CaseDto> browseCasesPool(Long userId, String specialization) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        String spec = specialization != null ? specialization : doctor.getPrimarySpecialization();
-        return patientServiceClient.getCasesPool(spec);
+        //String spec = specialization != null ? specialization : doctor.getPrimarySpecialization();
+        String spec = "Must be from Specialization Table";
+        return patientServiceClient.getCasesPool(spec).getBody().getData();
     }
 
     // 15. Reject Case Implementation
@@ -226,7 +244,9 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        patientServiceClient.rejectCase(caseId, doctor.getId(), reason);
+        /*TODO
+        *  I think no more need for below - double check*/
+        //patientServiceClient.rejectCase(caseId, doctor.getId(), reason);
     }
 
     // 16. Set Dynamic Fee Implementation
@@ -235,7 +255,9 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        patientServiceClient.setCaseFee(caseId, dto.getConsultationFee(), dto.getReason());
+        /*TODO
+         *  I think no more need for below - double check*/
+        //patientServiceClient.setCaseFee(caseId, dto.getConsultationFee(), dto.getReason());
     }
 
     // 17. Reschedule Appointment Implementation
@@ -375,6 +397,26 @@ public class DoctorService {
             doctor.setVerifiedAt(LocalDateTime.now());
         }
 
+        doctorRepository.save(doctor);
+    }
+
+    @Transactional
+    public void updateDoctorWorkLoad(Long doctorId, CaseStatus status, int flag) {
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        if(flag == 1){ //increase work load
+            //PENDING
+            if( status.name().equals("ASSIGNED") ) {
+                doctor.setCurrentCaseLoad( doctor.getCurrentCaseLoad() + 1 );
+            }
+            else if (status.name().equals("ACCEPTED")) {
+                doctor.setAcceptedCases( doctor.getAcceptedCases() + 1 );
+            }
+        }
+        else{ //decrease work load
+            doctor.setCurrentCaseLoad( Math.max(doctor.getCurrentCaseLoad() - 1 , 0)  );
+        }
         doctorRepository.save(doctor);
     }
 }

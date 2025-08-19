@@ -1,5 +1,7 @@
 package com.patientservice.service;
 
+import com.commonlibrary.entity.AssignmentPriority;
+import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.*;
@@ -13,9 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import static com.patientservice.entity.CaseStatus.*;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +32,93 @@ public class PatientService {
     private final RescheduleRequestRepository rescheduleRequestRepository;
     private final PaymentServiceClient paymentServiceClient;
     private final NotificationServiceClient notificationServiceClient;
+    private final CaseAssignmentRepository caseAssignmentRepository;
+    private final MedicalConfigurationService configService;
+    private final SmartCaseAssignmentService assignmentService;
+    private final CaseAssignmentRepository assignmentRepository;
+
+    //@Override
+    @Transactional
+    public Case createCase(Long userId, CreateCaseDto dto) {
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        // Enhanced validation with configuration data
+        /* TODO
+        *   Re-Enable validation function()*/
+        //validateCaseSubmission(patient, dto);
+
+        Case medicalCase = Case.builder()
+                .patient(patient)
+                .caseTitle(dto.getCaseTitle())
+                .description(dto.getDescription())
+                .primaryDiseaseCode(dto.getPrimaryDiseaseCode())
+                .secondaryDiseaseCodes(dto.getSecondaryDiseaseCodes())
+                .symptomCodes(dto.getSymptomCodes())
+                .currentMedicationCodes(dto.getCurrentMedicationCodes())
+                .requiredSpecialization(dto.getRequiredSpecialization())
+                .secondarySpecializations(dto.getSecondarySpecializations())
+                .status(SUBMITTED)
+                .urgencyLevel(dto.getUrgencyLevel())
+                .complexity(dto.getComplexity())
+                .paymentStatus(PaymentStatus.PENDING)
+                .requiresSecondOpinion(dto.getRequiresSecondOpinion())
+                .minDoctorsRequired(dto.getMinDoctorsRequired())
+                .maxDoctorsAllowed(dto.getMaxDoctorsAllowed())
+                .submittedAt(LocalDateTime.now())
+                .assignmentAttempts(0)
+                .rejectionCount(0)
+                .build();
+
+        Case saved = caseRepository.save(medicalCase);
+
+        // Update case status to PENDING and trigger smart assignment
+        saved.setStatus(CaseStatus.PENDING);
+        caseRepository.save(saved);
+
+        // Trigger smart case assignment asynchronously
+        CompletableFuture.runAsync(() -> {
+            try {
+                Thread.sleep(1000); // Small delay to ensure transaction is committed
+                assignmentService.assignCaseToMultipleDoctors(saved.getId());
+            } catch (Exception e) {
+                System.out.println("Failed to assign case {} automatically: " +  saved.getId());
+                e.fillInStackTrace();
+            }
+        });
+
+        return saved;
+    }
+
+    private void validateCaseSubmission(Patient patient, CreateCaseDto dto) {
+        // Validate subscription
+        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+            throw new BusinessException("Active subscription required", HttpStatus.PAYMENT_REQUIRED);
+        }
+
+        // Validate disease code exists
+        try {
+            configService.findDiseaseByIcdCodeCustom(dto.getPrimaryDiseaseCode());
+        } catch (Exception e) {
+            throw new BusinessException("Invalid primary disease code", HttpStatus.BAD_REQUEST);
+        }
+
+        // Validate specialization matches disease requirements
+        Set<String> requiredSpecs = configService.getSpecializationsForDisease(dto.getPrimaryDiseaseCode());
+        if (!requiredSpecs.isEmpty() && !requiredSpecs.contains(dto.getRequiredSpecialization())) {
+            throw new BusinessException("Specialization does not match disease requirements", HttpStatus.BAD_REQUEST);
+        }
+
+        // Validate all secondary disease codes
+        for (String diseaseCode : dto.getSecondaryDiseaseCodes()) {
+            try {
+                configService.getDiseaseByCode(diseaseCode);
+            } catch (Exception e) {
+                throw new BusinessException("Invalid secondary disease code: " + diseaseCode, HttpStatus.BAD_REQUEST);
+            }
+        }
+    }
+
 
     @Transactional
     public PatientProfileDto createProfile(Long userId, PatientProfileDto dto) {
@@ -89,42 +180,42 @@ public class PatientService {
         return dto;
     }
 
-    @Transactional
-    public Case createCase(Long userId, CreateCaseDto dto) {
-        Patient patient = patientRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
-
-        // Check subscription status
-        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
-            throw new BusinessException("Active subscription required to submit cases", HttpStatus.FORBIDDEN);
-        }
-
-        if (patient.getAccountLocked()) {
-            throw new BusinessException("Account is locked. Please complete subscription payment", HttpStatus.FORBIDDEN);
-        }
-
-        Case medicalCase = Case.builder()
-                .patient(patient)
-                .caseTitle(dto.getCaseTitle())
-                .description(dto.getDescription())
-                .category(dto.getCategory())
-                .subCategory(dto.getSubCategory())
-                .status(CaseStatus.SUBMITTED)
-                .urgencyLevel(dto.getUrgencyLevel())
-                .paymentStatus(PaymentStatus.PENDING)
-                .rejectionCount(0)
-                .build();
-
-        Case saved = caseRepository.save(medicalCase);
-
-        // Update patient's case count
-        patient.setCasesSubmitted(patient.getCasesSubmitted() + 1);
-        patientRepository.save(patient);
-
-        // Move to PENDING status for doctor assignment
-        saved.setStatus(CaseStatus.PENDING);
-        return caseRepository.save(saved);
-    }
+//    @Transactional
+//    public Case createCase(Long userId, CreateCaseDto dto) {
+//        Patient patient = patientRepository.findByUserId(userId)
+//                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+//
+//        // Check subscription status
+//        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+//            throw new BusinessException("Active subscription required to submit cases", HttpStatus.FORBIDDEN);
+//        }
+//
+//        if (patient.getAccountLocked()) {
+//            throw new BusinessException("Account is locked. Please complete subscription payment", HttpStatus.FORBIDDEN);
+//        }
+//
+//        Case medicalCase = Case.builder()
+//                .patient(patient)
+//                .caseTitle(dto.getCaseTitle())
+//                .description(dto.getDescription())
+//                //.category(dto.getCategory())
+//                //.subCategory(dto.getSubCategory())
+//                .status(CaseStatus.SUBMITTED)
+//                .urgencyLevel(dto.getUrgencyLevel())
+//                .paymentStatus(PaymentStatus.PENDING)
+//                .rejectionCount(0)
+//                .build();
+//
+//        Case saved = caseRepository.save(medicalCase);
+//
+//        // Update patient's case count
+//        patient.setCasesSubmitted(patient.getCasesSubmitted() + 1);
+//        patientRepository.save(patient);
+//
+//        // Move to PENDING status for doctor assignment
+//        saved.setStatus(CaseStatus.PENDING);
+//        return caseRepository.save(saved);
+//    }
 
     public List<Case> getPatientCases(Long userId) {
         Patient patient = patientRepository.findByUserId(userId)
@@ -133,10 +224,18 @@ public class PatientService {
         return caseRepository.findByPatientId(patient.getId());
     }
 
-
     public List<CaseDto> getCasesforDoctor(Long doctorId) {
-        return caseRepository.findByAssignedDoctorId(doctorId).stream().
-                map(this::convertToCaseDto).collect(Collectors.toList());
+        List<CaseAssignment> caseAssignments =  assignmentRepository.findByDoctorId( doctorId);
+        List<Case> casesForDoctor = new ArrayList<>();
+        List<Case> allCasses = caseRepository.findAllCases();
+
+        for (CaseAssignment caseAssignment : caseAssignments) {
+            Case newCase = allCasses.stream().
+                    filter(p-> p.getId().equals(caseAssignment.getCaseEntity().getId()) ).toList().get(0);
+            casesForDoctor.add(newCase);
+        }
+
+        return casesForDoctor.stream().map(this::convertToCaseDto).collect(Collectors.toList());
     }
 
     public CaseDto convertToCaseDto(Case newCase){
@@ -144,7 +243,7 @@ public class PatientService {
         caseDto.setId(newCase.getId());
         caseDto.setCaseTitle(newCase.getCaseTitle());
         caseDto.setDescription(newCase.getDescription());
-        caseDto.setCategory(newCase.getCategory());
+        //caseDto.setCategory(newCase.getCategory());
         caseDto.setCreatedAt(newCase.getCreatedAt());
         caseDto.setUrgencyLevel(newCase.getUrgencyLevel().toString());
         caseDto.setStatus(newCase.getStatus().toString());
@@ -197,9 +296,9 @@ public class PatientService {
         }
 
         // Simulate payment processing
-        medicalCase.setConsultationFee(amount);
+        //medicalCase.setConsultationFee(amount);
         medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
-        medicalCase.setPaymentCompletedAt(LocalDateTime.now());
+        //medicalCase.setPaymentCompletedAt(LocalDateTime.now());
         medicalCase.setStatus(CaseStatus.IN_PROGRESS);
 
         caseRepository.save(medicalCase);
@@ -319,19 +418,19 @@ public class PatientService {
         details.setId(medicalCase.getId());
         details.setCaseTitle(medicalCase.getCaseTitle());
         details.setDescription(medicalCase.getDescription());
-        details.setCategory(medicalCase.getCategory());
-        details.setSubCategory(medicalCase.getSubCategory());
+        //details.setCategory(medicalCase.getCategory());
+        //details.setSubCategory(medicalCase.getSubCategory());
         details.setStatus(medicalCase.getStatus());
         details.setUrgencyLevel(medicalCase.getUrgencyLevel());
-        details.setAssignedDoctorId(medicalCase.getAssignedDoctorId());
-        details.setConsultationFee(medicalCase.getConsultationFee());
+        //details.setAssignedDoctorId(medicalCase.getAssignedDoctorId());
+        //details.setConsultationFee(medicalCase.getConsultationFee());
         details.setPaymentStatus(medicalCase.getPaymentStatus());
         details.setCreatedAt(medicalCase.getCreatedAt());
-        details.setAcceptedAt(medicalCase.getAcceptedAt());
-        details.setScheduledAt(medicalCase.getScheduledAt());
-        details.setPaymentCompletedAt(medicalCase.getPaymentCompletedAt());
-        details.setClosedAt(medicalCase.getClosedAt());
-        details.setRejectionReason(medicalCase.getRejectionReason());
+        //details.setAcceptedAt(medicalCase.getAcceptedAt());
+        //details.setScheduledAt(medicalCase.getScheduledAt());
+        //details.setPaymentCompletedAt(medicalCase.getPaymentCompletedAt());
+        //details.setClosedAt(medicalCase.getClosedAt());
+        //details.setRejectionReason(medicalCase.getRejectionReason());
 
         // Add documents if any
         List<Document> documents = documentRepository.findByCaseId(caseId);
@@ -370,7 +469,8 @@ public class PatientService {
         // Notify doctor
         notificationServiceClient.sendNotification(
                 patient.getUserId(),
-                medicalCase.getAssignedDoctorId(),
+                //medicalCase.getAssignedDoctorId(), // Here we have to get Doctor Id.
+                Long.parseLong("1"),
                 "Reschedule Request",
                 "Patient requested to reschedule appointment for case: " + medicalCase.getCaseTitle()
         );
@@ -383,7 +483,7 @@ public class PatientService {
 
         List<PaymentHistoryDto> paymentHistoryDtoList = new ArrayList<>();
         try{
-            paymentHistoryDtoList = paymentServiceClient.getPatientPaymentHistory(patient.getId());
+            paymentHistoryDtoList = paymentServiceClient.getPatientPaymentHistory(patient.getId()).getBody().getData();
         }catch(Exception e) {
             paymentHistoryDtoList = null;
             e.printStackTrace();
@@ -393,6 +493,9 @@ public class PatientService {
     }
 
     // 6. Update Case Status Implementation (For internal use by other services)
+    /*TODO
+    *  1- upodate the needed locations: Case/Case_Assingment tables
+    *  2- Instead of the trigger in DB, we must call loadDoctorWorkLoad() function (call it form DB)*/
     @Transactional
     public void updateCaseStatus(Long caseId, String status, Long doctorId) {
         Case medicalCase = caseRepository.findById(caseId)
@@ -400,18 +503,115 @@ public class PatientService {
 
         CaseStatus newStatus = CaseStatus.valueOf(status);
         medicalCase.setStatus(newStatus);
-
-        if (newStatus == CaseStatus.ACCEPTED) {
-            medicalCase.setAcceptedAt(LocalDateTime.now());
-            medicalCase.setAssignedDoctorId(doctorId);
-        } else if (newStatus == CaseStatus.SCHEDULED) {
-            medicalCase.setScheduledAt(LocalDateTime.now());
-        } else if (newStatus == CaseStatus.IN_PROGRESS) {
-            medicalCase.setPaymentCompletedAt(LocalDateTime.now());
-        } else if (newStatus == CaseStatus.CONSULTATION_COMPLETE || newStatus == CaseStatus.CLOSED) {
-            medicalCase.setClosedAt(LocalDateTime.now());
-        }
+//
+//        if (newStatus == CaseStatus.ACCEPTED) {
+//            medicalCase.setAcceptedAt(LocalDateTime.now());
+//            medicalCase.setAssignedDoctorId(doctorId);
+//        } else if (newStatus == CaseStatus.SCHEDULED) {
+//            medicalCase.setScheduledAt(LocalDateTime.now());
+//        } else if (newStatus == CaseStatus.IN_PROGRESS) {
+//            medicalCase.setPaymentCompletedAt(LocalDateTime.now());
+//        } else if (newStatus == CaseStatus.CONSULTATION_COMPLETE || newStatus == CaseStatus.CLOSED) {
+//            medicalCase.setClosedAt(LocalDateTime.now());
+//        }
 
         caseRepository.save(medicalCase);
+    }
+
+    @Transactional
+    public void acceptAssignment(Long doctorId, Long assignmentId){
+        CaseAssignment caseAssignment =  caseAssignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new BusinessException("Assignment not found", HttpStatus.NOT_FOUND));
+        if (!caseAssignment.getDoctorId().equals(doctorId)) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+
+        if (caseAssignment.getStatus() != AssignmentStatus.PENDING) {
+            throw new BusinessException("Assignment cannot be accepted", HttpStatus.BAD_REQUEST);
+        }
+
+        caseAssignment.setStatus(AssignmentStatus.ACCEPTED);
+        caseAssignment.setRespondedAt(LocalDateTime.now());
+        caseAssignmentRepository.save(caseAssignment);
+
+        // Update case status if this is the primary assignment
+        if (caseAssignment.getPriority() == AssignmentPriority.PRIMARY) {
+            Case medicalCase = caseAssignment.getCaseEntity();
+            medicalCase.setStatus(CaseStatus.ACCEPTED);
+            caseRepository.save(medicalCase);
+        }
+    }
+
+    @Transactional
+    public void rejectAssignment(Long doctorId, Long assignmentId, String reason){
+        CaseAssignment assignment =  caseAssignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new BusinessException("Assignment not found", HttpStatus.NOT_FOUND));
+        if (!assignment.getDoctorId().equals(doctorId)) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+
+        if (assignment.getStatus() != AssignmentStatus.PENDING) {
+            throw new BusinessException("Assignment cannot be accepted", HttpStatus.BAD_REQUEST);
+        }
+
+        assignment.setStatus(AssignmentStatus.REJECTED);
+        assignment.setRejectionReason(reason);
+        assignment.setRespondedAt(LocalDateTime.now());
+        caseAssignmentRepository.save(assignment);
+
+        // Update doctor's case load
+        /*TODO
+        *  1- Call update doctor work load function in db
+        *  2- Trigger case assignment algorithm*/
+//        doctor.setCurrentCaseLoad(Math.max(0, doctor.getCurrentCaseLoad() - 1));
+//        doctor.setRejectedCases(doctor.getRejectedCases() + 1);
+//        doctorRepository.save(doctor);
+    }
+
+    public static CaseAssignmentDto assignmentDtoCovert(CaseAssignment assignment) {
+        CaseAssignmentDto dto = new CaseAssignmentDto();
+        dto.setId(assignment.getId());
+        dto.setAssignedAt(assignment.getAssignedAt());
+        dto.setStatus(assignment.getStatus());
+        dto.setAssignmentReason(assignment.getAssignmentReason());
+        dto.setPriority(assignment.getPriority());
+        dto.setCaseId(assignment.getCaseEntity().getId());
+        dto.setRejectionReason(assignment.getRejectionReason());
+        dto.setRespondedAt(assignment.getRespondedAt());
+        dto.setExpiresAt(assignment.getExpiresAt());
+        dto.setMatchingScore(assignment.getMatchingScore());
+        return dto;
+    }
+
+    public Map<String,Long> getAllCassesMetrics(){
+        Map<String,Long> metrics = new HashMap<>();
+        List<CaseStatus> activeStatusList = new ArrayList<>();
+        activeStatusList.add(CaseStatus.PENDING);
+        activeStatusList.add(CaseStatus.SUBMITTED);
+        activeStatusList.add(CaseStatus.ASSIGNED);
+        activeStatusList.add(CaseStatus.ACCEPTED);
+        activeStatusList.add(CaseStatus.SCHEDULED);
+        activeStatusList.add(CaseStatus.PAYMENT_PENDING);
+        activeStatusList.add(CaseStatus.IN_PROGRESS);
+        activeStatusList.add(CaseStatus.CONSULTATION_COMPLETE);
+        activeStatusList.add(CaseStatus.REJECTED);
+
+        Long activeCasesCount = caseRepository.countByStatusIn(activeStatusList);
+        Long completedCasesCount = caseRepository.countByStatus(CONSULTATION_COMPLETE);
+        Long inProgressCasesCunt = caseRepository.countByStatus(IN_PROGRESS);
+        Long activeSubscriptionsCount = patientRepository.countBySubscriptionStatus(SubscriptionStatus.ACTIVE);
+        //Long averageCaseResolutionTime = Long.valueOf(caseRepository.calculateAverageResolutionTime());
+
+        activeStatusList.add(CaseStatus.CLOSED);
+        Long totalCasesCount = caseRepository.countByStatusIn(activeStatusList);
+
+        metrics.put("totalCasesCount", totalCasesCount);
+        metrics.put("activeCasesCount", activeCasesCount);
+        metrics.put("completedCasesCount", completedCasesCount);
+        metrics.put("inProgressCasesCunt", inProgressCasesCunt);
+        metrics.put("activeSubscriptionsCount", activeSubscriptionsCount);
+        //metrics.put("averageCaseResolutionTime", averageCaseResolutionTime);
+
+        return metrics;
     }
 }

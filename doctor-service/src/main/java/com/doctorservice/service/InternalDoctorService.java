@@ -1,7 +1,7 @@
 package com.doctorservice.service;
 
-import com.adminservice.dto.DoctorDetailsDto;
-import com.adminservice.dto.PendingVerificationDto;
+import com.doctorservice.dto.DoctorDetailsDto;
+import com.doctorservice.dto.PendingVerificationDto;
 import com.doctorservice.entity.Doctor;
 import com.doctorservice.entity.VerificationStatus;
 import com.doctorservice.repository.DoctorRepository;
@@ -43,10 +43,10 @@ public class InternalDoctorService {
         dto.setId(doctor.getId());
         dto.setFullName(doctor.getFullName());
         dto.setLicenseNumber(doctor.getLicenseNumber());
-        dto.setPrimarySpecialization(doctor.getPrimarySpecialization());
-        dto.setSubSpecialization(doctor.getSubSpecialization());
+        dto.setPrimarySpecialization(doctor.getPrimarySpecializationCode());
+        dto.setSubSpecialization("Sub Specialization .. Added by me");
         dto.setAverageRating(doctor.getAverageRating());
-        dto.setConsultationCount(doctor.getConsultationCount());
+        dto.setConsultationCount(doctor.getTotalConsultations());
         
         return dto;
     }
@@ -88,7 +88,7 @@ public class InternalDoctorService {
         dto.setDoctorId(doctor.getId());
         dto.setFullName(doctor.getFullName());
         dto.setLicenseNumber(doctor.getLicenseNumber());
-        dto.setSpecialization(doctor.getPrimarySpecialization());
+        dto.setSpecialization("Sub Specialization .. Added by me");
         dto.setSubmittedAt(doctor.getCreatedAt());
         return dto;
     }

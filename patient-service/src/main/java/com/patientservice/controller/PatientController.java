@@ -3,7 +3,9 @@ package com.patientservice.controller;
 import com.commonlibrary.dto.ApiResponse;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
+import com.patientservice.entity.CaseAssignment;
 import com.patientservice.entity.Complaint;
+import com.patientservice.repository.CaseAssignmentRepository;
 import com.patientservice.service.ComplaintService;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
@@ -14,7 +16,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/patients")
@@ -24,6 +30,7 @@ public class PatientController {
     private final PatientService patientService;
     private final ComplaintService complaintService;
     private final ReportService reportService;
+    private final CaseAssignmentRepository assignmentRepository;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<PatientProfileDto>> createProfile(
@@ -164,4 +171,43 @@ public class PatientController {
         patientService.payConsultationFee(userId, caseId, amount);
         return ResponseEntity.ok(ApiResponse.success(null, "Payment completed successfully"));
     }
+
+    @PostMapping("/case-assignment/{doctorId}/assignment/{assignmentId}")
+    public ResponseEntity<ApiResponse<Void>> acceptAssignment(
+            @PathVariable Long doctorId,
+            @PathVariable Long assignmentId) {
+        patientService.acceptAssignment(doctorId, assignmentId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Assignment accepted"));
+    }
+
+    @PostMapping("/case-assignment/{doctorId}/assignment/{assignmentId}/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectAssignment(
+            @PathVariable Long doctorId,
+            @PathVariable Long assignmentId,
+            @RequestParam String reason) {
+        patientService.rejectAssignment(doctorId, assignmentId, reason);
+        return ResponseEntity.ok(ApiResponse.success(null, "Assignment rejected"));
+    }
+
+    @GetMapping("/case-assignments")
+    public ResponseEntity<ApiResponse<List<CaseAssignmentDto>>> getCasesByDoctorIdAndStatus(
+            @RequestParam Long doctorId, @RequestParam String status) {
+        List<CaseAssignmentDto> assignments = new ArrayList<>();
+        if( status.equals("NA") ){
+            assignments = assignmentRepository.findByDoctorId(doctorId)
+                    .stream().map(PatientService::assignmentDtoCovert).collect(Collectors.toList());
+        }
+        else
+            assignments = assignmentRepository.findByDoctorIdAndStatus(doctorId, status)
+                .stream().map(PatientService::assignmentDtoCovert).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(assignments));
+    }
+
+    @GetMapping("/cases/all-metrics")
+    public ResponseEntity<ApiResponse<Map<String,Long>>> getAllMetrics(){
+        Map<String,Long> metrics = new HashMap<>();
+        metrics = patientService.getAllCassesMetrics();
+        return ResponseEntity.ok(ApiResponse.success(metrics));
+    }
+
 }

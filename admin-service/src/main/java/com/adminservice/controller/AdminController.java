@@ -3,8 +3,13 @@ package com.adminservice.controller;
 import com.adminservice.dto.*;
 import com.adminservice.entity.Complaint;
 import com.adminservice.entity.SystemConfig;
+import com.adminservice.feign.CommonConfigClient;
 import com.adminservice.service.AdminService;
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.entity.Disease;
+import com.commonlibrary.entity.MedicalConfiguration;
+import com.commonlibrary.entity.Medication;
+import com.commonlibrary.entity.Symptom;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -20,6 +25,7 @@ import java.util.List;
 public class AdminController {
 
     private final AdminService adminService;
+    private final CommonConfigClient configService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardDto>> getDashboard() {
@@ -176,5 +182,51 @@ public class AdminController {
             @Valid @RequestBody RefundRequestDto dto) {
         adminService.processRefund(dto);
         return ResponseEntity.ok(ApiResponse.success(null, "Refund processed"));
+    }
+
+    @GetMapping("/config/diseases")
+    public ResponseEntity<ApiResponse<List<Disease>>> getAllDiseases() {
+        List<Disease> diseases = configService.getAllDiseases();
+        return ResponseEntity.ok(ApiResponse.success(diseases));
+    }
+
+    @GetMapping("/config/diseases/category/{category}")
+    public ResponseEntity<ApiResponse<List<Disease>>> getDiseasesByCategory(@PathVariable String category) {
+        List<Disease> diseases = configService.getAllActiveDiseasesByCategory(category);
+        return ResponseEntity.ok(ApiResponse.success(diseases));
+    }
+
+    @GetMapping("/config/medications")
+    public ResponseEntity<ApiResponse<List<Medication>>> getAllMedications() {
+        List<Medication> medications = configService.getAllMedications();
+        return ResponseEntity.ok(ApiResponse.success(medications));
+    }
+
+    @GetMapping("/config/symptoms")
+    public ResponseEntity<ApiResponse<List<Symptom>>> getAllSymptoms() {
+        List<Symptom> symptoms = configService.getAllActiveSymptoms();
+        return ResponseEntity.ok(ApiResponse.success(symptoms));
+    }
+
+    @GetMapping("/config/symptoms/system/{bodySystem}")
+    public ResponseEntity<ApiResponse<List<Symptom>>> getSymptomsByBodySystem(@PathVariable String bodySystem) {
+        List<Symptom> symptoms = configService.getSymptomsByBodySystem(bodySystem);
+        return ResponseEntity.ok(ApiResponse.success(symptoms));
+    }
+
+    @GetMapping("/config/{configType}")
+    public ResponseEntity<ApiResponse<List<MedicalConfiguration>>> getConfigurationsByType
+            (@PathVariable String configType) {
+        List<MedicalConfiguration> configs = configService.getConfigurationsByType(configType);
+        return ResponseEntity.ok(ApiResponse.success(configs));
+    }
+
+    /*TODO
+    *  Update clear cache functionality*/
+
+    @PostMapping("/config/cache/clear")
+    public ResponseEntity<ApiResponse<Void>> clearCache() {
+        //configService.clearCache();
+        return ResponseEntity.ok(ApiResponse.success(null, "Cache cleared successfully"));
     }
 }

@@ -11,5 +11,4 @@ import java.util.List;
 public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("SELECT D FROM Document D where D.medicalCase.id= ?1")
     List<Document> findByCaseId(Long caseId);
-
 }
