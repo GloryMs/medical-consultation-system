@@ -2,6 +2,8 @@ package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
 import com.commonlibrary.entity.CaseComplexity;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -18,11 +20,13 @@ import java.util.Set;
 @AllArgsConstructor
 public class Case extends BaseEntity {
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "patient_id", nullable = false)
+    @JsonBackReference
     private Patient patient;
 
-    @OneToMany(mappedBy = "medicalCase", fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "medicalCase", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonManagedReference
     private List<Document> documents;
 
     @OneToMany(mappedBy = "caseEntity", cascade = CascadeType.ALL, orphanRemoval = true)

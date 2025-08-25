@@ -1,11 +1,13 @@
 package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "patients")
@@ -23,6 +25,10 @@ public class Patient extends BaseEntity {
     private String fullName;
 
     private LocalDate dateOfBirth;
+
+    @OneToMany(mappedBy = "patient", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonManagedReference
+    private List<Case> medicalCase;
 
     @Enumerated(EnumType.STRING)
     private Gender gender;

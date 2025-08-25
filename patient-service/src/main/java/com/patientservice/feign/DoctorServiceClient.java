@@ -2,6 +2,7 @@ package com.patientservice.feign;
 
 
 import com.commonlibrary.dto.ApiResponse;
+import com.doctorservice.entity.Appointment;
 import com.doctorservice.entity.Doctor;
 import com.doctorservice.entity.VerificationStatus;
 import com.patientservice.entity.CaseStatus;
@@ -22,5 +23,8 @@ public interface DoctorServiceClient {
     ResponseEntity<ApiResponse<Void>> updateDoctorLoad(@PathVariable Long doctorId,
                                                        @PathVariable CaseStatus caseStatus,
                                                        @RequestParam int flag); // 1 -> increase | 0 -> decrease
+
+    @GetMapping("/api/doctors/appointments/{patientId}")
+    ResponseEntity<ApiResponse<List<Appointment>>> getPatientAppointments(@PathVariable Long patientId);
 
 }

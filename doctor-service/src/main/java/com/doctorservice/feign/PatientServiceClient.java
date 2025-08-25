@@ -39,6 +39,11 @@ public interface PatientServiceClient {
                    @RequestParam Long doctorId,
                    @RequestParam String notes);
 
+    @PostMapping("/api/patients/cases/{caseId}/claim")
+    ResponseEntity<ApiResponse<Void>> claimCase(@PathVariable Long caseId,
+                                                @RequestParam Long doctorId,
+                                                @RequestParam String notes);
+
     @PostMapping("/api/patients/case-assignment/{doctorId}/assignment/{assignmentId}")
     ResponseEntity<ApiResponse<Void>> acceptAssignment(@PathVariable Long doctorId,
                    @RequestParam Long assignmentId);

@@ -8,6 +8,9 @@ import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.entity.UserStatus;
 import com.commonlibrary.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -18,6 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -125,5 +130,51 @@ public class AuthService {
     private void createRoleSpecificProfile(User user, RegisterRequest request) {
         // This will be handled by respective services (patient-service, doctor-service)
         // through event-driven architecture or API calls
+    }
+
+    public Page<UserDto> getAllUsers(int page, int size, UserRole role, UserStatus status){
+        Pageable pageable = PageRequest.of(page, size);
+
+        if (role != null && status != null) {
+            return userRepository.findByRoleAndStatus(role, status, pageable)
+                    .map(this::convertToUserDto);
+        } else if (role != null) {
+            return userRepository.findByRole(role, pageable)
+                    .map(this::convertToUserDto);
+        } else if (status != null) {
+            return userRepository.findByStatus(status, pageable)
+                    .map(this::convertToUserDto);
+        } else {
+            return userRepository.findAll(pageable)
+                    .map(this::convertToUserDto);
+        }
+    }
+
+    public UserDto convertToUserDto(User user) {
+        UserDto userDto = new UserDto();
+        userDto.setId(user.getId());
+        userDto.setEmail(user.getEmail());
+        userDto.setRole(user.getRole().name());
+        userDto.setStatus(user.getStatus().name());
+        userDto.setEmailVerified(user.getEmailVerified());
+        userDto.setCreatedAt(user.getCreatedAt());
+        userDto.setUpdatedAt(user.getUpdatedAt());
+        userDto.setLastLoginAt(user.getLastLogin());
+        return userDto;
+    }
+
+    public UserStasDto getUsersStats(){
+        UserStasDto userStasDto = new UserStasDto();
+        List<UserRole> allRoles = new ArrayList<>();
+        allRoles.add(UserRole.ADMIN);
+        allRoles.add(UserRole.PATIENT);
+        allRoles.add(UserRole.DOCTOR);
+        userStasDto.setTotalUsers(userRepository.countByRoleIn(allRoles));
+        userStasDto.setActiveUsers(userRepository.countByStatus(UserStatus.ACTIVE));
+        userStasDto.setPatients(userRepository.countByStatus(UserStatus.PENDING_VERIFICATION));
+        userStasDto.setDoctors(userRepository.countByRole(UserRole.DOCTOR));
+        userStasDto.setPatients(userRepository.countByRole(UserRole.PATIENT));
+        userStasDto.setAdmins(userRepository.countByRole(UserRole.ADMIN));
+        return userStasDto;
     }
 }

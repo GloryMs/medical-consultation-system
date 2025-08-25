@@ -20,7 +20,7 @@ public interface UserRepository extends JpaRepository<UserDetailsNew, Long> {
 //
 //    @Query("SELECT COUNT(u) FROM UserDetailsNew u WHERE u.status = 'ACTIVE' AND MONTH(u.lastLogin) = MONTH(CURRENT_DATE)")
 //    Integer countActiveUsersThisMonth();
-    
+
     Page<UserDetailsNew> findByRole(String role, Pageable pageable);
     Page<UserDetailsNew> findByStatus(String status, Pageable pageable);
     Page<UserDetailsNew> findByRoleAndStatus(String role, String status, Pageable pageable);

@@ -5,6 +5,7 @@ import com.patientservice.entity.CaseStatus;
 import com.patientservice.entity.SubscriptionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -16,12 +17,18 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
     List<Case> findByPatientId(Long patientId);
     //List<Case> findByPatientIdAndStatus(Long patientId, CaseStatus status);
     //List<Case> findByAssignedDoctorId(Long doctorId);
+    List<Case> findCaseByRequiredSpecializationAndStatus(String specialization, CaseStatus caseStatus);
 
     Long countByStatus(CaseStatus status);
     Long countByStatusIn(List<CaseStatus> statuses);
+    Long countByPatientId(Long patientId);
 
 //    @Query("SELECT AVG(AGE(c.closedAt, c.createdAt)) FROM Case c WHERE c.status = 'CLOSED'")
 //    String calculateAverageResolutionTime();
+
+    @Query("SELECT c FROM Case c WHERE c.patient.id = :patientId ORDER BY c.submittedAt DESC LIMIT :limit ")
+    List<Case> findLastSubmittedCases(@Param("patientId") Long patientId, @Param("limit") int limit);
+//    List<Case> findTopByOrderBySubmittedAtDesc(int limit);
 
     //findByAssignedDoctorId
 }

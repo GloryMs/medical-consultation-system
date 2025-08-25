@@ -3,13 +3,12 @@ package com.adminservice.controller;
 import com.adminservice.dto.*;
 import com.adminservice.entity.Complaint;
 import com.adminservice.entity.SystemConfig;
+import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
 import com.adminservice.service.AdminService;
+import com.authservice.dto.UserStasDto;
 import com.commonlibrary.dto.ApiResponse;
-import com.commonlibrary.entity.Disease;
-import com.commonlibrary.entity.MedicalConfiguration;
-import com.commonlibrary.entity.Medication;
-import com.commonlibrary.entity.Symptom;
+import com.commonlibrary.entity.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,11 +25,18 @@ public class AdminController {
 
     private final AdminService adminService;
     private final CommonConfigClient configService;
+    private final AuthServiceClient authServiceClient;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardDto>> getDashboard() {
         DashboardDto dashboard = adminService.getDashboard();
         return ResponseEntity.ok(ApiResponse.success(dashboard));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponse<UserStasDto>> getStats() {
+        UserStasDto stats = adminService.getUserStats();
+        return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
     @PostMapping("/doctors/verify")
@@ -68,9 +74,9 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Page<UserDto>>> getAllUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String role,
-            @RequestParam(required = false) String status) {
-        Page<UserDto> users = adminService.getAllUsers(page, size, role, status);
+            @RequestParam(required = false) UserRole role,
+            @RequestParam(required = false) UserStatus status) {
+        Page<UserDto> users = authServiceClient.getAllUsers(page, size, role, status).getBody().getData();
         return ResponseEntity.ok(ApiResponse.success(users));
     }
 

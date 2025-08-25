@@ -11,6 +11,7 @@ public class CaseDto {
     private String category;
     private String status;
     private String urgencyLevel;
+    private String requiredSpecialization;
     private Long patientId;
     private LocalDateTime createdAt;
 }

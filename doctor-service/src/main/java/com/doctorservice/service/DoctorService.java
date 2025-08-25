@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -116,6 +117,12 @@ public class DoctorService {
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
         return appointmentRepository.findByDoctorId(doctor.getId());
+    }
+
+    public List<Appointment> getPatientAppointments(Long patientId) {
+        List<Appointment> patientAppointments = new ArrayList<>();
+        patientAppointments = appointmentRepository.findByPatientId(patientId);
+        return patientAppointments;
     }
 
     @Transactional

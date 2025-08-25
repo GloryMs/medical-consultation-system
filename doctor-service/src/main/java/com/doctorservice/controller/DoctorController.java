@@ -6,10 +6,14 @@ import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
 import com.doctorservice.feign.PatientServiceClient;
+import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.service.DoctorService;
 import jakarta.validation.Valid;
+import jakarta.ws.rs.Path;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.hibernate.validator.internal.constraintvalidators.bv.notempty.NotEmptyValidatorForCollection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +31,8 @@ public class DoctorController {
     private final DoctorService doctorService;
     private final DoctorRepository doctorRepository;
     private final PatientServiceClient caseAssignmentRepo;
+    private final AppointmentRepository appointmentRepository;
+    //private final NotEmptyValidatorForCollection notEmptyValidatorForCollection;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<DoctorProfileDto>> createProfile(
@@ -58,6 +64,13 @@ public class DoctorController {
     public ResponseEntity<ApiResponse<List<Appointment>>> getAppointments(
             @RequestHeader("X-User-Id") Long userId) {
         List<Appointment> appointments = doctorService.getDoctorAppointments(userId);
+        return ResponseEntity.ok(ApiResponse.success(appointments));
+    }
+
+    @GetMapping("/appointments/{patientId}")
+    public ResponseEntity<ApiResponse<List<Appointment>>> getPatientAppointments(
+            @PathVariable Long patientId) {
+        List<Appointment> appointments = doctorService.getPatientAppointments(patientId);
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
@@ -99,8 +112,8 @@ public class DoctorController {
     @GetMapping("/cases/pool")
     public ResponseEntity<ApiResponse<List<CaseDto>>> browseCasesPool(
             @RequestHeader("X-User-Id") Long userId,
-            @RequestParam(required = false) String specialization) {
-        List<CaseDto> cases = doctorService.browseCasesPool(userId, specialization);
+            @RequestParam String specialization) {
+        List<CaseDto> cases = caseAssignmentRepo.getCasesPool(specialization).getBody().getData();
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
@@ -238,6 +251,16 @@ public class DoctorController {
                 new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
         caseAssignmentRepo.acceptAssignment(userId, assignmentId);
         return ResponseEntity.ok(ApiResponse.success(null, "Assignment accepted"));
+    }
+
+    @PostMapping("/cases/{caseId}/claim")
+    public ResponseEntity<ApiResponse<Void>> calimAssignment(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long caseId, @RequestParam String note) {
+        doctorRepository.findByUserId(userId).orElseThrow(() ->
+                new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        caseAssignmentRepo.claimCase(caseId, caseId, note);
+        return ResponseEntity.ok(ApiResponse.success(null, "Case claimed"));
     }
 
     @PostMapping("/assignments/{assignmentId}/reject")

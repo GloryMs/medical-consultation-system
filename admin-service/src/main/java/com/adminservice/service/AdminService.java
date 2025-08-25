@@ -1,6 +1,7 @@
 package com.adminservice.service;
 
 import com.adminservice.dto.*;
+import com.adminservice.dto.UserDto;
 import com.adminservice.entity.*;
 import com.adminservice.feign.*;
 import com.adminservice.repository.ComplaintRepository;
@@ -8,6 +9,7 @@ import com.adminservice.repository.SystemConfigRepository;
 import com.adminservice.repository.StaticContentRepository;
 import com.adminservice.repository.UserRepository;
 import com.doctorservice.entity.Doctor;
+import com.authservice.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -15,8 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-
-import javax.print.Doc;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -49,6 +49,19 @@ public class AdminService {
                 .totalRevenue(15000.00)
                 .activeSubscriptions(85L)
                 .build();
+    }
+
+    public UserStasDto getUserStats(){
+        UserStasDto statsDto = new UserStasDto();
+        try{
+            statsDto = authServiceClient.getUsersStats().getBody().getData();
+        } catch (Exception e) {
+            log.error("Failed to get users stats ..");
+            System.out.println("Failed to get users stats ..");
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        return statsDto;
     }
 
     public void verifyDoctor(VerifyDoctorDto dto) {
@@ -157,24 +170,24 @@ public class AdminService {
          return pendingVerificationDto;
     }
 
-    // 29. Get All Users Implementation
-    public Page<UserDto> getAllUsers(int page, int size, String role, String status) {
-        Pageable pageable = PageRequest.of(page, size);
-
-        if (role != null && status != null) {
-            return userRepository.findByRoleAndStatus(role, status, pageable)
-                    .map(this::mapToUserDto);
-        } else if (role != null) {
-            return userRepository.findByRole(role, pageable)
-                    .map(this::mapToUserDto);
-        } else if (status != null) {
-            return userRepository.findByStatus(status, pageable)
-                    .map(this::mapToUserDto);
-        } else {
-            return userRepository.findAll(pageable)
-                    .map(this::mapToUserDto);
-        }
-    }
+//    // 29. Get All Users Implementation
+//    public Page<UserDto> getAllUsers(int page, int size, String role, String status) {
+//        Pageable pageable = PageRequest.of(page, size);
+//
+//        if (role != null && status != null) {
+//            return userRepository.findByRoleAndStatus(role, status, pageable)
+//                    .map(this::mapToUserDto);
+//        } else if (role != null) {
+//            return userRepository.findByRole(role, pageable)
+//                    .map(this::mapToUserDto);
+//        } else if (status != null) {
+//            return userRepository.findByStatus(status, pageable)
+//                    .map(this::mapToUserDto);
+//        } else {
+//            return userRepository.findAll(pageable)
+//                    .map(this::mapToUserDto);
+//        }
+//    }
 
     public DoctorDetailsDto convertToDoctorDetailsDto(Doctor doctor){
         DoctorDetailsDto doctorDetailsDto = new DoctorDetailsDto();

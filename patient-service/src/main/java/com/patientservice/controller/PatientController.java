@@ -1,16 +1,22 @@
 package com.patientservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.exception.BusinessException;
+import com.doctorservice.entity.Appointment;
+import com.doctorservice.entity.CaseStatus;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
 import com.patientservice.entity.CaseAssignment;
 import com.patientservice.entity.Complaint;
 import com.patientservice.repository.CaseAssignmentRepository;
+import com.patientservice.repository.CaseRepository;
+import com.patientservice.repository.ComplaintRepository;
 import com.patientservice.service.ComplaintService;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.apache.kafka.shaded.com.google.protobuf.Api;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +37,8 @@ public class PatientController {
     private final ComplaintService complaintService;
     private final ReportService reportService;
     private final CaseAssignmentRepository assignmentRepository;
+    private final CaseRepository CaseRepository;
+    private final ComplaintRepository complaintRepository;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<PatientProfileDto>> createProfile(
@@ -124,6 +132,13 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(complaints));
     }
 
+    @GetMapping("/complaints/{complaintId}")
+    public ResponseEntity<ApiResponse<Complaint>> getComplaintByI( @PathVariable Long complaintId ) {
+         Complaint complaint = complaintRepository.findById(complaintId).orElseThrow(() ->
+                 new BusinessException("No complaints found", HttpStatus.NOT_FOUND));
+         return ResponseEntity.ok(ApiResponse.success(complaint));
+    }
+
     // 9. Generate Patient Report - MISSING ENDPOINT
     @GetMapping("/reports/medical-history")
     public ResponseEntity<ApiResponse<PatientReportDto>> generateMedicalHistoryReport(
@@ -148,6 +163,13 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
+    @GetMapping("/cases/pool")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getCassesPool(
+            @RequestParam String specialization ) {
+        List<CaseDto> cases = patientService.getCasesPool(specialization);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
     @GetMapping("/cases/doctor/{doctorId}")
     public ResponseEntity<ApiResponse<List<CaseDto>>> getCasesForDoctor(
             @PathVariable("doctorId") Long doctorId) {
@@ -161,6 +183,14 @@ public class PatientController {
             @PathVariable Long caseId) {
         patientService.acceptAppointment(userId, caseId);
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment accepted"));
+    }
+
+    @GetMapping("/cases/appointments")
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAppointments(
+            @RequestHeader("X-User-Id") Long userId){
+        List<AppointmentDto> appointments = new ArrayList<>();
+        appointments = patientService.getByPatientAppointments(userId);
+        return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
     @PostMapping("/cases/{caseId}/pay")
@@ -189,6 +219,15 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(null, "Assignment rejected"));
     }
 
+    @PostMapping("/cases/{caseId}/claim")
+    public ResponseEntity<ApiResponse<Void>> claimCase(
+            @PathVariable Long caseId,
+            @RequestParam Long doctorId,
+            @RequestParam String reason) {
+        patientService.claimCase(caseId, doctorId, reason);
+        return ResponseEntity.ok(ApiResponse.success(null, "Case claimed"));
+    }
+
     @GetMapping("/case-assignments")
     public ResponseEntity<ApiResponse<List<CaseAssignmentDto>>> getCasesByDoctorIdAndStatus(
             @RequestParam Long doctorId, @RequestParam String status) {
@@ -208,6 +247,13 @@ public class PatientController {
         Map<String,Long> metrics = new HashMap<>();
         metrics = patientService.getAllCassesMetrics();
         return ResponseEntity.ok(ApiResponse.success(metrics));
+    }
+
+    @GetMapping("/{patientId}/dashboard")
+    public ResponseEntity<ApiResponse<PatientDashboardDto>> getPatientDashboard(@PathVariable Long patientId){
+        PatientDashboardDto patientDashboardDto = new PatientDashboardDto();
+        patientDashboardDto = patientService.getPatientDashboard(patientId);
+        return ResponseEntity.ok(ApiResponse.success(patientDashboardDto));
     }
 
 }

@@ -3,12 +3,20 @@ package com.patientservice.service;
 import com.commonlibrary.entity.AssignmentPriority;
 import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.exception.BusinessException;
+import com.doctorservice.entity.Appointment;
+import com.doctorservice.entity.AppointmentStatus;
+import com.doctorservice.entity.ConsultationType;
+import com.notificationservice.dto.NotificationDto;
+import com.notificationservice.entity.Notification;
 import com.patientservice.dto.*;
 import com.patientservice.entity.*;
+import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.PaymentServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.repository.*;
+import jakarta.persistence.criteria.CriteriaBuilder;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +31,7 @@ import static com.patientservice.entity.CaseStatus.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PatientService {
 
     private final PatientRepository patientRepository;
@@ -36,6 +45,7 @@ public class PatientService {
     private final MedicalConfigurationService configService;
     private final SmartCaseAssignmentService assignmentService;
     private final CaseAssignmentRepository assignmentRepository;
+    private final DoctorServiceClient doctorServiceClient;
 
     //@Override
     @Transactional
@@ -238,12 +248,19 @@ public class PatientService {
         return casesForDoctor.stream().map(this::convertToCaseDto).collect(Collectors.toList());
     }
 
+    public List<CaseDto> getCasesPool(String specialization){
+        List<CaseDto> caseDtos = new ArrayList<>();
+        caseDtos = caseRepository.findCaseByRequiredSpecializationAndStatus(specialization,
+                        CaseStatus.PENDING).stream().map(this::convertToCaseDto).toList();
+        return caseDtos;
+    }
+
     public CaseDto convertToCaseDto(Case newCase){
         CaseDto caseDto = new CaseDto();
         caseDto.setId(newCase.getId());
         caseDto.setCaseTitle(newCase.getCaseTitle());
         caseDto.setDescription(newCase.getDescription());
-        //caseDto.setCategory(newCase.getCategory());
+        caseDto.setRequiredSpecialization(newCase.getRequiredSpecialization());
         caseDto.setCreatedAt(newCase.getCreatedAt());
         caseDto.setUrgencyLevel(newCase.getUrgencyLevel().toString());
         caseDto.setStatus(newCase.getStatus().toString());
@@ -277,6 +294,42 @@ public class PatientService {
         // Move to payment pending status
         medicalCase.setStatus(CaseStatus.PAYMENT_PENDING);
         caseRepository.save(medicalCase);
+    }
+
+    public List<AppointmentDto> getByPatientAppointments (Long patientId){
+        List<AppointmentDto>  appointments = new ArrayList<>();
+        appointments = getPatientAppointments(patientId).stream().
+                map(this::convertToAppointmentDto).collect(Collectors.toList());
+        return appointments;
+    }
+
+    public AppointmentDto convertToAppointmentDto(Appointment newAppointment){
+        AppointmentDto appointmentDto = new AppointmentDto();
+        appointmentDto.setCaseId(newAppointment.getCaseId());
+        appointmentDto.setPatientId(newAppointment.getPatientId());
+        appointmentDto.setDoctorId(newAppointment.getDoctor().getUserId());
+        appointmentDto.setDuration(newAppointment.getDuration());
+        appointmentDto.setScheduledTime(newAppointment.getScheduledTime());
+        appointmentDto.setDoctorName(newAppointment.getDoctor().getFullName());
+        appointmentDto.setCompletedAt(newAppointment.getCompletedAt());
+        appointmentDto.setStatus(newAppointment.getStatus());
+        appointmentDto.setRescheduleCount(newAppointment.getRescheduleCount());
+        appointmentDto.setMeetingId(newAppointment.getMeetingId());
+        appointmentDto.setMeetingLink(newAppointment.getMeetingLink());
+        appointmentDto.setRescheduledFrom(newAppointment.getRescheduledFrom());
+        appointmentDto.setRescheduleReason(newAppointment.getRescheduleReason());
+        appointmentDto.setCompletedAt(newAppointment.getCompletedAt());
+        return appointmentDto;
+    }
+
+    public List<Appointment> getPatientAppointments(Long patientId) {
+        List<Appointment> patientAppointments = new ArrayList<>();
+        try{
+            patientAppointments = doctorServiceClient.getPatientAppointments(patientId).getBody().getData();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return patientAppointments;
     }
 
     @Transactional
@@ -543,6 +596,64 @@ public class PatientService {
     }
 
     @Transactional
+    public void claimCase(Long caseId, Long doctorId, String note){
+        try {
+            log.info("Doctor {} attempting to claim case {}", doctorId, caseId);
+
+            Case claimedCase =  caseRepository.findById(caseId)
+                    .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+            if (claimedCase.getStatus() != CaseStatus.PENDING) {
+                throw new BusinessException("Case cannot be accepted", HttpStatus.BAD_REQUEST);
+            }
+
+            claimedCase.setStatus(CaseStatus.ASSIGNED);
+            claimedCase.setFirstAssignedAt(LocalDateTime.now());
+            caseRepository.save(claimedCase);
+
+            //update CaseAssignment Relation Table
+            try{
+                createOrUpdateCaseAssignment(caseId, doctorId, note);
+            }catch(Exception e){
+                e.printStackTrace();
+            }
+
+            log.info("Case {} successfully claimed by doctor {}", caseId, doctorId);
+        } catch (BusinessException e) {
+            log.warn("Business rule violation in case claiming: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error claiming case {} by doctor {}: {}",
+                    caseId, doctorId, e.getMessage(), e);
+            throw new BusinessException("Unable to claim case at this time",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private void createOrUpdateCaseAssignment(Long caseId, Long doctorId, String note) {
+        List<CaseAssignment> existingAssignments = caseAssignmentRepository.findByCaseEntityId(caseId);
+
+        CaseAssignment assignment;
+        if (existingAssignments.isEmpty()) {
+            assignment = CaseAssignment.builder()
+                    .caseEntity(caseRepository.getReferenceById(caseId))
+                    .doctorId(doctorId)
+                    .assignedAt(LocalDateTime.now())
+                    .assignmentReason(note)
+                    .status(AssignmentStatus.ACCEPTED)
+                    .build();
+        } else {
+            assignment = existingAssignments.get(0);
+            assignment.setDoctorId(doctorId);
+            assignment.setAssignedAt(LocalDateTime.now());
+            assignment.setAssignmentReason(note);
+            assignment.setStatus(AssignmentStatus.ACCEPTED);
+        }
+
+        caseAssignmentRepository.save(assignment);
+    }
+
+    @Transactional
     public void rejectAssignment(Long doctorId, Long assignmentId, String reason){
         CaseAssignment assignment =  caseAssignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new BusinessException("Assignment not found", HttpStatus.NOT_FOUND));
@@ -613,5 +724,42 @@ public class PatientService {
         //metrics.put("averageCaseResolutionTime", averageCaseResolutionTime);
 
         return metrics;
+    }
+
+    public NotificationDto convertToNotficationDto(Notification notification){
+        NotificationDto dto = new NotificationDto();
+        dto.setMessage(notification.getMessage());
+        dto.setTitle(notification.getTitle());
+        dto.setSenderId(notification.getSenderId());
+        dto.setActionUrl(notification.getActionUrl());
+        dto.setRecipientEmail(notification.getRecipientEmail());
+        return dto;
+    }
+
+    public PatientDashboardDto getPatientDashboard(Long patientId){
+        PatientDashboardDto dto = new PatientDashboardDto();
+        try{
+            List<CaseStatus> statusList = new ArrayList<>();
+            StatsDto stats = new StatsDto();
+            statusList.add(ACCEPTED);
+            statusList.add(ASSIGNED);
+            statusList.add(IN_PROGRESS);
+            statusList.add(SCHEDULED);
+            statusList.add(CONSULTATION_COMPLETE);
+            stats.setTotalCases( caseRepository.countByPatientId(patientId) );
+            stats.setActiveCases( caseRepository.countByStatusIn(statusList) );
+            stats.setCompletedCases(caseRepository.countByStatus(CLOSED));
+            dto.setStats(stats);
+            List<Case> recentCases = caseRepository.findLastSubmittedCases(patientId, 3);
+            dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
+            dto.setUpcomingAppointments(getByPatientAppointments(patientId));
+            List<NotificationDto> recentNotifications = notificationServiceClient.getUserNotifications(patientId)
+                    .getBody().getData().stream().map(this::convertToNotficationDto).toList();
+            dto.setRecentNotifications(recentNotifications);
+        }catch(Exception e){
+            log.error("Failed to get patient dashboard");
+            log.error(e.getMessage());
+        }
+        return dto;
     }
 }
