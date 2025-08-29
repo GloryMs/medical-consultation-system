@@ -1,7 +1,7 @@
 package com.doctorservice.controller;
 
 import com.doctorservice.dto.DoctorDetailsDto;
-import com.doctorservice.dto.PendingVerificationDto;
+import com.commonlibrary.dto.PendingVerificationDto;
 import com.doctorservice.service.InternalDoctorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;

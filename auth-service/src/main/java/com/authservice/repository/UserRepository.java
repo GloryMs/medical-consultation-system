@@ -1,6 +1,6 @@
 package com.authservice.repository;
 
-import com.commonlibrary.entity.User;
+import com.authservice.entity.User;
 import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.entity.UserStatus;
 import org.springframework.data.domain.Page;

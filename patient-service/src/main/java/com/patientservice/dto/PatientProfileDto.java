@@ -1,7 +1,7 @@
 package com.patientservice.dto;
 
-import com.patientservice.entity.Gender;
-import com.patientservice.entity.SubscriptionStatus;
+import com.commonlibrary.entity.Gender;
+import com.commonlibrary.entity.SubscriptionStatus;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 

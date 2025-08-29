@@ -1,7 +1,7 @@
 package com.notificationservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
-import com.notificationservice.dto.NotificationDto;
+import com.commonlibrary.dto.NotificationDto;
 import com.notificationservice.entity.Notification;
 import com.notificationservice.service.NotificationService;
 import jakarta.validation.Valid;

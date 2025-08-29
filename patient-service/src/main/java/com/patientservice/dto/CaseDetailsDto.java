@@ -1,5 +1,7 @@
 package com.patientservice.dto;
 
+import com.commonlibrary.entity.PaymentStatus;
+import com.commonlibrary.entity.UrgencyLevel;
 import com.patientservice.entity.*;
 import lombok.Data;
 

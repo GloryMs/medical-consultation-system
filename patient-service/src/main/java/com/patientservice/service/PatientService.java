@@ -1,20 +1,16 @@
 package com.patientservice.service;
 
-import com.commonlibrary.entity.AssignmentPriority;
-import com.commonlibrary.entity.AssignmentStatus;
+import com.commonlibrary.dto.AppointmentDto;
+import com.commonlibrary.dto.NotificationDto;
+import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
-import com.doctorservice.entity.Appointment;
-import com.doctorservice.entity.AppointmentStatus;
-import com.doctorservice.entity.ConsultationType;
-import com.notificationservice.dto.NotificationDto;
-import com.notificationservice.entity.Notification;
 import com.patientservice.dto.*;
 import com.patientservice.entity.*;
+import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.PaymentServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.repository.*;
-import jakarta.persistence.criteria.CriteriaBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -114,7 +110,7 @@ public class PatientService {
         }
 
         // Validate specialization matches disease requirements
-        Set<String> requiredSpecs = configService.getSpecializationsForDisease(dto.getPrimaryDiseaseCode());
+        List<String> requiredSpecs = configService.getSpecializationsForDisease(dto.getPrimaryDiseaseCode());
         if (!requiredSpecs.isEmpty() && !requiredSpecs.contains(dto.getRequiredSpecialization())) {
             throw new BusinessException("Specialization does not match disease requirements", HttpStatus.BAD_REQUEST);
         }
@@ -303,14 +299,13 @@ public class PatientService {
         return appointments;
     }
 
-    public AppointmentDto convertToAppointmentDto(Appointment newAppointment){
+    public AppointmentDto convertToAppointmentDto(AppointmentDto newAppointment){
         AppointmentDto appointmentDto = new AppointmentDto();
         appointmentDto.setCaseId(newAppointment.getCaseId());
         appointmentDto.setPatientId(newAppointment.getPatientId());
-        appointmentDto.setDoctorId(newAppointment.getDoctor().getUserId());
+        appointmentDto.setDoctor(newAppointment.getDoctor());
         appointmentDto.setDuration(newAppointment.getDuration());
         appointmentDto.setScheduledTime(newAppointment.getScheduledTime());
-        appointmentDto.setDoctorName(newAppointment.getDoctor().getFullName());
         appointmentDto.setCompletedAt(newAppointment.getCompletedAt());
         appointmentDto.setStatus(newAppointment.getStatus());
         appointmentDto.setRescheduleCount(newAppointment.getRescheduleCount());
@@ -322,8 +317,8 @@ public class PatientService {
         return appointmentDto;
     }
 
-    public List<Appointment> getPatientAppointments(Long patientId) {
-        List<Appointment> patientAppointments = new ArrayList<>();
+    public List<AppointmentDto> getPatientAppointments(Long patientId) {
+        List<AppointmentDto> patientAppointments = new ArrayList<>();
         try{
             patientAppointments = doctorServiceClient.getPatientAppointments(patientId).getBody().getData();
         } catch (Exception e) {
@@ -726,7 +721,7 @@ public class PatientService {
         return metrics;
     }
 
-    public NotificationDto convertToNotficationDto(Notification notification){
+    public NotificationDto convertToNotficationDto(NotificationDto notification){
         NotificationDto dto = new NotificationDto();
         dto.setMessage(notification.getMessage());
         dto.setTitle(notification.getTitle());

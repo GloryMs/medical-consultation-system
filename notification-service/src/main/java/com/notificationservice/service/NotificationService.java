@@ -1,8 +1,8 @@
 package com.notificationservice.service;
 
-import com.notificationservice.dto.NotificationDto;
+import com.commonlibrary.dto.NotificationDto;
 import com.notificationservice.entity.Notification;
-import com.notificationservice.entity.NotificationPriority;
+import com.commonlibrary.entity.NotificationPriority;
 import com.notificationservice.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

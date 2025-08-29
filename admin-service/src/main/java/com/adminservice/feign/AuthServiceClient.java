@@ -1,17 +1,14 @@
 package com.adminservice.feign;
 
-import com.adminservice.dto.UserDto;
-import com.authservice.dto.UserStasDto;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.entity.UserStatus;
-import com.doctorservice.entity.Doctor;
+
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @FeignClient(name = "auth-service")
 public interface AuthServiceClient {

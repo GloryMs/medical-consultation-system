@@ -2,9 +2,9 @@ package com.doctorservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
 import com.commonlibrary.entity.CaseComplexity;
+import com.commonlibrary.entity.VerificationStatus;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 

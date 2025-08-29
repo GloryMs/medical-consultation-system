@@ -1,7 +1,7 @@
 package com.doctorservice.repository;
 
 import com.doctorservice.entity.Appointment;
-import com.doctorservice.entity.AppointmentStatus;
+import com.commonlibrary.entity.AppointmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

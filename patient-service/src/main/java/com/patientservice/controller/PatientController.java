@@ -1,22 +1,18 @@
 package com.patientservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.AppointmentDto;
 import com.commonlibrary.exception.BusinessException;
-import com.doctorservice.entity.Appointment;
-import com.doctorservice.entity.CaseStatus;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
-import com.patientservice.entity.CaseAssignment;
 import com.patientservice.entity.Complaint;
 import com.patientservice.repository.CaseAssignmentRepository;
-import com.patientservice.repository.CaseRepository;
 import com.patientservice.repository.ComplaintRepository;
 import com.patientservice.service.ComplaintService;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.shaded.com.google.protobuf.Api;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -37,7 +33,6 @@ public class PatientController {
     private final ComplaintService complaintService;
     private final ReportService reportService;
     private final CaseAssignmentRepository assignmentRepository;
-    private final CaseRepository CaseRepository;
     private final ComplaintRepository complaintRepository;
 
     @PostMapping("/profile")

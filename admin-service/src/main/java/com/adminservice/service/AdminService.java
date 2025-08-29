@@ -1,26 +1,25 @@
 package com.adminservice.service;
 
 import com.adminservice.dto.*;
-import com.adminservice.dto.UserDto;
 import com.adminservice.entity.*;
 import com.adminservice.feign.*;
 import com.adminservice.repository.ComplaintRepository;
 import com.adminservice.repository.SystemConfigRepository;
 import com.adminservice.repository.StaticContentRepository;
 import com.adminservice.repository.UserRepository;
-import com.doctorservice.entity.Doctor;
-import com.authservice.dto.*;
+import com.commonlibrary.dto.PendingVerificationDto;
+import com.commonlibrary.entity.ComplaintPriority;
+import com.commonlibrary.entity.ComplaintStatus;
+import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -149,8 +148,7 @@ public class AdminService {
     public List<PendingVerificationDto> getPendingVerifications() {
         List<PendingVerificationDto> pendingVerifications = new ArrayList<>();
         try{
-            pendingVerifications= doctorServiceClient.getPendingVerifications().getBody().getData().
-                    stream().map(this::convertToPendingVerificationDto).collect(Collectors.toList());
+            pendingVerifications= doctorServiceClient.getPendingVerifications().getBody().getData();
         }
         catch(Exception e){
             log.error("Failed to get doctors with pending verification");
@@ -159,9 +157,9 @@ public class AdminService {
         return pendingVerifications;
     }
 
-    public PendingVerificationDto convertToPendingVerificationDto(Doctor doctor) {
+    public PendingVerificationDto convertToPendingVerificationDto(DoctorDto doctor) {
         PendingVerificationDto pendingVerificationDto = new PendingVerificationDto();
-        pendingVerificationDto.setDoctorId(doctor.getUserId());
+        pendingVerificationDto.setDoctorId(doctor.getDoctorId());
         pendingVerificationDto.setFullName(doctor.getFullName());
         pendingVerificationDto.setLicenseNumber(doctor.getLicenseNumber());
         pendingVerificationDto.setSpecialization(doctor.getPrimarySpecializationCode());
@@ -189,9 +187,9 @@ public class AdminService {
 //        }
 //    }
 
-    public DoctorDetailsDto convertToDoctorDetailsDto(Doctor doctor){
+    public DoctorDetailsDto convertToDoctorDetailsDto(DoctorDto doctor){
         DoctorDetailsDto doctorDetailsDto = new DoctorDetailsDto();
-        doctorDetailsDto.setId(doctor.getId());
+        doctorDetailsDto.setId(doctor.getDoctorId());
         doctorDetailsDto.setFullName(doctor.getFullName());
         doctorDetailsDto.setLicenseNumber(doctor.getLicenseNumber());
         doctorDetailsDto.setPrimarySpecialization(doctor.getPrimarySpecializationCode());
@@ -207,10 +205,9 @@ public class AdminService {
 
         try{
             // Get doctor details
-            DoctorDetailsDto doctor =  convertToDoctorDetailsDto(doctorServiceClient.
-                    getDoctorDetails(doctorId).getBody().getData());
+            DoctorProfileDto doctor =  doctorServiceClient.getDoctorDetails(doctorId).getBody().getData();
             report.setDoctorName(doctor.getFullName());
-            report.setSpecialization(doctor.getPrimarySpecialization());
+            report.setSpecialization(doctor.getPrimarySpecializationCode());
 
             // Performance metrics
             Map<String, Object> performance = doctorServiceClient.getDoctorPerformance
@@ -388,17 +385,17 @@ public class AdminService {
         paymentServiceClient.processRefund(dto.getPaymentId(), dto.getRefundAmount(), dto.getReason());
     }
 
-    // Helper methods
-    private UserDto mapToUserDto(UserDetailsNew user) {
-        UserDto dto = new UserDto();
-        dto.setId(user.getId());
-        dto.setEmail(user.getEmail());
-        dto.setRole(user.getRole());
-        dto.setStatus(user.getStatus());
-        dto.setCreatedAt(user.getCreatedAt());
-        dto.setLastLogin(user.getLastLogin());
-        return dto;
-    }
+//    // Helper methods
+//    private UserDto mapToUserDto(UserDetailsNew user) {
+//        UserDto dto = new UserDto();
+//        dto.setId(user.getId());
+//        dto.setEmail(user.getEmail());
+//        dto.setRole(user.getRole());
+//        dto.setStatus(user.getStatus());
+//        dto.setCreatedAt(user.getCreatedAt());
+//        dto.setLastLogin(user.getLastLogin());
+//        return dto;
+//    }
 
     private String generateTemporaryPassword() {
         return "Temp" + UUID.randomUUID().toString().substring(0, 8) + "!";

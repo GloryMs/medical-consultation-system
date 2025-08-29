@@ -1,8 +1,8 @@
 package com.adminservice.repository;
 
 import com.adminservice.entity.Complaint;
-import com.adminservice.entity.ComplaintStatus;
-import com.adminservice.entity.ComplaintPriority;
+import com.commonlibrary.entity.ComplaintStatus;
+import com.commonlibrary.entity.ComplaintPriority;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

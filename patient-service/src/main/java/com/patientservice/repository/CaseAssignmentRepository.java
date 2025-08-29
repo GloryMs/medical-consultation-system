@@ -1,12 +1,11 @@
 package com.patientservice.repository;
 
-import com.commonlibrary.entity.AssignmentStatus;
 import com.patientservice.entity.CaseAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-
+import com.commonlibrary.entity.*;
 import java.time.LocalDateTime;
 import java.util.List;
 

@@ -1,6 +1,6 @@
 package com.notificationservice.kafka;
 
-import com.notificationservice.dto.NotificationDto;
+import com.commonlibrary.dto.NotificationDto;
 import com.notificationservice.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

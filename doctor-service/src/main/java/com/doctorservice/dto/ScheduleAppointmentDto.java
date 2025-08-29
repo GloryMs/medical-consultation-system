@@ -1,6 +1,6 @@
 package com.doctorservice.dto;
 
-import com.doctorservice.entity.ConsultationType;
+import com.commonlibrary.entity.ConsultationType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 

@@ -2,7 +2,6 @@ package com.patientservice.repository;
 
 import com.patientservice.entity.Case;
 import com.patientservice.entity.CaseStatus;
-import com.patientservice.entity.SubscriptionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

@@ -1,7 +1,9 @@
 package com.patientservice.dto;
 
 import java.util.List;
-import com.notificationservice.dto.NotificationDto;
+
+import com.commonlibrary.dto.AppointmentDto;
+import com.commonlibrary.dto.NotificationDto;
 import lombok.*;
 
 @Data

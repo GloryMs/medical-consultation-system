@@ -1,7 +1,7 @@
 package com.doctorservice.repository;
 
 import com.doctorservice.entity.Doctor;
-import com.doctorservice.entity.VerificationStatus;
+import com.commonlibrary.entity.VerificationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;

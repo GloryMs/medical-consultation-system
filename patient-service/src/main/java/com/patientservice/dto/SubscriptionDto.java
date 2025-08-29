@@ -1,6 +1,6 @@
 package com.patientservice.dto;
 
-import com.patientservice.entity.PlanType;
+import com.commonlibrary.entity.PlanType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 

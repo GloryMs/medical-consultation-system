@@ -1,6 +1,9 @@
 package com.adminservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.ComplaintPriority;
+import com.commonlibrary.entity.ComplaintStatus;
+import com.commonlibrary.entity.ComplaintType;
 import jakarta.persistence.*;
 import lombok.*;
 

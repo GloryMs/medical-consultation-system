@@ -1,7 +1,7 @@
 package com.patientservice.feign;
 
 import com.commonlibrary.dto.ApiResponse;
-import com.notificationservice.entity.Notification;
+import com.commonlibrary.dto.NotificationDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,5 +21,5 @@ public interface NotificationServiceClient {
                           @RequestParam String message);
 
     @GetMapping("/api/notifications/user/{userId}")
-    ResponseEntity<ApiResponse<List<Notification>>> getUserNotifications(@PathVariable Long userId);
+    ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(@PathVariable Long userId);
 }

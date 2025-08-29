@@ -1,81 +1,95 @@
 package com.patientservice.service;
 
-import com.commonlibrary.entity.Disease;
-import com.commonlibrary.entity.MedicalConfiguration;
-import com.commonlibrary.entity.Medication;
-import com.commonlibrary.entity.Symptom;
+import com.commonlibrary.dto.DiseaseDto;
 import com.commonlibrary.exception.BusinessException;
-import com.commonlibrary.repository.DiseaseRepository;
-import com.commonlibrary.repository.MedicalConfigurationRepository;
-import com.commonlibrary.repository.MedicationRepository;
-import com.commonlibrary.repository.SymptomRepository;
+import com.patientservice.feign.MedicalConfigurationMainService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MedicalConfigurationService {
 
-    private final MedicalConfigurationRepository configRepository;
-    private final DiseaseRepository diseaseRepository;
-    private final MedicationRepository medicationRepository;
-    private final SymptomRepository symptomRepository;
+//    private final MedicalConfigurationRepository configRepository;
+//    private final DiseaseRepository diseaseRepository;
+//    private final MedicationRepository medicationRepository;
+//    private final SymptomRepository symptomRepository;
+    
+    private final MedicalConfigurationMainService medicalConfigurationMainService;
 
-    @Cacheable(value = "medical-configs", key = "#configType")
-    public List<MedicalConfiguration> getConfigurationsByType(String configType) {
-        return configRepository.findByConfigTypeAndIsActiveTrueOrderBySortOrder(configType);
-    }
+    /*TODO 
+    *  Re-enable all bellow functions*/
+    
+//    @Cacheable(value = "medical-configs", key = "#configType")
+//    public List<MedicalConfigurationDto> getConfigurationsByType(String configType) {
+//        return medicalConfigurationMainService.findByConfigTypeAndIsActiveTrueOrderBySortOrder(configType);
+//    }
+//
+//    @Cacheable(value = "diseases")
+//    public List<DiseaseDto> getAllActiveDiseases() {
+//        return medicalConfigurationMainService.findByIsActiveTrueOrderByCategory();
+//    }
+//
+//    @Cacheable(value = "diseases-by-category", key = "#category")
+//    public List<DiseaseDto> getDiseasesByCategory(String category) {
+//        return medicalConfigurationMainService.findByCategoryAndIsActiveTrueOrderByName(category);
+//    }
+//
+//    @Cacheable(value = "medications")
+//    public List<MedicationDto> getAllActiveMedications() {
+//        return medicalConfigurationMainService.findByIsActiveTrueOrderByName();
+//    }
+//
+//    @Cacheable(value = "medications-by-category", key = "#category")
+//    public List<MedicationDto> getMedicationsByCategory(String category) {
+//        return medicalConfigurationMainService.findByCategoryAndIsActiveTrueOrderByName(category);
+//    }
+//
+//    @Cacheable(value = "symptoms")
+//    public List<SymptomDto> getAllActiveSymptoms() {
+//        
+//        return medicalConfigurationMainService.findByIsActiveTrueOrderByBodySystem();
+//    }
+//
+//    @Cacheable(value = "symptoms-by-system", key = "#bodySystem")
+//    public List<SymptomDto> getSymptomsByBodySystem(String bodySystem) {
+//        return medicalConfigurationMainService.findByBodySystemAndIsActiveTrueOrderByName(bodySystem);
+//    }
 
-    @Cacheable(value = "diseases")
-    public List<Disease> getAllActiveDiseases() {
-        return diseaseRepository.findByIsActiveTrueOrderByCategory();
-    }
+//    public Set<String> getRelatedDiseasesForSymptoms(Set<String> symptomCodes) {
+//        List<SymptomDto> symptoms = medicalConfigurationMainService.findByCodeInAndIsActiveTrue(symptomCodes);
+//        return symptoms.stream()
+//            .flatMap(symptom -> symptom.getRelatedDiseases().stream())
+//            .collect(Collectors.toSet());
+//    }
+//    public boolean isDiseaseExisted(String icdCode) {
+//        boolean isExsited = medicalConfigurationMainService.existsByIcdCode(icdCode);
+//        return isExsited;
+//    }
 
-    @Cacheable(value = "diseases-by-category", key = "#category")
-    public List<Disease> getDiseasesByCategory(String category) {
-        return diseaseRepository.findByCategoryAndIsActiveTrueOrderByName(category);
-    }
-
-    @Cacheable(value = "medications")
-    public List<Medication> getAllActiveMedications() {
-        return medicationRepository.findByIsActiveTrueOrderByName();
-    }
-
-    @Cacheable(value = "medications-by-category", key = "#category")
-    public List<Medication> getMedicationsByCategory(String category) {
-        return medicationRepository.findByCategoryAndIsActiveTrueOrderByName(category);
-    }
-
-    @Cacheable(value = "symptoms")
-    public List<Symptom> getAllActiveSymptoms() {
-        return symptomRepository.findByIsActiveTrueOrderByBodySystem();
-    }
-
-    @Cacheable(value = "symptoms-by-system", key = "#bodySystem")
-    public List<Symptom> getSymptomsByBodySystem(String bodySystem) {
-        return symptomRepository.findByBodySystemAndIsActiveTrueOrderByName(bodySystem);
-    }
-
-    public Disease getDiseaseByCode(String icdCode) {
-        Disease disease = diseaseRepository.findByIcdCodeAndIsActiveTrue(icdCode)
-                .orElseThrow(() -> new BusinessException("Disease not found: " + icdCode, HttpStatus.NOT_FOUND));
+    public DiseaseDto getDiseaseByCode(String icdCode) {
+        DiseaseDto disease = null;
+        try{
+            disease = medicalConfigurationMainService.getDiseaseByCode(icdCode);
+        } catch (Exception e) {
+            log.error("Disease not found: " + icdCode);
+            log.error(e.getMessage());
+        }
         return disease;
     }
 
-    public Disease findDiseaseByIcdCodeCustom(String icdCode) {
-        Disease disease;
+    public DiseaseDto findDiseaseByIcdCodeCustom(String icdCode) {
+        DiseaseDto disease;
         try{
-            disease = diseaseRepository.findDiseaseByIcdCodeCustom(icdCode).orElseThrow();
+            //disease = medicalConfigurationMainService.getSpecializationsForDisease(icdCode);
+            disease = medicalConfigurationMainService.findDiseaseByIcdCodeCustom(icdCode);
         } catch (Exception e) {
             e.printStackTrace();
             throw new BusinessException("Disease not found: " + icdCode, HttpStatus.NOT_FOUND);
@@ -84,23 +98,10 @@ public class MedicalConfigurationService {
         return disease;
     }
 
-    public boolean isDiseaseExisted(String icdCode) {
-        boolean isExsited = diseaseRepository.existsByIcdCode(icdCode);
-        return isExsited;
+    public List<String> getSpecializationsForDisease(String diseaseCode) {
+        return medicalConfigurationMainService.getSpecializationsForDisease(diseaseCode);
     }
-
-    public Set<String> getSpecializationsForDisease(String diseaseCode) {
-        return diseaseRepository.findByIcdCodeAndIsActiveTrue(diseaseCode)
-            .map(Disease::getRequiredSpecializations)
-            .orElse(Collections.emptySet());
-    }
-
-    public Set<String> getRelatedDiseasesForSymptoms(Set<String> symptomCodes) {
-        List<Symptom> symptoms = symptomRepository.findByCodeInAndIsActiveTrue(symptomCodes);
-        return symptoms.stream()
-            .flatMap(symptom -> symptom.getRelatedDiseases().stream())
-            .collect(Collectors.toSet());
-    }
+    
 
     @CacheEvict(value = {"medical-configs", "diseases", "medications", "symptoms"}, allEntries = true)
     public void clearCache() {

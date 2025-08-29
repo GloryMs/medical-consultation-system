@@ -1,9 +1,9 @@
 package com.doctorservice.service;
 
 import com.doctorservice.dto.DoctorDetailsDto;
-import com.doctorservice.dto.PendingVerificationDto;
+import com.commonlibrary.dto.PendingVerificationDto;
 import com.doctorservice.entity.Doctor;
-import com.doctorservice.entity.VerificationStatus;
+import com.commonlibrary.entity.VerificationStatus;
 import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.ConsultationReportRepository;

@@ -1,7 +1,7 @@
 package com.patientservice.repository;
 
 import com.patientservice.entity.RescheduleRequest;
-import com.patientservice.entity.RescheduleStatus;
+import com.commonlibrary.entity.RescheduleStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

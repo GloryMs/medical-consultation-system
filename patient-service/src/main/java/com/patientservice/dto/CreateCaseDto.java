@@ -1,7 +1,7 @@
 package com.patientservice.dto;
 
 import com.commonlibrary.entity.CaseComplexity;
-import com.patientservice.entity.UrgencyLevel;
+import com.commonlibrary.entity.UrgencyLevel;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 import org.springframework.validation.annotation.Validated;

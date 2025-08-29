@@ -1,6 +1,7 @@
 package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.RescheduleStatus;
 import jakarta.persistence.*;
 import lombok.*;
 

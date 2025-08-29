@@ -1,6 +1,8 @@
 package com.doctorservice.entity;
 
+import com.commonlibrary.entity.AppointmentStatus;
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.ConsultationType;
 import jakarta.persistence.*;
 import lombok.*;
 

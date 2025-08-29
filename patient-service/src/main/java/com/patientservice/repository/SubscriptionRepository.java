@@ -1,7 +1,6 @@
 package com.patientservice.repository;
 
 import com.patientservice.entity.Subscription;
-import com.patientservice.entity.SubscriptionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

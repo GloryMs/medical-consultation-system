@@ -1,6 +1,8 @@
 package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.PaymentStatus;
+import com.commonlibrary.entity.PlanType;
 import jakarta.persistence.*;
 import lombok.*;
 

@@ -1,10 +1,8 @@
 package com.patientservice.repository;
 
-import com.patientservice.entity.CaseStatus;
 import com.patientservice.entity.Patient;
-import com.patientservice.entity.SubscriptionStatus;
+import com.commonlibrary.entity.SubscriptionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import java.util.Optional;
 

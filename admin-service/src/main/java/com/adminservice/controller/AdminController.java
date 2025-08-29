@@ -6,8 +6,9 @@ import com.adminservice.entity.SystemConfig;
 import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
 import com.adminservice.service.AdminService;
-import com.authservice.dto.UserStasDto;
-import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.*;
+import com.commonlibrary.dto.PendingVerificationDto;
+import com.commonlibrary.dto.UserDto;
 import com.commonlibrary.entity.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -191,39 +192,39 @@ public class AdminController {
     }
 
     @GetMapping("/config/diseases")
-    public ResponseEntity<ApiResponse<List<Disease>>> getAllDiseases() {
-        List<Disease> diseases = configService.getAllDiseases();
+    public ResponseEntity<ApiResponse<List<DiseaseDto>>> getAllDiseases() {
+        List<DiseaseDto> diseases = configService.getAllDiseases();
         return ResponseEntity.ok(ApiResponse.success(diseases));
     }
 
     @GetMapping("/config/diseases/category/{category}")
-    public ResponseEntity<ApiResponse<List<Disease>>> getDiseasesByCategory(@PathVariable String category) {
-        List<Disease> diseases = configService.getAllActiveDiseasesByCategory(category);
+    public ResponseEntity<ApiResponse<List<DiseaseDto>>> getDiseasesByCategory(@PathVariable String category) {
+        List<DiseaseDto> diseases = configService.getAllActiveDiseasesByCategory(category);
         return ResponseEntity.ok(ApiResponse.success(diseases));
     }
 
     @GetMapping("/config/medications")
-    public ResponseEntity<ApiResponse<List<Medication>>> getAllMedications() {
-        List<Medication> medications = configService.getAllMedications();
+    public ResponseEntity<ApiResponse<List<MedicationDto>>> getAllMedications() {
+        List<MedicationDto> medications = configService.getAllMedications();
         return ResponseEntity.ok(ApiResponse.success(medications));
     }
 
     @GetMapping("/config/symptoms")
-    public ResponseEntity<ApiResponse<List<Symptom>>> getAllSymptoms() {
-        List<Symptom> symptoms = configService.getAllActiveSymptoms();
+    public ResponseEntity<ApiResponse<List<SymptomDto>>> getAllSymptoms() {
+        List<SymptomDto> symptoms = configService.getAllActiveSymptoms();
         return ResponseEntity.ok(ApiResponse.success(symptoms));
     }
 
     @GetMapping("/config/symptoms/system/{bodySystem}")
-    public ResponseEntity<ApiResponse<List<Symptom>>> getSymptomsByBodySystem(@PathVariable String bodySystem) {
-        List<Symptom> symptoms = configService.getSymptomsByBodySystem(bodySystem);
+    public ResponseEntity<ApiResponse<List<SymptomDto>>> getSymptomsByBodySystem(@PathVariable String bodySystem) {
+        List<SymptomDto> symptoms = configService.getSymptomsByBodySystem(bodySystem);
         return ResponseEntity.ok(ApiResponse.success(symptoms));
     }
 
     @GetMapping("/config/{configType}")
-    public ResponseEntity<ApiResponse<List<MedicalConfiguration>>> getConfigurationsByType
+    public ResponseEntity<ApiResponse<List<MedicalConfigurationDto>>> getConfigurationsByType
             (@PathVariable String configType) {
-        List<MedicalConfiguration> configs = configService.getConfigurationsByType(configType);
+        List<MedicalConfigurationDto> configs = configService.getConfigurationsByType(configType);
         return ResponseEntity.ok(ApiResponse.success(configs));
     }
 

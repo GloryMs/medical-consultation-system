@@ -1,7 +1,12 @@
 package com.doctorservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.dto.DoctorProfileDto;
+import com.commonlibrary.dto.PendingVerificationDto;
 import com.commonlibrary.entity.AssignmentStatus;
+import com.commonlibrary.entity.CaseStatus;
+import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
@@ -9,11 +14,9 @@ import com.doctorservice.feign.PatientServiceClient;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.service.DoctorService;
+import com.doctorservice.service.InternalDoctorService;
 import jakarta.validation.Valid;
-import jakarta.ws.rs.Path;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.hibernate.validator.internal.constraintvalidators.bv.notempty.NotEmptyValidatorForCollection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,6 +35,7 @@ public class DoctorController {
     private final DoctorRepository doctorRepository;
     private final PatientServiceClient caseAssignmentRepo;
     private final AppointmentRepository appointmentRepository;
+    private final InternalDoctorService internalDoctorService;
     //private final NotEmptyValidatorForCollection notEmptyValidatorForCollection;
 
     @PostMapping("/profile")
@@ -84,10 +88,10 @@ public class DoctorController {
     }
 
     // 10. Get Doctor Profile - MISSING ENDPOINT
-    @GetMapping("/profile")
+    @GetMapping("/profile/{doctorId}")
     public ResponseEntity<ApiResponse<DoctorProfileDto>> getProfile(
-            @RequestHeader("X-User-Id") Long userId) {
-        DoctorProfileDto profile = doctorService.getProfile(userId);
+            @PathVariable Long doctorId) {
+        DoctorProfileDto profile = doctorService.getProfile(doctorId);
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
@@ -292,8 +296,8 @@ public class DoctorController {
     }
 
     @GetMapping("/status/pending-verifications")
-    public ResponseEntity<ApiResponse<List<Doctor>>> getPendingVerifications(){
-        List<Doctor> doctors = doctorRepository.findByVerificationStatus(VerificationStatus.PENDING);
+    public ResponseEntity<ApiResponse<List<PendingVerificationDto>>> getPendingVerifications(){
+        List<PendingVerificationDto> doctors = internalDoctorService.getPendingVerifications();
         return ResponseEntity.ok(ApiResponse.success(doctors));
     }
 

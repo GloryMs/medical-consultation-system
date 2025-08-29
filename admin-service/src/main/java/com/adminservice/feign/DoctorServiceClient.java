@@ -1,9 +1,10 @@
 package com.adminservice.feign;
 
 import com.adminservice.dto.DoctorDetailsDto;
-import com.adminservice.dto.PendingVerificationDto;
 import com.commonlibrary.dto.ApiResponse;
-import com.doctorservice.entity.Doctor;
+import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.dto.DoctorProfileDto;
+import com.commonlibrary.dto.PendingVerificationDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,13 +25,13 @@ public interface DoctorServiceClient {
                                                                @RequestParam String reason);
 
     @GetMapping("/api/doctors/pending-verifications")
-    ResponseEntity<ApiResponse<List<Doctor>>> getPendingVerifications();
+    ResponseEntity<ApiResponse<List<PendingVerificationDto>>> getPendingVerifications();
 
     @GetMapping("/api/doctors/pending-verifications/count")
     ResponseEntity<ApiResponse<Long>> getPendingVerificationsCount();
 
-    @GetMapping("/api/doctors/{doctorId}")
-    ResponseEntity<ApiResponse<Doctor>> getDoctorDetails(@PathVariable Long doctorId);
+    @GetMapping("/api/profile/{doctorId}")
+    ResponseEntity<ApiResponse<DoctorProfileDto>> getDoctorDetails(@PathVariable Long doctorId);
 
     @GetMapping("/api/doctors/{doctorId}/performance")
     ResponseEntity<ApiResponse<Map<String, Object>>> getDoctorPerformance(@PathVariable Long doctorId,

@@ -1,6 +1,8 @@
 package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.Gender;
+import com.commonlibrary.entity.SubscriptionStatus;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;

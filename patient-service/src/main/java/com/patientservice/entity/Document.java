@@ -1,6 +1,7 @@
 package com.patientservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.DocumentType;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.*;

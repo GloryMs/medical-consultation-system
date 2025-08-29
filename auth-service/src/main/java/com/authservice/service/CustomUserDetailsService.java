@@ -1,7 +1,7 @@
 package com.authservice.service;
 
 import com.authservice.repository.UserRepository;
-import com.commonlibrary.entity.User;
+import com.authservice.entity.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;

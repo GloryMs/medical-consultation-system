@@ -1,6 +1,8 @@
 package com.notificationservice.entity;
 
 import com.commonlibrary.entity.BaseEntity;
+import com.commonlibrary.entity.NotificationPriority;
+import com.commonlibrary.entity.NotificationType;
 import jakarta.persistence.*;
 import lombok.*;
 

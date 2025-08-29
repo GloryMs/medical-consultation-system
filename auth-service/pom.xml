@@ -3,26 +3,21 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.medical.consultation</groupId>
-        <artifactId>medical-consultation-system</artifactId>
-        <version>1.0.0</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.4</version>
+        <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
+    <groupId>com.medical.consultation</groupId>
     <artifactId>auth-service</artifactId>
-
+    <version>1.0.0</version>
 
     <properties>
         <java.version>17</java.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
     </properties>
     <dependencies>
-        <dependency>
-            <groupId>com.medical.consultation</groupId>
-            <artifactId>common-library</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-
-
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -85,6 +80,11 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.medical.consultation</groupId>
+            <artifactId>common-library</artifactId>
+            <version>1.0.0</version>
         </dependency>
     </dependencies>
 

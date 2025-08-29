@@ -1,7 +1,7 @@
 package com.patientservice.dto;
 
-import com.patientservice.entity.PlanType;
-import com.patientservice.entity.SubscriptionStatus;
+import com.commonlibrary.entity.PlanType;
+import com.commonlibrary.entity.SubscriptionStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;

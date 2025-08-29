@@ -2,9 +2,9 @@ package com.patientservice.feign;
 
 
 import com.commonlibrary.dto.ApiResponse;
-import com.doctorservice.entity.Appointment;
-import com.doctorservice.entity.Doctor;
-import com.doctorservice.entity.VerificationStatus;
+import com.commonlibrary.dto.AppointmentDto;
+import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.entity.VerificationStatus;
 import com.patientservice.entity.CaseStatus;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +16,7 @@ import java.util.List;
 public interface DoctorServiceClient {
 
     @GetMapping("/api/doctors/status/{status}/available/{isAvailable}")
-    ResponseEntity<ApiResponse<List<Doctor>>> findByVerificationStatusAndIsAvailableTrue(
+    ResponseEntity<ApiResponse<List<DoctorDto>>> findByVerificationStatusAndIsAvailableTrue(
             @PathVariable VerificationStatus status, @PathVariable Boolean isAvailable);
 
     @PutMapping("/api/doctors/{doctorId}/update-load/{caseStatus}")
@@ -25,6 +25,6 @@ public interface DoctorServiceClient {
                                                        @RequestParam int flag); // 1 -> increase | 0 -> decrease
 
     @GetMapping("/api/doctors/appointments/{patientId}")
-    ResponseEntity<ApiResponse<List<Appointment>>> getPatientAppointments(@PathVariable Long patientId);
+    ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointments(@PathVariable Long patientId);
 
 }

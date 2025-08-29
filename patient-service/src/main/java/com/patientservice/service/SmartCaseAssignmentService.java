@@ -1,15 +1,13 @@
 package com.patientservice.service;
 
-import com.commonlibrary.dto.DoctorMatchingResult;
-import com.commonlibrary.entity.AssignmentPriority;
-import com.commonlibrary.entity.AssignmentStatus;
-import com.commonlibrary.entity.CaseComplexity;
-import com.commonlibrary.entity.Disease;
+import com.commonlibrary.dto.DiseaseDto;
+import com.commonlibrary.dto.DoctorMatchingResultDto;
+import com.commonlibrary.entity.*;
+import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
-import com.doctorservice.entity.Doctor;
-import com.doctorservice.entity.VerificationStatus;
 import com.commonlibrary.dto.DoctorDto;
 import com.patientservice.entity.*;
+import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.repository.CaseAssignmentRepository;
@@ -21,8 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import javax.print.Doc;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -69,10 +65,10 @@ public class SmartCaseAssignmentService {
         }
 
         // Calculate matching scores for all eligible doctors
-        List<DoctorMatchingResult> matchingResults = calculateMatchingScores(medicalCase, eligibleDoctors);
+        List<DoctorMatchingResultDto> matchingResults = calculateMatchingScores(medicalCase, eligibleDoctors);
 
         // Sort by score and select top doctors
-        List<DoctorMatchingResult> selectedDoctors = selectBestDoctors(medicalCase, matchingResults);
+        List<DoctorMatchingResultDto> selectedDoctors = selectBestDoctors(medicalCase, matchingResults);
 
         // Create assignments
         List<CaseAssignment> assignments = createCaseAssignments(medicalCase, selectedDoctors);
@@ -90,7 +86,7 @@ public class SmartCaseAssignmentService {
     /**
      * Calculate comprehensive matching score between case and doctor
      */
-    private DoctorMatchingResult calculateMatchingScore(Case medicalCase, DoctorDto doctor) {
+    private DoctorMatchingResultDto calculateMatchingScore(Case medicalCase, DoctorDto doctor) {
         double totalScore = 0.0;
         Map<String, Double> scoreBreakdown = new HashMap<>();
 
@@ -133,7 +129,7 @@ public class SmartCaseAssignmentService {
         totalScore = applyComplexityModifier(totalScore, medicalCase, doctor);
         totalScore = applyUrgencyModifier(totalScore, medicalCase, doctor);
 
-        return DoctorMatchingResult.builder()
+        return DoctorMatchingResultDto.builder()
             .doctor(doctor)
             .totalScore(Math.min(totalScore, 100.0)) // Cap at 100
             .scoreBreakdown(scoreBreakdown)
@@ -163,7 +159,7 @@ public class SmartCaseAssignmentService {
         score += (matchingSecondary.size() * 5.0); // 5 points per secondary match
 
         // Subspecialization bonus
-        Set<String> diseaseSpecializations = configService.getSpecializationsForDisease(medicalCase.getPrimaryDiseaseCode());
+        List<String> diseaseSpecializations = configService.getSpecializationsForDisease(medicalCase.getPrimaryDiseaseCode());
         Set<String> matchingSubSpec = new HashSet<>(doctor.getSubSpecializationCodes());
         matchingSubSpec.retainAll(diseaseSpecializations);
         score += (matchingSubSpec.size() * 10.0); // 10 points per subspecialization match
@@ -188,11 +184,11 @@ public class SmartCaseAssignmentService {
         score += (matchingDiseases.size() * 10.0);
 
         // Related disease categories
-        Disease primaryDisease = configService.getDiseaseByCode(medicalCase.getPrimaryDiseaseCode());
+        DiseaseDto primaryDisease = configService.getDiseaseByCode(medicalCase.getPrimaryDiseaseCode());
         long categoryMatches = doctor.getDiseaseExpertiseCodes().stream()
             .mapToLong(code -> {
                 try {
-                    Disease expertiseDisease = configService.getDiseaseByCode(code);
+                    DiseaseDto expertiseDisease = configService.getDiseaseByCode(code);
                     return expertiseDisease.getCategory().equals(primaryDisease.getCategory()) ? 1 : 0;
                 } catch (Exception e) {
                     return 0;
@@ -376,7 +372,7 @@ public class SmartCaseAssignmentService {
         // Get all verified and available doctors
         List<DoctorDto> allDoctors = new ArrayList<>();
         try{
-            List<Doctor> doctors = doctorServiceClient.findByVerificationStatusAndIsAvailableTrue(
+            List<DoctorDto> doctors = doctorServiceClient.findByVerificationStatusAndIsAvailableTrue(
                     VerificationStatus.VERIFIED, true).getBody().getData();
             allDoctors = doctors.stream().map(this::convertToDoctorDto).toList();
         }catch (Exception e) {
@@ -389,9 +385,9 @@ public class SmartCaseAssignmentService {
             .collect(Collectors.toList());
     }
 
-    public DoctorDto convertToDoctorDto(Doctor doctor){
+    public DoctorDto convertToDoctorDto(DoctorDto doctor){
         DoctorDto doctorDto = new DoctorDto();
-          doctorDto.setDoctorId(doctor.getId());
+          doctorDto.setDoctorId(doctor.getDoctorId());
           doctorDto.setFullName(doctor.getFullName());
           doctorDto.setPrimarySpecializationCode(doctor.getPrimarySpecializationCode());
           doctorDto.setSpecializationCodes(doctor.getSpecializationCodes());
@@ -467,7 +463,7 @@ public class SmartCaseAssignmentService {
     /**
      * Calculate matching scores for all eligible doctors
      */
-    private List<DoctorMatchingResult> calculateMatchingScores(Case medicalCase, List<DoctorDto> eligibleDoctors) {
+    private List<DoctorMatchingResultDto> calculateMatchingScores(Case medicalCase, List<DoctorDto> eligibleDoctors) {
         return eligibleDoctors.parallelStream()
             .map(doctor -> calculateMatchingScore(medicalCase, doctor))
             .filter(result -> result.getTotalScore() >= 30.0) // Minimum threshold
@@ -477,17 +473,17 @@ public class SmartCaseAssignmentService {
     /**
      * Select the best doctors based on scoring and case requirements
      */
-    private List<DoctorMatchingResult> selectBestDoctors(Case medicalCase, List<DoctorMatchingResult> matchingResults) {
+    private List<DoctorMatchingResultDto> selectBestDoctors(Case medicalCase, List<DoctorMatchingResultDto> matchingResults) {
         // Sort by score descending
-        List<DoctorMatchingResult> sortedResults = matchingResults.stream()
+        List<DoctorMatchingResultDto> sortedResults = matchingResults.stream()
             .sorted((a, b) -> Double.compare(b.getTotalScore(), a.getTotalScore()))
             .collect(Collectors.toList());
 
-        List<DoctorMatchingResult> selectedDoctors = new ArrayList<>();
+        List<DoctorMatchingResultDto> selectedDoctors = new ArrayList<>();
         
         // Always try to assign primary doctor (highest score)
         if (!sortedResults.isEmpty()) {
-            DoctorMatchingResult primary = sortedResults.get(0);
+            DoctorMatchingResultDto primary = sortedResults.get(0);
             primary.setPriority(AssignmentPriority.PRIMARY);
             selectedDoctors.add(primary);
         }
@@ -497,7 +493,7 @@ public class SmartCaseAssignmentService {
                                     medicalCase.getMinDoctorsRequired() - 1);
         
         for (int i = 1; i < sortedResults.size() && selectedDoctors.size() < medicalCase.getMaxDoctorsAllowed(); i++) {
-            DoctorMatchingResult candidate = sortedResults.get(i);
+            DoctorMatchingResultDto candidate = sortedResults.get(i);
             
             // Ensure diversity in selections
             if (isDiverseSelection(selectedDoctors, candidate)) {
@@ -509,7 +505,7 @@ public class SmartCaseAssignmentService {
 
         // If we don't have minimum required doctors, add more (with lower threshold)
         if (selectedDoctors.size() < medicalCase.getMinDoctorsRequired()) {
-            for (DoctorMatchingResult result : matchingResults) {
+            for (DoctorMatchingResultDto result : matchingResults) {
                 if (selectedDoctors.size() >= medicalCase.getMinDoctorsRequired()) break;
                 
                 boolean alreadySelected = selectedDoctors.stream()
@@ -529,7 +525,7 @@ public class SmartCaseAssignmentService {
     /**
      * Ensure diverse selection of doctors (different subspecializations if possible)
      */
-    private boolean isDiverseSelection(List<DoctorMatchingResult> selected, DoctorMatchingResult candidate) {
+    private boolean isDiverseSelection(List<DoctorMatchingResultDto> selected, DoctorMatchingResultDto candidate) {
         if (selected.isEmpty()) return true;
 
         // Check if candidate brings different subspecializations
@@ -547,11 +543,11 @@ public class SmartCaseAssignmentService {
     /**
      * Create case assignments for selected doctors
      */
-    private List<CaseAssignment> createCaseAssignments(Case medicalCase, List<DoctorMatchingResult> selectedDoctors) {
+    private List<CaseAssignment> createCaseAssignments(Case medicalCase, List<DoctorMatchingResultDto> selectedDoctors) {
         List<CaseAssignment> assignments = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
-        for (DoctorMatchingResult result : selectedDoctors) {
+        for (DoctorMatchingResultDto result : selectedDoctors) {
             CaseAssignment assignment = CaseAssignment.builder()
                 .caseEntity(medicalCase)
                 .doctorId(result.getDoctor().getDoctorId())

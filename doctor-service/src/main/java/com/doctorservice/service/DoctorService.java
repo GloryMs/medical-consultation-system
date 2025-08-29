@@ -1,5 +1,9 @@
 package com.doctorservice.service;
 
+import com.commonlibrary.dto.DoctorProfileDto;
+import com.commonlibrary.entity.AppointmentStatus;
+import com.commonlibrary.entity.CaseStatus;
+import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
