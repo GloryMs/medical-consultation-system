@@ -1,6 +1,7 @@
 package com.authservice.service;
 
 import com.authservice.dto.*;
+import com.authservice.kafka.UserRegistrationProducer;
 import com.authservice.repository.UserRepository;
 import com.authservice.security.JwtService;
 import com.authservice.entity.User;
@@ -35,6 +36,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
+    private final UserRegistrationProducer userRegistrationProducer;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -54,6 +56,12 @@ public class AuthService {
                 .build();
 
         User savedUser = userRepository.save(user);
+
+        userRegistrationProducer.sendUserRegistrationEvent(
+                savedUser.getId(),
+                savedUser.getEmail(),
+                savedUser.getRole().name()
+        );
 
         // Create role-specific profile based on user role
         createRoleSpecificProfile(savedUser, request);

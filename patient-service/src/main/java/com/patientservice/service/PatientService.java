@@ -10,6 +10,7 @@ import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.PaymentServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
+import com.patientservice.kafka.CaseEventProducer;
 import com.patientservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ public class PatientService {
     private final SmartCaseAssignmentService assignmentService;
     private final CaseAssignmentRepository assignmentRepository;
     private final DoctorServiceClient doctorServiceClient;
+    private final CaseEventProducer caseEventProducer;
 
     //@Override
     @Transactional
@@ -550,6 +552,7 @@ public class PatientService {
                 .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
 
         CaseStatus newStatus = CaseStatus.valueOf(status);
+        String oldStatus = medicalCase.getStatus().toString();
         medicalCase.setStatus(newStatus);
 //
 //        if (newStatus == CaseStatus.ACCEPTED) {
@@ -564,6 +567,12 @@ public class PatientService {
 //        }
 
         caseRepository.save(medicalCase);
+
+        // Send Kafka event
+        caseEventProducer.sendCaseStatusUpdateEvent(
+                caseId, oldStatus, status,
+                medicalCase.getPatient().getId(), doctorId
+        );
     }
 
     @Transactional

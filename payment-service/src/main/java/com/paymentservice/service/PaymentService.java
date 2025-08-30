@@ -6,6 +6,7 @@ import com.paymentservice.dto.PaymentReceiptDto;
 import com.paymentservice.dto.ProcessPaymentDto;
 import com.paymentservice.entity.Payment;
 import com.paymentservice.entity.PaymentStatus;
+import com.paymentservice.kafka.PaymentEventProducer;
 import com.paymentservice.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final PaymentEventProducer paymentEventProducer;
 
     @Transactional
     public Payment processPayment(ProcessPaymentDto dto) {
@@ -47,7 +49,18 @@ public class PaymentService {
         // Simulate payment processing
         simulatePaymentProcessing(payment);
 
-        return paymentRepository.save(payment);
+        Payment saved = paymentRepository.save(payment);
+
+        // Send Kafka event
+        paymentEventProducer.sendPaymentCompletedEvent(
+                dto.getPatientId(),
+                dto.getDoctorId(),
+                dto.getCaseId(),
+                dto.getPaymentType().toString(),
+                dto.getAmount().doubleValue()
+        );
+
+        return saved;
     }
 
     private void simulatePaymentProcessing(Payment payment) {

@@ -5,11 +5,16 @@ import com.commonlibrary.entity.NotificationType;
 import jakarta.persistence.Column;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import lombok.Data;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Data
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class NotificationDto {
     private Long senderId;
     private Long receiverId;
