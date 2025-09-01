@@ -3,6 +3,7 @@ package com.adminservice.service;
 import com.adminservice.dto.*;
 import com.adminservice.entity.*;
 import com.adminservice.feign.*;
+import com.adminservice.kafka.AdminEventProducer;
 import com.adminservice.repository.ComplaintRepository;
 import com.adminservice.repository.SystemConfigRepository;
 import com.adminservice.repository.StaticContentRepository;
@@ -12,6 +13,7 @@ import com.commonlibrary.entity.ComplaintPriority;
 import com.commonlibrary.entity.ComplaintStatus;
 import com.commonlibrary.dto.DoctorDto;
 import com.commonlibrary.dto.*;
+import com.commonlibrary.kafka.NotificationProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class AdminService {
     private final StaticContentRepository staticContentRepository;
     private final UserRepository userRepository;
     private final NotificationServiceClient notificationServiceClient;
+    private final AdminEventProducer adminEventProducer;
 
     public DashboardDto getDashboard() {
         // Simulate dashboard data
@@ -478,5 +481,20 @@ public class AdminService {
     private double calculateSystemAvailability() {
         // Calculate system availability
         return 99.95; // 99.95%
+    }
+
+    public void notifyAdminOfNewDoctor(Long userId, String email) {
+        try{
+            adminEventProducer.sendDoctorRegistrationNotification(userId, email, 0L);
+            log.info("New doctor registration requires admin review: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send notification about new doctor registration", e);
+        }
+    }
+
+    public void updatePaymentStats(String paymentType, Double amount) {
+        // Update payment and revenue statistics
+        log.info("Updating payment stats: type={}, amount={}", paymentType, amount);
+        // Implement financial statistics logic
     }
 }

@@ -57,7 +57,8 @@ public class PaymentService {
                 dto.getDoctorId(),
                 dto.getCaseId(),
                 dto.getPaymentType().toString(),
-                dto.getAmount().doubleValue()
+                dto.getAmount().doubleValue(),
+                saved.getTransactionId()
         );
 
         return saved;

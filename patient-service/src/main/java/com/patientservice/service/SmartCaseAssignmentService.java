@@ -10,6 +10,7 @@ import com.patientservice.entity.*;
 import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
+import com.patientservice.kafka.PatientEventProducer;
 import com.patientservice.repository.CaseAssignmentRepository;
 import com.patientservice.repository.CaseRepository;
 import jakarta.transaction.Transactional;
@@ -42,7 +43,7 @@ public class SmartCaseAssignmentService {
     private static final double AVAILABILITY_WEIGHT = 0.10;
     private static final double PERFORMANCE_WEIGHT = 0.05;
     private static final double CASE_PREFERENCE_WEIGHT = 0.05;
-
+    private final PatientEventProducer patientEventProducer;
 
 
     /**
@@ -600,15 +601,14 @@ public class SmartCaseAssignmentService {
         caseRepository.save(medicalCase);
     }
 
-    /**
-     * Send notifications to assigned doctors
-     */
     private void sendAssignmentNotifications(Case medicalCase, List<CaseAssignment> assignments) {
         for (CaseAssignment assignment : assignments) {
+            String title ="";
+            String message = "";
             try {
-                String title = String.format("New %s Case Assignment", 
+                title = String.format("New %s Case Assignment",
                     assignment.getPriority().name().toLowerCase());
-                String message = String.format(
+                message = String.format(
                     "You have been assigned a %s case: %s. Urgency: %s. Please review and respond by %s.",
                     assignment.getPriority().name().toLowerCase(),
                     medicalCase.getCaseTitle(),
@@ -616,12 +616,13 @@ public class SmartCaseAssignmentService {
                     assignment.getExpiresAt().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm"))
                 );
 
-                notificationService.sendNotification(
-                    0L, // System notification
-                    assignment.getDoctorId(),
-                    title,
-                    message
-                );
+                patientEventProducer.sendAssignmentNotification(
+                        medicalCase.getPatient().getUserId(),
+                        assignment.getDoctorId(),
+                        medicalCase.getId(),
+                        title,
+                        message
+                        );
             } catch (Exception e) {
                 log.error("Failed to send notification for assignment {}", assignment.getId(), e);
             }
@@ -631,7 +632,8 @@ public class SmartCaseAssignmentService {
     /**
      * Generate human-readable matching reason
      */
-    private String generateMatchingReason(Map<String, Double> scoreBreakdown, Case medicalCase, DoctorDto doctor) {
+    private String generateMatchingReason(Map<String, Double> scoreBreakdown,
+                                          Case medicalCase, DoctorDto doctor) {
         StringBuilder reason = new StringBuilder();
         
         reason.append("Matched based on: ");

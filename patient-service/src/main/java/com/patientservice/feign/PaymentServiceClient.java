@@ -13,6 +13,5 @@ import java.util.List;
 public interface PaymentServiceClient {
 
     @GetMapping("/api/payments/patient/{patientId}/history")
-    //@GetMapping("/api/payments/history")
     ResponseEntity<ApiResponse<List<PaymentHistoryDto>>> getPatientPaymentHistory(@PathVariable Long patientId);
 }

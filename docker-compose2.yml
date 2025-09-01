@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.4.0
     container_name: medical-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -46,29 +46,50 @@ services:
     networks:
       - medical-network
 
-#  kafka:
-#    image: confluentinc/cp-kafka:latest
-#    container_name: medical-kafka
-#    depends_on:
-#      - zookeeper
-#    ports:
-#      - "9092:9092"
-#      - "29092:29092"
-#    environment:
-#      KAFKA_BROKER_ID: 1
-#      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-#      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-#    networks:
-#      - medical-network
-#    healthcheck:
-#      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-#      interval: 10s
-#      timeout: 10s
-#      retries: 5
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: medical-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - medical-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: medical-kafka-ui
+    depends_on:
+      - kafka  # Use your actual Kafka service name
+    ports:
+      - "8090:8080"  # Changed port to avoid conflict with your API Gateway
+    environment:
+      KAFKA_CLUSTERS_0_NAME: medical-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+    networks:
+      - medical-network
+    restart: unless-stopped
 
   # Redis Cache (Optional - for session management and caching)
   redis:
@@ -163,6 +184,7 @@ services:
       SPRING_DATASOURCE_USERNAME: user1
       SPRING_DATASOURCE_PASSWORD: user1
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET: shdkjdjlkERFSGBS12377ggdggd453737@KKKK$44DFDJFJKDJKdsjdhsjdhhdfkdfndpp!mmm?mmjjdjKJFKJDHFKJD
       JWT_EXPIRATION: 86400000
     networks:
@@ -213,7 +235,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/medical_doctor_db
       SPRING_DATASOURCE_USERNAME: user1
       SPRING_DATASOURCE_PASSWORD: user1
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-serv/er:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     networks:
       - medical-network
@@ -239,6 +261,7 @@ services:
       SPRING_DATASOURCE_USERNAME: user1
       SPRING_DATASOURCE_PASSWORD: user1
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     networks:
       - medical-network
     healthcheck:
@@ -284,6 +307,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     networks:
       - medical-network
     healthcheck:
@@ -308,9 +332,9 @@ services:
       SPRING_DATASOURCE_USERNAME: user1
       SPRING_DATASOURCE_PASSWORD: user1
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-#      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-#      SPRING_KAFKA_CONSUMER_GROUP_ID: notification-group
-#      SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET: earliest
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_CONSUMER_GROUP_ID: notification-group
+      SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET: earliest
       # Email configuration - Update these with real SMTP settings
 #      SPRING_MAIL_HOST: smtp.gmail.com
 #      SPRING_MAIL_PORT: 587
@@ -329,8 +353,9 @@ services:
 
 
 # Volumes for persistent data
-#volumes:
-#  postgres_data:
+volumes:
+  kafka-data:
+    driver: local
 #  postgres_data_lib:
 #  pgadmin_data:
 

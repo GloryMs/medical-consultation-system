@@ -14,12 +14,6 @@ import java.util.List;
 @FeignClient(name = "notification-service")
 public interface NotificationServiceClient {
 
-    @PostMapping("/api/notifications/send")
-    void sendNotification(@RequestParam Long senderId,
-                          @RequestParam Long receiverId,
-                          @RequestParam String title,
-                          @RequestParam String message);
-
     @GetMapping("/api/notifications/user/{userId}")
     ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(@PathVariable Long userId);
 }

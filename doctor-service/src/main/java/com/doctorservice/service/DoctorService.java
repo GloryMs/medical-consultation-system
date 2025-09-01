@@ -13,6 +13,7 @@ import com.doctorservice.repository.ConsultationReportRepository;
 import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.feign.PatientServiceClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DoctorService {
 
     private final DoctorRepository doctorRepository;
@@ -429,5 +431,39 @@ public class DoctorService {
             doctor.setCurrentCaseLoad( Math.max(doctor.getCurrentCaseLoad() - 1 , 0)  );
         }
         doctorRepository.save(doctor);
+    }
+
+//    @Transactional
+//    public void updateDoctorWorkload(Long doctorId, Long caseId, String status) {
+//        // Update doctor's case count and workload statistics
+//        // This replaces the database trigger functionality
+//        //log.info("Updating doctor {} workload for case {} with status {}", doctorId, caseId, status);
+//
+//        // Implement your workload update logic here
+//        // Example: Update active cases count, completion statistics, etc.
+//    }
+
+    @Transactional
+    public void initializeDoctorProfile(Long userId, String email) {
+        // Check if doctor profile already exists
+        if (doctorRepository.findByUserId(userId).isPresent()) {
+            log.info("Doctor profile already exists for user: {}", userId);
+            return;
+        }
+
+        // Create basic doctor profile
+        Doctor doctor = Doctor.builder()
+                .userId(userId)
+                .email(email)
+                .verificationStatus(VerificationStatus.PENDING)
+                .isAvailable(false)
+                .totalConsultations(0)
+                .averageRating(0.0)
+                .acceptedCases(0)
+                .currentCaseLoad(0)
+                .build();
+
+        doctorRepository.save(doctor);
+        //log.info("Doctor profile initialized for user: {}", userId);
     }
 }

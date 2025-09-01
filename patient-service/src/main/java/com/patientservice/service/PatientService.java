@@ -10,7 +10,7 @@ import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.PaymentServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
-import com.patientservice.kafka.CaseEventProducer;
+import com.patientservice.kafka.PatientEventProducer;
 import com.patientservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,7 +43,7 @@ public class PatientService {
     private final SmartCaseAssignmentService assignmentService;
     private final CaseAssignmentRepository assignmentRepository;
     private final DoctorServiceClient doctorServiceClient;
-    private final CaseEventProducer caseEventProducer;
+    private final PatientEventProducer patientEventProducer;
 
     //@Override
     @Transactional
@@ -182,6 +182,13 @@ public class PatientService {
 
         // Simulate payment processing
         processPayment(saved, patient);
+
+        // 🔥 NEW: Send Kafka event after subscription creation
+        patientEventProducer.sendSubscriptionCreatedEvent(
+                patient.getId(),
+                dto.getPlanType().toString(),
+                amount.doubleValue()
+        );
 
         dto.setId(saved.getId());
         dto.setAmount(amount);
@@ -516,14 +523,16 @@ public class PatientService {
 
         rescheduleRequestRepository.save(request);
 
-        // Notify doctor
-        notificationServiceClient.sendNotification(
-                patient.getUserId(),
-                //medicalCase.getAssignedDoctorId(), // Here we have to get Doctor Id.
-                Long.parseLong("1"),
-                "Reschedule Request",
-                "Patient requested to reschedule appointment for case: " + medicalCase.getCaseTitle()
-        );
+        Long doctorId = -1L;
+        try{
+            doctorId = medicalCase.getAssignments().get(0).getDoctorId();
+            // 🔥 NEW: Send Kafka event instead of direct notification
+            patientEventProducer.sendRescheduleRequestEvent(
+                    caseId, patient.getId(), doctorId, dto.getReason());
+        } catch (Exception e) {
+            log.error("Doctor not found ...");
+            log.error(e.getMessage());
+        }
     }
 
     // 5. Get Payment History Implementation
@@ -568,8 +577,8 @@ public class PatientService {
 
         caseRepository.save(medicalCase);
 
-        // Send Kafka event
-        caseEventProducer.sendCaseStatusUpdateEvent(
+        // 🔥 NEW: Send Kafka event instead of direct notification
+        patientEventProducer.sendCaseStatusUpdateEvent(
                 caseId, oldStatus, status,
                 medicalCase.getPatient().getId(), doctorId
         );
@@ -765,5 +774,52 @@ public class PatientService {
             log.error(e.getMessage());
         }
         return dto;
+    }
+
+    @Transactional
+    public void activateSubscriptionAfterPayment(Long patientId) {
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        // Update subscription status
+        patient.setSubscriptionStatus(SubscriptionStatus.ACTIVE);
+        patient.setAccountLocked(false);
+        patientRepository.save(patient);
+
+        log.info("Subscription activated for patient: {}", patientId);
+    }
+
+    @Transactional
+    public void updateCaseAfterPayment(Long caseId, Long patientId) {
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+        // Update case to indicate payment is complete
+        medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
+        medicalCase.setStatus(CaseStatus.IN_PROGRESS);
+        caseRepository.save(medicalCase);
+
+        log.info("Case payment completed for case: {}", caseId);
+    }
+
+    @Transactional
+    public void initializePatientProfile(Long userId, String email) {
+        // Check if patient profile already exists
+        if (patientRepository.findByUserId(userId).isPresent()) {
+            log.info("Patient profile already exists for user: {}", userId);
+            return;
+        }
+
+        // Create basic patient profile
+        Patient patient = Patient.builder()
+                .userId(userId)
+                //.email(email)
+                .subscriptionStatus(SubscriptionStatus.PENDING)
+                .accountLocked(true)
+                .casesSubmitted(0)
+                .build();
+
+        patientRepository.save(patient);
+        log.info("Patient profile initialized for user: {}", userId);
     }
 }
