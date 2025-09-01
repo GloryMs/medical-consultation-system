@@ -51,24 +51,15 @@ public class DoctorService {
                 .userId(userId)
                 .fullName(dto.getFullName())
                 .licenseNumber(dto.getLicenseNumber())
-                .primarySpecializationCode(dto.getPrimarySpecializationCode())
-                .subSpecializationCodes(dto.getSubSpecializationCodes())
-                .baseConsultationFee(dto.getBaseConsultationFee())
+                .primarySpecialization(dto.getPrimarySpecializationCode())
+                .subSpecializations(dto.getSubSpecializationCodes())
+                .caseRate(dto.getCaseRate())
+                .hourlyRate(dto.getHourlyRate())
                 .verificationStatus(VerificationStatus.PENDING)
-                .complexCaseFee(dto.getComplexCaseFee())
-                .maxComplexityLevel(dto.getMaxComplexityLevel())
+                .emergencyRate(dto.getComplexCaseFee())
                 .yearsOfExperience(dto.getYearsOfExperience())
-                .averageRating(0.0)
-                .acceptsComplexCases(dto.getAcceptsComplexCases())
-                .acceptsUrgentCases(dto.getAcceptsUrgentCases())
-                .acceptsSecondOpinions(dto.getAcceptsSecondOpinions())
-                .certifications(dto.getCertifications())
-                .diseaseExpertiseCodes(dto.getSymptomExpertiseCodes())
-                .preferredCaseTypes(dto.getPreferredCaseTypes())
-                .researchAreas(dto.getResearchAreas())
-                .symptomExpertiseCodes(dto.getSymptomExpertiseCodes())
+                .rating(0.0)
                 .yearsOfExperience(dto.getYearsOfExperience())
-                .symptomExpertiseCodes(dto.getSymptomExpertiseCodes())
                 .phoneNumber(dto.getPhoneNumber())
                 .email(dto.getEmail())
                 .isAvailable(true)
@@ -413,25 +404,25 @@ public class DoctorService {
         doctorRepository.save(doctor);
     }
 
-    @Transactional
-    public void updateDoctorWorkLoad(Long doctorId, CaseStatus status, int flag) {
-        Doctor doctor = doctorRepository.findById(doctorId)
-                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
-
-        if(flag == 1){ //increase work load
-            //PENDING
-            if( status.name().equals("ASSIGNED") ) {
-                doctor.setCurrentCaseLoad( doctor.getCurrentCaseLoad() + 1 );
-            }
-            else if (status.name().equals("ACCEPTED")) {
-                doctor.setAcceptedCases( doctor.getAcceptedCases() + 1 );
-            }
-        }
-        else{ //decrease work load
-            doctor.setCurrentCaseLoad( Math.max(doctor.getCurrentCaseLoad() - 1 , 0)  );
-        }
-        doctorRepository.save(doctor);
-    }
+//    @Transactional
+//    public void updateDoctorWorkLoad(Long doctorId, CaseStatus status, int flag) {
+//        Doctor doctor = doctorRepository.findById(doctorId)
+//                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+//
+//        if(flag == 1){ //increase work load
+//            //PENDING
+//            if( status.name().equals("ASSIGNED") ) {
+//                doctor.setCurrentCaseLoad( doctor.getCurrentCaseLoad() + 1 );
+//            }
+//            else if (status.name().equals("ACCEPTED")) {
+//                doctor.setAcceptedCases( doctor.getAcceptedCases() + 1 );
+//            }
+//        }
+//        else{ //decrease work load
+//            doctor.setCurrentCaseLoad( Math.max(doctor.getCurrentCaseLoad() - 1 , 0)  );
+//        }
+//        doctorRepository.save(doctor);
+//    }
 
 //    @Transactional
 //    public void updateDoctorWorkload(Long doctorId, Long caseId, String status) {
@@ -457,10 +448,10 @@ public class DoctorService {
                 .email(email)
                 .verificationStatus(VerificationStatus.PENDING)
                 .isAvailable(false)
-                .totalConsultations(0)
-                .averageRating(0.0)
-                .acceptedCases(0)
-                .currentCaseLoad(0)
+                .consultationCount(0)
+                .rating(0.0)
+                .activeCases(0)
+                .workloadPercentage(0.0)
                 .build();
 
         doctorRepository.save(doctor);

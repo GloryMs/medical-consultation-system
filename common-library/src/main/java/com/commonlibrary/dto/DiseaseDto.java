@@ -15,6 +15,7 @@ import java.util.Set;
 @Data
 public class DiseaseDto{
 
+    private Long id;
     private String icdCode;
     private String name;
     private String description;

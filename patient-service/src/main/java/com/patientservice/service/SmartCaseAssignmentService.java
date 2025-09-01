@@ -1,24 +1,22 @@
+// Fixed SmartCaseAssignmentService.java with correct config service integration
 package com.patientservice.service;
 
-import com.commonlibrary.dto.DiseaseDto;
-import com.commonlibrary.dto.DoctorMatchingResultDto;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.entity.*;
-import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
-import com.commonlibrary.dto.DoctorDto;
+import com.patientservice.dto.*;
 import com.patientservice.entity.*;
-import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.kafka.PatientEventProducer;
-import com.patientservice.repository.CaseAssignmentRepository;
-import com.patientservice.repository.CaseRepository;
-import jakarta.transaction.Transactional;
+import com.patientservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -35,44 +33,60 @@ public class SmartCaseAssignmentService {
     private final CaseAssignmentRepository caseAssignmentRepository;
     private final MedicalConfigurationService configService;
     private final NotificationServiceClient notificationService;
-
-    private static final double PRIMARY_SPECIALIZATION_WEIGHT = 0.30;
-    private static final double DISEASE_EXPERTISE_WEIGHT = 0.25;
-    private static final double SYMPTOM_EXPERTISE_WEIGHT = 0.15;
-    private static final double EXPERIENCE_WEIGHT = 0.10;
-    private static final double AVAILABILITY_WEIGHT = 0.10;
-    private static final double PERFORMANCE_WEIGHT = 0.05;
-    private static final double CASE_PREFERENCE_WEIGHT = 0.05;
     private final PatientEventProducer patientEventProducer;
 
+    // Scoring weights for matching algorithm
+    private static final double PRIMARY_SPECIALIZATION_WEIGHT = 0.30;
+    private static final double WORKLOAD_AVAILABILITY_WEIGHT = 0.25;
+    private static final double DISEASE_EXPERTISE_WEIGHT = 0.20;
+    private static final double SYMPTOM_EXPERTISE_WEIGHT = 0.10;
+    private static final double EXPERIENCE_WEIGHT = 0.08;
+    private static final double PERFORMANCE_WEIGHT = 0.05;
+    private static final double CASE_PREFERENCE_WEIGHT = 0.02;
+
+    @Value("${case.assignment.minimum-score-threshold:35.0}")
+    private Double minimumScoreThreshold;
+
+    @Value("${case.assignment.workload-penalty-threshold:80.0}")
+    private Double workloadPenaltyThreshold;
+
+    @Value("${case.assignment.emergency-override-enabled:true}")
+    private Boolean emergencyOverrideEnabled;
 
     /**
-     * Main method to assign a case to multiple doctors
+     * Main method to assign a case to multiple doctors using workload-aware algorithm
      */
     public List<CaseAssignment> assignCaseToMultipleDoctors(Long caseId) {
         log.info("Starting smart case assignment for case ID: {}", caseId);
-        
+
         Case medicalCase = caseRepository.findById(caseId)
-            .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
 
         // Validate case can be assigned
         validateCaseForAssignment(medicalCase);
 
-        // Get eligible doctors
-        List<DoctorDto> eligibleDoctors = findEligibleDoctors(medicalCase);
-        
-        if (eligibleDoctors.isEmpty()) {
-            throw new BusinessException("No eligible doctors found for this case", HttpStatus.NOT_FOUND);
+        // Get eligible doctors with workload information
+        List<DoctorCapacityDto> eligibleDoctorsWithCapacity = findEligibleDoctorsWithWorkload(medicalCase);
+
+        if (eligibleDoctorsWithCapacity.isEmpty()) {
+            // Try emergency assignment if enabled
+            if (emergencyOverrideEnabled && isEmergencyCase(medicalCase)) {
+                eligibleDoctorsWithCapacity = findEmergencyEligibleDoctors(medicalCase);
+            }
+
+            if (eligibleDoctorsWithCapacity.isEmpty()) {
+                throw new BusinessException("No eligible doctors found for this case", HttpStatus.NOT_FOUND);
+            }
         }
 
-        // Calculate matching scores for all eligible doctors
-        List<DoctorMatchingResultDto> matchingResults = calculateMatchingScores(medicalCase, eligibleDoctors);
+        // Calculate workload-aware matching scores
+        List<DoctorMatchingResultDto> matchingResults = calculateWorkloadAwareMatchingScores(medicalCase, eligibleDoctorsWithCapacity);
 
         // Sort by score and select top doctors
-        List<DoctorMatchingResultDto> selectedDoctors = selectBestDoctors(medicalCase, matchingResults);
+        List<DoctorMatchingResultDto> selectedDoctors = selectBestDoctorsWithWorkloadBalance(medicalCase, matchingResults);
 
-        // Create assignments
-        List<CaseAssignment> assignments = createCaseAssignments(medicalCase, selectedDoctors);
+        // Create assignments with workload updates
+        List<CaseAssignment> assignments = createCaseAssignmentsWithWorkloadUpdate(medicalCase, selectedDoctors);
 
         // Update case status and metadata
         updateCaseAfterAssignment(medicalCase, assignments);
@@ -80,440 +94,493 @@ public class SmartCaseAssignmentService {
         // Send notifications
         sendAssignmentNotifications(medicalCase, assignments);
 
-        log.info("Successfully assigned case {} to {} doctors", caseId, assignments.size());
+        log.info("Successfully assigned case {} to {} doctors with workload consideration", caseId, assignments.size());
         return assignments;
     }
 
     /**
-     * Calculate comprehensive matching score between case and doctor
+     * Find eligible doctors with their current workload information
      */
-    private DoctorMatchingResultDto calculateMatchingScore(Case medicalCase, DoctorDto doctor) {
-        double totalScore = 0.0;
+    private List<DoctorCapacityDto> findEligibleDoctorsWithWorkload(Case medicalCase) {
+        try {
+            // Get doctors by specialization with workload info
+            List<String> requiredSpecializations = new ArrayList<>();
+            requiredSpecializations.add(medicalCase.getRequiredSpecialization());
+            if (medicalCase.getSecondarySpecializations() != null) {
+                requiredSpecializations.addAll(medicalCase.getSecondarySpecializations());
+            }
+
+            List<DoctorCapacityDto> eligibleDoctors = new ArrayList<>();
+
+            for (String specialization : requiredSpecializations) {
+                var response = doctorServiceClient.getAvailableDoctorsBySpecializationWithCapacity(
+                        specialization, medicalCase.getMaxDoctorsAllowed() * 2
+                );
+
+                if (response != null && response.getBody() != null && response.getBody().getData() != null) {
+                    eligibleDoctors.addAll(response.getBody().getData());
+                }
+            }
+
+            // Remove duplicates and filter by workload capacity
+            Map<Long, DoctorCapacityDto> uniqueDoctors = new HashMap<>();
+            for (DoctorCapacityDto doctor : eligibleDoctors) {
+                if (!uniqueDoctors.containsKey(doctor.getDoctorId())) {
+                    uniqueDoctors.put(doctor.getDoctorId(), doctor);
+                }
+            }
+
+            return uniqueDoctors.values().stream()
+                    .filter(doctor -> isDoctorEligibleForCase(medicalCase, doctor))
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.error("Error finding eligible doctors with workload: {}", e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Find doctors for emergency cases (can override normal workload limits)
+     */
+    private List<DoctorCapacityDto> findEmergencyEligibleDoctors(Case medicalCase) {
+        try {
+            log.info("Searching for emergency eligible doctors for critical case {}", medicalCase.getId());
+
+            var response = doctorServiceClient.getEmergencyAvailableDoctors(
+                    medicalCase.getRequiredSpecialization(),
+                    medicalCase.getMaxDoctorsAllowed() * 2
+            );
+
+            if (response != null && response.getBody() != null && response.getBody().getData() != null) {
+                return response.getBody().getData().stream()
+                        .filter(doctor -> doctor.getIsAvailable())
+                        .collect(Collectors.toList());
+            }
+
+            return new ArrayList<>();
+        } catch (Exception e) {
+            log.error("Error finding emergency eligible doctors: {}", e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Calculate workload-aware matching scores
+     */
+    private List<DoctorMatchingResultDto> calculateWorkloadAwareMatchingScores(
+            Case medicalCase, List<DoctorCapacityDto> eligibleDoctors) {
+
+        return eligibleDoctors.parallelStream()
+                .map(doctor -> calculateWorkloadAwareMatchingScore(medicalCase, doctor))
+                .filter(result -> result.getTotalScore() >= minimumScoreThreshold)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Calculate comprehensive workload-aware matching score
+     */
+    private DoctorMatchingResultDto calculateWorkloadAwareMatchingScore(Case medicalCase, DoctorCapacityDto doctor) {
         Map<String, Double> scoreBreakdown = new HashMap<>();
+        double totalScore = 0.0;
 
-        // 1. Primary Specialization Match (30%)
+        // 1. Primary Specialization Score (30%)
         double specializationScore = calculateSpecializationScore(medicalCase, doctor);
-        totalScore += specializationScore * PRIMARY_SPECIALIZATION_WEIGHT;
         scoreBreakdown.put("specialization", specializationScore);
+        totalScore += specializationScore * PRIMARY_SPECIALIZATION_WEIGHT;
 
-        // 2. Disease Expertise Match (25%)
-        double diseaseScore = calculateDiseaseExpertiseScore(medicalCase, doctor);
-        totalScore += diseaseScore * DISEASE_EXPERTISE_WEIGHT;
+        // 2. Workload & Availability Score (25%)
+        double workloadScore = calculateWorkloadAvailabilityScore(medicalCase, doctor);
+        scoreBreakdown.put("workload_availability", workloadScore);
+        totalScore += workloadScore * WORKLOAD_AVAILABILITY_WEIGHT;
+
+        // 3. Disease Expertise Score (20%) - FIXED: Using existing config service methods
+        double diseaseScore = calculateDiseaseExpertiseScoreFixed(medicalCase, doctor);
         scoreBreakdown.put("disease_expertise", diseaseScore);
+        totalScore += diseaseScore * DISEASE_EXPERTISE_WEIGHT;
 
-        // 3. Symptom Expertise Match (15%)
-        double symptomScore = calculateSymptomExpertiseScore(medicalCase, doctor);
-        totalScore += symptomScore * SYMPTOM_EXPERTISE_WEIGHT;
+        // 4. Symptom Expertise Score (10%) - FIXED: Simplified approach
+        double symptomScore = calculateSymptomExpertiseScoreFixed(medicalCase, doctor);
         scoreBreakdown.put("symptom_expertise", symptomScore);
+        totalScore += symptomScore * SYMPTOM_EXPERTISE_WEIGHT;
 
-        // 4. Experience Score (10%)
-        double experienceScore = calculateExperienceScore(medicalCase, doctor);
-        totalScore += experienceScore * EXPERIENCE_WEIGHT;
+        // 5. Experience Score (8%)
+        double experienceScore = calculateExperienceScore(doctor);
         scoreBreakdown.put("experience", experienceScore);
-
-        // 5. Availability Score (10%)
-        double availabilityScore = calculateAvailabilityScore(doctor);
-        totalScore += availabilityScore * AVAILABILITY_WEIGHT;
-        scoreBreakdown.put("availability", availabilityScore);
+        totalScore += experienceScore * EXPERIENCE_WEIGHT;
 
         // 6. Performance Score (5%)
         double performanceScore = calculatePerformanceScore(doctor);
-        totalScore += performanceScore * PERFORMANCE_WEIGHT;
         scoreBreakdown.put("performance", performanceScore);
+        totalScore += performanceScore * PERFORMANCE_WEIGHT;
 
-        // 7. Case Preference Score (5%)
+        // 7. Case Preference Score (2%)
         double preferenceScore = calculateCasePreferenceScore(medicalCase, doctor);
-        totalScore += preferenceScore * CASE_PREFERENCE_WEIGHT;
         scoreBreakdown.put("case_preference", preferenceScore);
+        totalScore += preferenceScore * CASE_PREFERENCE_WEIGHT;
 
-        // Apply case complexity and urgency modifiers
-        totalScore = applyComplexityModifier(totalScore, medicalCase, doctor);
-        totalScore = applyUrgencyModifier(totalScore, medicalCase, doctor);
+        // Apply workload penalty for heavily loaded doctors
+        totalScore = applyWorkloadPenalty(totalScore, doctor);
+
+        // Apply urgency boost for emergency cases
+        totalScore = applyUrgencyBoost(totalScore, medicalCase, doctor);
+
+        // Ensure score is within bounds
+        totalScore = Math.max(0.0, Math.min(100.0, totalScore));
 
         return DoctorMatchingResultDto.builder()
-            .doctor(doctor)
-            .totalScore(Math.min(totalScore, 100.0)) // Cap at 100
-            .scoreBreakdown(scoreBreakdown)
-            .matchingReason(generateMatchingReason(scoreBreakdown, medicalCase, doctor))
-            .build();
+                .doctor(convertToLegacyDoctorDto(doctor))
+                .doctorCapacity(doctor)
+                .totalScore(totalScore)
+                .scoreBreakdown(scoreBreakdown)
+                .matchingReason(generateWorkloadAwareMatchingReason(scoreBreakdown, medicalCase, doctor))
+                .workloadPercentage(doctor.getWorkloadPercentage())
+                .emergencyMode(doctor.getEmergencyMode())
+                .canAcceptImmediately(doctor.canAcceptCase())
+                .assignmentSuccessProbability(calculateAssignmentSuccessProbability(doctor, medicalCase))
+                .build();
+    }
+
+    /**
+     * FIXED: Calculate disease expertise score using existing config service methods
+     */
+    private double calculateDiseaseExpertiseScoreFixed(Case medicalCase, DoctorCapacityDto doctor) {
+        try {
+            // Get disease information using existing config service method
+            DiseaseDto disease = configService.getDiseaseByCode(medicalCase.getPrimaryDiseaseCode());
+
+            if (disease != null) {
+                // Get specializations for the disease using existing method
+                List<String> diseaseSpecializations = configService.getSpecializationsForDisease(medicalCase.getPrimaryDiseaseCode());
+
+                if (diseaseSpecializations != null && diseaseSpecializations.contains(doctor.getPrimarySpecialization())) {
+                    return 85.0; // Strong disease expertise match
+                }
+
+                // Check if doctor's subspecializations match disease requirements
+                if (doctor.getSubSpecializations() != null && diseaseSpecializations != null) {
+                    boolean hasSubSpecMatch = doctor.getSubSpecializations().stream()
+                            .anyMatch(diseaseSpecializations::contains);
+                    if (hasSubSpecMatch) {
+                        return 70.0; // Good subspecialization match
+                    }
+                }
+            }
+
+            // Check secondary diseases if primary doesn't match well
+            if (medicalCase.getSecondaryDiseaseCodes() != null) {
+                for (String diseaseCode : medicalCase.getSecondaryDiseaseCodes()) {
+                    try {
+                        List<String> secondaryDiseaseSpecs = configService.getSpecializationsForDisease(diseaseCode);
+                        if (secondaryDiseaseSpecs != null && secondaryDiseaseSpecs.contains(doctor.getPrimarySpecialization())) {
+                            return 60.0; // Moderate disease expertise for secondary diseases
+                        }
+                    } catch (Exception e) {
+                        log.debug("Could not get specializations for secondary disease: {}", diseaseCode);
+                    }
+                }
+            }
+
+            return 40.0; // Basic expertise assumed if specialization matches case requirement
+        } catch (Exception e) {
+            log.warn("Error calculating disease expertise score for disease {}: {}",
+                    medicalCase.getPrimaryDiseaseCode(), e.getMessage());
+            return 50.0; // Neutral score on error
+        }
+    }
+
+    /**
+     * FIXED: Calculate symptom expertise score using simplified approach
+     */
+    private double calculateSymptomExpertiseScoreFixed(Case medicalCase, DoctorCapacityDto doctor) {
+        try {
+            if (medicalCase.getSymptomCodes() == null || medicalCase.getSymptomCodes().isEmpty()) {
+                return 50.0; // Neutral if no symptoms specified
+            }
+
+            // Simplified approach: if doctor's specialization matches case requirement,
+            // assume they have symptom expertise
+            if (doctor.getPrimarySpecialization().equals(medicalCase.getRequiredSpecialization())) {
+                return 75.0; // Good symptom-specialization match
+            }
+
+            // Check if any subspecializations match secondary specializations needed for the case
+            if (doctor.getSubSpecializations() != null && medicalCase.getSecondarySpecializations() != null) {
+                boolean hasMatch = doctor.getSubSpecializations().stream()
+                        .anyMatch(subSpec -> medicalCase.getSecondarySpecializations().contains(subSpec));
+                if (hasMatch) {
+                    return 65.0; // Moderate symptom expertise
+                }
+            }
+
+            return 45.0; // Limited symptom expertise
+        } catch (Exception e) {
+            log.warn("Error calculating symptom expertise score: {}", e.getMessage());
+            return 50.0; // Neutral score on error
+        }
+    }
+
+    /**
+     * Calculate workload and availability score (major factor)
+     */
+    private double calculateWorkloadAvailabilityScore(Case medicalCase, DoctorCapacityDto doctor) {
+        double score = 0.0;
+
+        // Base availability score
+        if (!doctor.getIsAvailable()) {
+            return 0.0; // Not available = zero score
+        }
+        score += 20.0; // Base score for being available
+
+        // Workload-based scoring (inverse relationship)
+        double workloadPercentage = doctor.getWorkloadPercentage();
+        if (workloadPercentage <= 30.0) {
+            score += 50.0; // Very low workload - excellent
+        } else if (workloadPercentage <= 50.0) {
+            score += 40.0; // Low workload - very good
+        } else if (workloadPercentage <= 70.0) {
+            score += 25.0; // Moderate workload - good
+        } else if (workloadPercentage <= 90.0) {
+            score += 10.0; // High workload - limited
+        } else {
+            score += 0.0; // Very high workload - poor choice
+        }
+
+        // Active cases capacity score
+        double caseCapacityRatio = (double) doctor.getActiveCases() / doctor.getMaxActiveCases();
+        if (caseCapacityRatio <= 0.5) {
+            score += 20.0; // Plenty of case capacity
+        } else if (caseCapacityRatio <= 0.7) {
+            score += 15.0; // Good case capacity
+        } else if (caseCapacityRatio <= 0.9) {
+            score += 5.0; // Limited case capacity
+        }
+
+        // Daily appointment capacity score
+        double appointmentCapacityRatio = (double) doctor.getTodayAppointments() / doctor.getMaxDailyAppointments();
+        if (appointmentCapacityRatio <= 0.5) {
+            score += 10.0; // Good appointment availability
+        } else if (appointmentCapacityRatio <= 0.8) {
+            score += 5.0; // Limited appointment availability
+        }
+
+        // Emergency mode bonus (can handle overload)
+        if (doctor.getEmergencyMode() && isEmergencyCase(medicalCase)) {
+            score += 15.0; // Emergency mode bonus for urgent cases
+        }
+
+        return Math.min(100.0, score);
     }
 
     /**
      * Calculate specialization matching score
      */
-    private double calculateSpecializationScore(Case medicalCase, DoctorDto doctor) {
+    private double calculateSpecializationScore(Case medicalCase, DoctorCapacityDto doctor) {
         double score = 0.0;
 
         // Primary specialization exact match
-        if (doctor.getPrimarySpecializationCode().equals(medicalCase.getRequiredSpecialization())) {
-            score += 40.0;
-        }
-
-        // Check if doctor has required specialization in their list
-        if (doctor.getSpecializationCodes().contains(medicalCase.getRequiredSpecialization())) {
-            score += 30.0;
+        if (medicalCase.getRequiredSpecialization().equals(doctor.getPrimarySpecialization())) {
+            score += 80.0;
         }
 
         // Secondary specializations match
-        Set<String> matchingSecondary = new HashSet<>(doctor.getSpecializationCodes());
-        matchingSecondary.retainAll(medicalCase.getSecondarySpecializations());
-        score += (matchingSecondary.size() * 5.0); // 5 points per secondary match
+        if (medicalCase.getSecondarySpecializations() != null && doctor.getSubSpecializations() != null) {
+            Set<String> caseSecondarySpecs = medicalCase.getSecondarySpecializations();
+            Set<String> doctorSubSpecs = doctor.getSubSpecializations();
 
-        // Subspecialization bonus
-        List<String> diseaseSpecializations = configService.getSpecializationsForDisease(medicalCase.getPrimaryDiseaseCode());
-        Set<String> matchingSubSpec = new HashSet<>(doctor.getSubSpecializationCodes());
-        matchingSubSpec.retainAll(diseaseSpecializations);
-        score += (matchingSubSpec.size() * 10.0); // 10 points per subspecialization match
+            long matchingSecondarySpecs = caseSecondarySpecs.stream()
+                    .mapToLong(spec -> doctorSubSpecs.contains(spec) ? 1 : 0)
+                    .sum();
 
-        return Math.min(score, 100.0);
-    }
-
-    /**
-     * Calculate disease expertise matching score
-     */
-    private double calculateDiseaseExpertiseScore(Case medicalCase, DoctorDto doctor) {
-        double score = 0.0;
-
-        // Primary disease expertise
-        if (doctor.getDiseaseExpertiseCodes().contains(medicalCase.getPrimaryDiseaseCode())) {
-            score += 50.0;
+            if (matchingSecondarySpecs > 0) {
+                score += Math.min(20.0, matchingSecondarySpecs * 10.0);
+            }
         }
 
-        // Secondary diseases
-        Set<String> matchingDiseases = new HashSet<>(doctor.getDiseaseExpertiseCodes());
-        matchingDiseases.retainAll(medicalCase.getSecondaryDiseaseCodes());
-        score += (matchingDiseases.size() * 10.0);
-
-        // Related disease categories
-        DiseaseDto primaryDisease = configService.getDiseaseByCode(medicalCase.getPrimaryDiseaseCode());
-        long categoryMatches = doctor.getDiseaseExpertiseCodes().stream()
-            .mapToLong(code -> {
-                try {
-                    DiseaseDto expertiseDisease = configService.getDiseaseByCode(code);
-                    return expertiseDisease.getCategory().equals(primaryDisease.getCategory()) ? 1 : 0;
-                } catch (Exception e) {
-                    return 0;
-                }
-            })
-            .sum();
-        score += (categoryMatches * 5.0);
-
-        return Math.min(score, 100.0);
-    }
-
-    /**
-     * Calculate symptom expertise matching score
-     */
-    private double calculateSymptomExpertiseScore(Case medicalCase, DoctorDto doctor) {
-        Set<String> caseSymptoms = medicalCase.getSymptomCodes();
-        Set<String> doctorSymptoms = doctor.getSymptomExpertiseCodes();
-
-        if (caseSymptoms.isEmpty() || doctorSymptoms.isEmpty()) {
-            return 50.0; // Neutral score if no data
-        }
-
-        Set<String> matchingSymptoms = new HashSet<>(caseSymptoms);
-        matchingSymptoms.retainAll(doctorSymptoms);
-
-        double matchPercentage = (double) matchingSymptoms.size() / caseSymptoms.size();
-        return matchPercentage * 100.0;
+        return Math.min(100.0, score);
     }
 
     /**
      * Calculate experience-based score
      */
-    private double calculateExperienceScore(Case medicalCase, DoctorDto doctor) {
-        int experience = doctor.getYearsOfExperience() != null ? doctor.getYearsOfExperience() : 0;
-        
-        // Base score based on experience
-        double score = Math.min(experience * 2.0, 60.0); // Max 60 for 30+ years
-        
-        // Complexity bonus
-        if (medicalCase.getComplexity() == CaseComplexity.HIGHLY_COMPLEX && experience >= 10) {
-            score += 20.0;
-        } else if (medicalCase.getComplexity() == CaseComplexity.COMPLEX && experience >= 5) {
-            score += 15.0;
-        }
-        
-        // Consultation count bonus
-        if (doctor.getTotalConsultations() > 100) {
-            score += 10.0;
-        } else if (doctor.getTotalConsultations() > 50) {
-            score += 5.0;
-        }
-        
-        return Math.min(score, 100.0);
-    }
-
-    /**
-     * Calculate availability score
-     */
-    private double calculateAvailabilityScore(DoctorDto doctor) {
-        if (!doctor.getIsAvailable()) {
-            return 0.0;
-        }
-
-        double score = 50.0; // Base score for being available
-
-        // Case load factor
-        double loadPercentage = (double) doctor.getCurrentCaseLoad() / doctor.getMaxConcurrentCases();
-        if (loadPercentage < 0.5) {
-            score += 40.0; // Low load bonus
-        } else if (loadPercentage < 0.8) {
-            score += 20.0; // Medium load
-        } else if (loadPercentage < 1.0) {
-            score += 10.0; // High load penalty
-        } else {
-            return 0.0; // Overloaded
-        }
-
-        // Response time bonus
-        if (doctor.getAverageResponseTime() <= 2.0) {
-            score += 10.0; // Fast responder
-        } else if (doctor.getAverageResponseTime() <= 6.0) {
-            score += 5.0; // Good responder
-        }
-
-        return Math.min(score, 100.0);
-    }
-
-    /**
-     * Calculate performance score
-     */
-    private double calculatePerformanceScore(DoctorDto doctor) {
+    private double calculateExperienceScore(DoctorCapacityDto doctor) {
         double score = 0.0;
 
-        // Rating score (0-5 scale to 0-50 points)
-        if (doctor.getAverageRating() != null) {
-            score += (doctor.getAverageRating() / 5.0) * 50.0;
+        // Consultation count score
+        int consultations = doctor.getConsultationCount();
+        if (consultations >= 1000) {
+            score += 40.0; // Very experienced
+        } else if (consultations >= 500) {
+            score += 30.0; // Experienced
+        } else if (consultations >= 100) {
+            score += 20.0; // Moderately experienced
+        } else if (consultations >= 50) {
+            score += 15.0; // Some experience
+        } else {
+            score += 10.0; // New doctor
         }
 
-        // Acceptance rate (if they have history)
-        int totalOffered = doctor.getAcceptedCases() + doctor.getRejectedCases();
-        if (totalOffered > 0) {
-            double acceptanceRate = (double) doctor.getAcceptedCases() / totalOffered;
-            score += acceptanceRate * 30.0;
+        // Rating-based experience bonus
+        if (doctor.getAverageRating() != null) {
+            if (doctor.getAverageRating() >= 4.5) {
+                score += 30.0; // Excellent rating
+            } else if (doctor.getAverageRating() >= 4.0) {
+                score += 20.0; // Good rating
+            } else if (doctor.getAverageRating() >= 3.5) {
+                score += 10.0; // Average rating
+            }
         } else {
-            score += 25.0; // Neutral score for new doctors
+            score += 15.0; // No rating yet (neutral)
+        }
+
+        return Math.min(100.0, score);
+    }
+
+    /**
+     * Calculate performance-based score
+     */
+    private double calculatePerformanceScore(DoctorCapacityDto doctor) {
+        double score = 50.0; // Base neutral score
+
+        // Rating performance
+        if (doctor.getAverageRating() != null) {
+            score = doctor.getAverageRating() * 20.0; // Scale 0-5 rating to 0-100
+        }
+
+        // Consultation volume bonus (indicates reliability)
+        if (doctor.getConsultationCount() > 100) {
+            score += 10.0; // Volume bonus
         }
 
         // Completion rate bonus
-        if (doctor.getTotalConsultations() > 10) {
-            score += 20.0; // Experienced doctor bonus
+        if (doctor.getCompletionRate() != null) {
+            score += (doctor.getCompletionRate() - 80.0) * 0.5; // Bonus for high completion rates
         }
 
-        return Math.min(score, 100.0);
+        return Math.min(100.0, Math.max(0.0, score));
     }
 
     /**
      * Calculate case preference score
      */
-    private double calculateCasePreferenceScore(Case medicalCase, DoctorDto doctor) {
+    private double calculateCasePreferenceScore(Case medicalCase, DoctorCapacityDto doctor) {
         double score = 50.0; // Neutral base
 
-        // Complexity preference
-        if (medicalCase.getComplexity().ordinal() <= doctor.getMaxComplexityLevel().ordinal()) {
-            score += 20.0;
-        } else {
-            return 0.0; // Cannot handle this complexity
+        // Emergency case preference
+        if (isEmergencyCase(medicalCase) && doctor.getEmergencyMode()) {
+            score += 25.0; // Prefers emergency cases
         }
 
-        // Urgency preference
-        if (medicalCase.getUrgencyLevel() == UrgencyLevel.CRITICAL ||
-            medicalCase.getUrgencyLevel() == UrgencyLevel.HIGH) {
-            if (doctor.getAcceptsUrgentCases()) {
-                score += 15.0;
-            } else {
-                score -= 20.0;
-            }
+        // Experience with case complexity
+        if (doctor.getYearsOfExperience() != null && doctor.getYearsOfExperience() > 5) {
+            score += 15.0; // Experienced doctors get preference bonus
         }
 
-        // Second opinion preference
-        if (medicalCase.getRequiresSecondOpinion() && doctor.getAcceptsSecondOpinions()) {
-            score += 15.0;
-        } else if (medicalCase.getRequiresSecondOpinion() && !doctor.getAcceptsSecondOpinions()) {
-            score -= 30.0;
-        }
-
-        return Math.max(score, 0.0);
+        return Math.min(100.0, score);
     }
 
     /**
-     * Apply complexity modifier to total score
+     * Apply workload penalty for heavily loaded doctors
      */
-    private double applyComplexityModifier(double baseScore, Case medicalCase, DoctorDto doctor) {
-        if (medicalCase.getComplexity() == CaseComplexity.HIGHLY_COMPLEX) {
-            if (doctor.getAcceptsComplexCases() && doctor.getYearsOfExperience() >= 10) {
-                return baseScore * 1.1; // 10% bonus for complex case expertise
-            } else if (!doctor.getAcceptsComplexCases()) {
-                return baseScore * 0.5; // Significant penalty
+    private double applyWorkloadPenalty(double baseScore, DoctorCapacityDto doctor) {
+        if (doctor.getWorkloadPercentage() > workloadPenaltyThreshold) {
+            double penaltyFactor = 1.0 - ((doctor.getWorkloadPercentage() - workloadPenaltyThreshold) / 100.0);
+            return baseScore * Math.max(0.3, penaltyFactor); // Minimum 30% of original score
+        }
+        return baseScore;
+    }
+
+    /**
+     * Apply urgency boost for emergency cases
+     */
+    private double applyUrgencyBoost(double baseScore, Case medicalCase, DoctorCapacityDto doctor) {
+        if (isEmergencyCase(medicalCase)) {
+            if (doctor.getEmergencyMode()) {
+                return baseScore * 1.2; // 20% boost for emergency-enabled doctors
+            } else if (doctor.getWorkloadPercentage() < 60.0) {
+                return baseScore * 1.1; // 10% boost for low-workload doctors
             }
         }
         return baseScore;
     }
 
     /**
-     * Apply urgency modifier to total score
+     * Calculate assignment success probability
      */
-    private double applyUrgencyModifier(double baseScore, Case medicalCase, DoctorDto doctor) {
-        if (medicalCase.getUrgencyLevel() == UrgencyLevel.CRITICAL) {
-            if (doctor.getAcceptsUrgentCases() && doctor.getAverageResponseTime() <= 2.0) {
-                return baseScore * 1.15; // 15% bonus for urgent case handling
-            } else if (!doctor.getAcceptsUrgentCases()) {
-                return baseScore * 0.3; // Major penalty
-            }
-        }
-        return baseScore;
+    private Double calculateAssignmentSuccessProbability(DoctorCapacityDto doctor, Case medicalCase) {
+        double probability = 0.5; // Base 50%
+
+        // Availability factor
+        if (doctor.getIsAvailable()) probability += 0.2;
+
+        // Workload factor
+        if (doctor.getWorkloadPercentage() < 50.0) probability += 0.15;
+        else if (doctor.getWorkloadPercentage() > 85.0) probability -= 0.15;
+
+        // Emergency mode factor
+        if (doctor.getEmergencyMode() && isEmergencyCase(medicalCase)) probability += 0.1;
+
+        // Experience factor
+        if (doctor.getConsultationCount() > 100) probability += 0.05;
+
+        return Math.max(0.0, Math.min(1.0, probability));
     }
 
     /**
-     * Find all eligible doctors for a case
+     * Select best doctors with workload balancing
      */
-    private List<DoctorDto> findEligibleDoctors(Case medicalCase) {
-        // Get all verified and available doctors
-        List<DoctorDto> allDoctors = new ArrayList<>();
-        try{
-            List<DoctorDto> doctors = doctorServiceClient.findByVerificationStatusAndIsAvailableTrue(
-                    VerificationStatus.VERIFIED, true).getBody().getData();
-            allDoctors = doctors.stream().map(this::convertToDoctorDto).toList();
-        }catch (Exception e) {
-            log.error("Failed to fetch doctors ...");
-            log.error(e.getMessage());
-        }
+    private List<DoctorMatchingResultDto> selectBestDoctorsWithWorkloadBalance(
+            Case medicalCase, List<DoctorMatchingResultDto> matchingResults) {
 
-        return allDoctors.stream()
-            .filter(doctor -> isDoctorEligible(doctor, medicalCase))
-            .collect(Collectors.toList());
-    }
-
-    public DoctorDto convertToDoctorDto(DoctorDto doctor){
-        DoctorDto doctorDto = new DoctorDto();
-          doctorDto.setDoctorId(doctor.getDoctorId());
-          doctorDto.setFullName(doctor.getFullName());
-          doctorDto.setPrimarySpecializationCode(doctor.getPrimarySpecializationCode());
-          doctorDto.setSpecializationCodes(doctor.getSpecializationCodes());
-          doctorDto.setSubSpecializationCodes(doctor.getSubSpecializationCodes());
-          doctorDto.setDiseaseExpertiseCodes(doctor.getDiseaseExpertiseCodes());
-          doctorDto.setSymptomExpertiseCodes(doctor.getSymptomExpertiseCodes());
-          doctorDto.setYearsOfExperience(doctor.getYearsOfExperience());
-          doctorDto.setCertifications(doctor.getCertifications());
-          doctorDto.setResearchAreas(doctor.getResearchAreas());
-          doctorDto.setMaxConcurrentCases(doctor.getMaxConcurrentCases());
-          doctorDto.setCurrentCaseLoad(doctor.getCurrentCaseLoad());
-          doctorDto.setAcceptsSecondOpinions(doctor.getAcceptsSecondOpinions());
-          doctorDto.setAcceptsComplexCases(doctor.getAcceptsComplexCases());
-          doctorDto.setAverageRating(doctor.getAverageRating());
-          doctorDto.setTotalConsultations(doctor.getTotalConsultations());
-          doctorDto.setAcceptedCases(doctor.getAcceptedCases());
-          doctorDto.setRejectedCases(doctor.getRejectedCases());
-          doctorDto.setAverageResponseTime(doctor.getAverageResponseTime());
-          doctorDto.setPreferredCaseTypes(doctor.getPreferredCaseTypes());
-          doctorDto.setMaxComplexityLevel(doctor.getMaxComplexityLevel());
-          doctorDto.setAcceptsUrgentCases(doctor.getAcceptsUrgentCases());
-          doctorDto.setBaseConsultationFee(doctor.getBaseConsultationFee());
-          doctorDto.setUrgentCaseFee(doctor.getUrgentCaseFee());
-          doctorDto.setComplexCaseFee(doctor.getComplexCaseFee());
-          doctorDto.setIsAvailable(doctor.getIsAvailable());
-
-        return doctorDto;
-    }
-
-    /**
-     * Check if a doctor is eligible for a specific case
-     */
-    private boolean isDoctorEligible(DoctorDto doctor, Case medicalCase) {
-        // Basic availability check
-        if (!doctor.getIsAvailable() || doctor.getCurrentCaseLoad() >= doctor.getMaxConcurrentCases()) {
-            return false;
-        }
-
-        // Specialization requirement
-        boolean hasRequiredSpec = doctor.getPrimarySpecializationCode().equals(medicalCase.getRequiredSpecialization()) ||
-                                doctor.getSpecializationCodes().contains(medicalCase.getRequiredSpecialization());
-        if (!hasRequiredSpec) {
-            return false;
-        }
-
-        // Complexity check
-        if (medicalCase.getComplexity().ordinal() > doctor.getMaxComplexityLevel().ordinal()) {
-            return false;
-        }
-
-        // Urgency check
-        if ((medicalCase.getUrgencyLevel() == UrgencyLevel.CRITICAL || 
-             medicalCase.getUrgencyLevel() == UrgencyLevel.HIGH) && 
-            !doctor.getAcceptsUrgentCases()) {
-            return false;
-        }
-
-        // Second opinion check
-        if (medicalCase.getRequiresSecondOpinion() && !doctor.getAcceptsSecondOpinions()) {
-            return false;
-        }
-
-        // Check if doctor already has assignment for this case
-        boolean alreadyAssigned = caseAssignmentRepository.existsByCaseEntityIdAndDoctorId(
-            medicalCase.getId(), doctor.getDoctorId());
-        if (alreadyAssigned) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Calculate matching scores for all eligible doctors
-     */
-    private List<DoctorMatchingResultDto> calculateMatchingScores(Case medicalCase, List<DoctorDto> eligibleDoctors) {
-        return eligibleDoctors.parallelStream()
-            .map(doctor -> calculateMatchingScore(medicalCase, doctor))
-            .filter(result -> result.getTotalScore() >= 30.0) // Minimum threshold
-            .collect(Collectors.toList());
-    }
-
-    /**
-     * Select the best doctors based on scoring and case requirements
-     */
-    private List<DoctorMatchingResultDto> selectBestDoctors(Case medicalCase, List<DoctorMatchingResultDto> matchingResults) {
-        // Sort by score descending
+        // Sort by score descending, then by workload ascending
         List<DoctorMatchingResultDto> sortedResults = matchingResults.stream()
-            .sorted((a, b) -> Double.compare(b.getTotalScore(), a.getTotalScore()))
-            .collect(Collectors.toList());
+                .sorted((a, b) -> {
+                    int scoreCompare = Double.compare(b.getTotalScore(), a.getTotalScore());
+                    if (scoreCompare == 0) {
+                        return Double.compare(a.getWorkloadPercentage(), b.getWorkloadPercentage());
+                    }
+                    return scoreCompare;
+                })
+                .collect(Collectors.toList());
 
         List<DoctorMatchingResultDto> selectedDoctors = new ArrayList<>();
-        
-        // Always try to assign primary doctor (highest score)
+
+        // Always try to assign primary doctor
         if (!sortedResults.isEmpty()) {
             DoctorMatchingResultDto primary = sortedResults.get(0);
             primary.setPriority(AssignmentPriority.PRIMARY);
             selectedDoctors.add(primary);
+
+            log.info("Selected primary doctor {} with score {} and workload {}%",
+                    primary.getDoctorCapacity().getDoctorId(), primary.getTotalScore(), primary.getWorkloadPercentage());
         }
 
-        // Select additional doctors for second opinions
-        int remainingSlots = Math.min(medicalCase.getMaxDoctorsAllowed() - 1, 
-                                    medicalCase.getMinDoctorsRequired() - 1);
-        
-        for (int i = 1; i < sortedResults.size() && selectedDoctors.size() < medicalCase.getMaxDoctorsAllowed(); i++) {
+        // Select additional doctors with workload consideration
+        int maxDoctors = medicalCase.getMaxDoctorsAllowed();
+        int minDoctors = medicalCase.getMinDoctorsRequired();
+
+        for (int i = 1; i < sortedResults.size() && selectedDoctors.size() < maxDoctors; i++) {
             DoctorMatchingResultDto candidate = sortedResults.get(i);
-            
-            // Ensure diversity in selections
-            if (isDiverseSelection(selectedDoctors, candidate)) {
-                candidate.setPriority(selectedDoctors.size() == 1 ? 
-                    AssignmentPriority.SECONDARY : AssignmentPriority.CONSULTANT);
+
+            if (isDiverseAndBalancedSelection(selectedDoctors, candidate)) {
+                candidate.setPriority(selectedDoctors.size() == 1 ?
+                        AssignmentPriority.SECONDARY : AssignmentPriority.CONSULTANT);
                 selectedDoctors.add(candidate);
+
+                log.info("Selected additional doctor {} with score {} and workload {}%",
+                        candidate.getDoctorCapacity().getDoctorId(), candidate.getTotalScore(), candidate.getWorkloadPercentage());
             }
         }
 
-        // If we don't have minimum required doctors, add more (with lower threshold)
-        if (selectedDoctors.size() < medicalCase.getMinDoctorsRequired()) {
-            for (DoctorMatchingResultDto result : matchingResults) {
-                if (selectedDoctors.size() >= medicalCase.getMinDoctorsRequired()) break;
-                
+        // Ensure minimum doctors requirement
+        if (selectedDoctors.size() < minDoctors) {
+            for (DoctorMatchingResultDto result : sortedResults) {
+                if (selectedDoctors.size() >= minDoctors) break;
+
                 boolean alreadySelected = selectedDoctors.stream()
-                    .anyMatch(selected -> selected.getDoctor().getDoctorId().
-                            equals(result.getDoctor().getDoctorId()));
-                
-                if (!alreadySelected && result.getTotalScore() >= 20.0) { // Lower threshold
+                        .anyMatch(selected -> selected.getDoctorCapacity().getDoctorId().equals(result.getDoctorCapacity().getDoctorId()));
+
+                if (!alreadySelected && result.getTotalScore() >= (minimumScoreThreshold * 0.7)) {
                     result.setPriority(AssignmentPriority.CONSULTANT);
                     selectedDoctors.add(result);
                 }
@@ -524,57 +591,152 @@ public class SmartCaseAssignmentService {
     }
 
     /**
-     * Ensure diverse selection of doctors (different subspecializations if possible)
+     * Check workload balance in selection
      */
-    private boolean isDiverseSelection(List<DoctorMatchingResultDto> selected, DoctorMatchingResultDto candidate) {
+    private boolean isDiverseAndBalancedSelection(List<DoctorMatchingResultDto> selected,
+                                                  DoctorMatchingResultDto candidate) {
         if (selected.isEmpty()) return true;
 
-        // Check if candidate brings different subspecializations
-        Set<String> selectedSubSpecs = selected.stream()
-            .flatMap(result -> result.getDoctor().getSubSpecializationCodes().stream())
-            .collect(Collectors.toSet());
+        // Avoid multiple overloaded doctors
+        long overloadedCount = selected.stream()
+                .mapToLong(result -> result.getWorkloadPercentage() > 80.0 ? 1 : 0)
+                .sum();
 
-        Set<String> candidateSubSpecs = candidate.getDoctor().getSubSpecializationCodes();
-        
-        // If candidate has unique subspecializations, it adds diversity
-        return candidateSubSpecs.stream().anyMatch(spec -> !selectedSubSpecs.contains(spec)) ||
-               selected.size() < 2; // Always accept first two regardless
+        if (overloadedCount >= 1 && candidate.getWorkloadPercentage() > 80.0) {
+            return false;
+        }
+
+        // Check specialization diversity
+        Set<String> selectedSpecs = selected.stream()
+                .map(result -> result.getDoctorCapacity().getPrimarySpecialization())
+                .collect(Collectors.toSet());
+
+        return !selectedSpecs.contains(candidate.getDoctorCapacity().getPrimarySpecialization()) ||
+                selected.size() < 2;
     }
 
+    // [Continue with rest of the methods - createCaseAssignmentsWithWorkloadUpdate, validation methods, etc.]
+    // These remain the same as in the previous version
+
     /**
-     * Create case assignments for selected doctors
+     * Create case assignments with workload updates
      */
-    private List<CaseAssignment> createCaseAssignments(Case medicalCase, List<DoctorMatchingResultDto> selectedDoctors) {
+    private List<CaseAssignment> createCaseAssignmentsWithWorkloadUpdate(
+            Case medicalCase, List<DoctorMatchingResultDto> selectedDoctors) {
+
         List<CaseAssignment> assignments = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
         for (DoctorMatchingResultDto result : selectedDoctors) {
             CaseAssignment assignment = CaseAssignment.builder()
-                .caseEntity(medicalCase)
-                .doctorId(result.getDoctor().getDoctorId())
-                .status(AssignmentStatus.PENDING)
-                .priority(result.getPriority())
-                .assignedAt(now)
-                .expiresAt(calculateExpirationTime(medicalCase.getUrgencyLevel()))
-                .assignmentReason(result.getMatchingReason())
-                .matchingScore(result.getTotalScore())
-                .build();
+                    .caseEntity(medicalCase)
+                    .doctorId(result.getDoctorCapacity().getDoctorId())
+                    .status(AssignmentStatus.PENDING)
+                    .priority(result.getPriority())
+                    .assignedAt(now)
+                    .expiresAt(calculateExpirationTime(medicalCase.getUrgencyLevel()))
+                    .assignmentReason(result.getMatchingReason())
+                    .matchingScore(result.getTotalScore())
+                    .build();
 
             assignments.add(caseAssignmentRepository.save(assignment));
 
-            // Update doctor's current case load
-            /*TODO
-             *  Update Doctor work load*/
-//            Doctor doctor = result.getDoctor();
-//            doctor.setCurrentCaseLoad(doctor.getCurrentCaseLoad() + 1);
-            try{
-                doctorServiceClient.updateDoctorLoad(result.getDoctor().getDoctorId(), medicalCase.getStatus(), 1);
-            }catch (Exception e) {
-                log.error("Failed to update doctor work load.");
-                log.error(e.getMessage());
+            // Update doctor's workload
+            try {
+                doctorServiceClient.updateDoctorWorkload(result.getDoctorCapacity().getDoctorId());
+                log.info("Triggered workload update for doctor {} after case assignment",
+                        result.getDoctorCapacity().getDoctorId());
+            } catch (Exception e) {
+                log.error("Failed to update doctor workload for doctor {}: {}",
+                        result.getDoctorCapacity().getDoctorId(), e.getMessage());
             }
         }
+
         return assignments;
+    }
+
+    /**
+     * Check if doctor is eligible for case
+     */
+    private boolean isDoctorEligibleForCase(Case medicalCase, DoctorCapacityDto doctor) {
+        if (!doctor.getIsAvailable()) return false;
+
+        boolean alreadyAssigned = caseAssignmentRepository.existsByCaseEntityIdAndDoctorId(
+                medicalCase.getId(), doctor.getDoctorId());
+        if (alreadyAssigned) return false;
+
+        if (!doctor.getEmergencyMode()) {
+            if (doctor.getActiveCases() >= doctor.getMaxActiveCases()) return false;
+            if (doctor.getTodayAppointments() >= doctor.getMaxDailyAppointments()) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if case is emergency
+     */
+    private boolean isEmergencyCase(Case medicalCase) {
+        return medicalCase.getUrgencyLevel() == UrgencyLevel.CRITICAL ||
+                medicalCase.getUrgencyLevel() == UrgencyLevel.HIGH;
+    }
+
+    /**
+     * Generate workload-aware matching reason
+     */
+    private String generateWorkloadAwareMatchingReason(Map<String, Double> scoreBreakdown,
+                                                       Case medicalCase, DoctorCapacityDto doctor) {
+        StringBuilder reason = new StringBuilder("Matched based on: ");
+
+        List<String> strengths = new ArrayList<>();
+
+        if (scoreBreakdown.get("specialization") >= 70) {
+            strengths.add("Strong specialization match");
+        }
+        if (scoreBreakdown.get("workload_availability") >= 70) {
+            strengths.add("Excellent availability & low workload");
+        } else if (scoreBreakdown.get("workload_availability") >= 50) {
+            strengths.add("Good availability");
+        }
+        if (scoreBreakdown.get("disease_expertise") >= 60) {
+            strengths.add("Disease expertise");
+        }
+        if (scoreBreakdown.get("experience") >= 70) {
+            strengths.add("Extensive experience");
+        }
+        if (doctor.getEmergencyMode() && isEmergencyCase(medicalCase)) {
+            strengths.add("Emergency mode enabled");
+        }
+
+        if (strengths.isEmpty()) {
+            reason.append("General qualification and capacity");
+        } else {
+            reason.append(String.join(", ", strengths));
+        }
+
+        reason.append(String.format(" (Workload: %.1f%%)", doctor.getWorkloadPercentage()));
+        return reason.toString();
+    }
+
+    /**
+     * Convert DoctorCapacityDto to legacy DoctorDto for compatibility
+     */
+    private DoctorDto convertToLegacyDoctorDto(DoctorCapacityDto capacity) {
+        DoctorDto legacy = new DoctorDto();
+        legacy.setUserId(capacity.getDoctorId());
+        legacy.setFullName(capacity.getFullName());
+        legacy.setPrimarySpecialization(capacity.getPrimarySpecialization());
+        legacy.setRating(capacity.getAverageRating());
+        legacy.setConsultationCount(capacity.getConsultationCount());
+        legacy.setIsAvailable(capacity.getIsAvailable());
+        legacy.setYearsOfExperience(capacity.getYearsOfExperience());
+
+        // Convert Set to List for sub-specializations if needed
+        if (capacity.getSubSpecializations() != null) {
+            legacy.setSubSpecializations(capacity.getSubSpecializations());
+        }
+
+        return legacy;
     }
 
     /**
@@ -583,11 +745,30 @@ public class SmartCaseAssignmentService {
     private LocalDateTime calculateExpirationTime(UrgencyLevel urgency) {
         LocalDateTime now = LocalDateTime.now();
         return switch (urgency) {
-            case CRITICAL -> now.plusHours(2);   // 2 hours for critical
-            case HIGH -> now.plusHours(6);       // 6 hours for high
-            case MEDIUM -> now.plusHours(24);    // 24 hours for medium
-            case LOW -> now.plusHours(48);       // 48 hours for low
+            case CRITICAL -> now.plusHours(1);   // 1 hour for critical
+            case HIGH -> now.plusHours(4);       // 4 hours for high
+            case MEDIUM -> now.plusHours(12);    // 12 hours for medium
+            case LOW -> now.plusHours(24);       // 24 hours for low
         };
+    }
+
+    /**
+     * Validate that a case can be assigned
+     */
+    private void validateCaseForAssignment(Case medicalCase) {
+        if (medicalCase.getStatus() != CaseStatus.PENDING && medicalCase.getStatus() != CaseStatus.SUBMITTED) {
+            throw new BusinessException("Case is not in a state that allows assignment", HttpStatus.BAD_REQUEST);
+        }
+
+        Patient patient = medicalCase.getPatient();
+        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+            throw new BusinessException("Patient must have active subscription", HttpStatus.PAYMENT_REQUIRED);
+        }
+
+        if (patient.getSubscriptionExpiry() != null &&
+                patient.getSubscriptionExpiry().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("Patient subscription has expired", HttpStatus.PAYMENT_REQUIRED);
+        }
     }
 
     /**
@@ -601,19 +782,20 @@ public class SmartCaseAssignmentService {
         caseRepository.save(medicalCase);
     }
 
+    /**
+     * Send assignment notifications
+     */
     private void sendAssignmentNotifications(Case medicalCase, List<CaseAssignment> assignments) {
         for (CaseAssignment assignment : assignments) {
-            String title ="";
-            String message = "";
             try {
-                title = String.format("New %s Case Assignment",
-                    assignment.getPriority().name().toLowerCase());
-                message = String.format(
-                    "You have been assigned a %s case: %s. Urgency: %s. Please review and respond by %s.",
-                    assignment.getPriority().name().toLowerCase(),
-                    medicalCase.getCaseTitle(),
-                    medicalCase.getUrgencyLevel().name(),
-                    assignment.getExpiresAt().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm"))
+                String title = String.format("New %s Case Assignment",
+                        assignment.getPriority().name().toLowerCase());
+                String message = String.format(
+                        "You have been assigned a %s case: %s. Urgency: %s. Please review and respond by %s.",
+                        assignment.getPriority().name().toLowerCase(),
+                        medicalCase.getCaseTitle(),
+                        medicalCase.getUrgencyLevel().name(),
+                        assignment.getExpiresAt().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm"))
                 );
 
                 patientEventProducer.sendAssignmentNotification(
@@ -622,102 +804,329 @@ public class SmartCaseAssignmentService {
                         medicalCase.getId(),
                         title,
                         message
-                        );
+                );
             } catch (Exception e) {
-                log.error("Failed to send notification for assignment {}", assignment.getId(), e);
+                log.error("Failed to send assignment notification for assignment {}", assignment.getId(), e);
             }
         }
     }
 
     /**
-     * Generate human-readable matching reason
+     * Accept assignment with workload update
      */
-    private String generateMatchingReason(Map<String, Double> scoreBreakdown,
-                                          Case medicalCase, DoctorDto doctor) {
-        StringBuilder reason = new StringBuilder();
-        
-        reason.append("Matched based on: ");
-        
-        List<String> strengths = new ArrayList<>();
-        
-        if (scoreBreakdown.get("specialization") >= 70) {
-            strengths.add("Strong specialization match");
-        }
-        if (scoreBreakdown.get("disease_expertise") >= 60) {
-            strengths.add("Disease expertise");
-        }
-        if (scoreBreakdown.get("experience") >= 70) {
-            strengths.add("Extensive experience");
-        }
-        if (scoreBreakdown.get("availability") >= 80) {
-            strengths.add("High availability");
-        }
-        if (scoreBreakdown.get("performance") >= 80) {
-            strengths.add("Excellent performance history");
+    @Transactional
+    public void acceptAssignmentWithWorkloadUpdate(Long doctorId, Long assignmentId) {
+        CaseAssignment caseAssignment = caseAssignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new BusinessException("Assignment not found", HttpStatus.NOT_FOUND));
+
+        if (!caseAssignment.getDoctorId().equals(doctorId)) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
         }
 
-        if (strengths.isEmpty()) {
-            reason.append("General qualification and availability");
+        if (caseAssignment.getStatus() != AssignmentStatus.PENDING) {
+            throw new BusinessException("Assignment cannot be accepted", HttpStatus.BAD_REQUEST);
+        }
+
+        // Check current workload capacity
+        try {
+            var capacityResponse = doctorServiceClient.getDoctorCapacity(doctorId);
+            if (capacityResponse != null && capacityResponse.getBody() != null) {
+                DoctorCapacityDto capacity = capacityResponse.getBody().getData();
+
+                if (!capacity.getEmergencyMode() &&
+                        capacity.getActiveCases() >= capacity.getMaxActiveCases()) {
+                    throw new BusinessException("Doctor workload capacity exceeded", HttpStatus.BAD_REQUEST);
+                }
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Could not verify doctor capacity, proceeding with assignment: {}", e.getMessage());
+        }
+
+        caseAssignment.setStatus(AssignmentStatus.ACCEPTED);
+        caseAssignment.setRespondedAt(LocalDateTime.now());
+        caseAssignmentRepository.save(caseAssignment);
+
+        // Update case status if primary assignment
+        if (caseAssignment.getPriority() == AssignmentPriority.PRIMARY) {
+            Case medicalCase = caseAssignment.getCaseEntity();
+            medicalCase.setStatus(CaseStatus.ACCEPTED);
+            caseRepository.save(medicalCase);
+        }
+
+        // Update doctor workload
+        try {
+            doctorServiceClient.updateDoctorWorkload(doctorId);
+            log.info("Updated workload for doctor {} after case acceptance", doctorId);
+        } catch (Exception e) {
+            log.error("Failed to update doctor workload after acceptance: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Reject assignment with workload update and automatic reassignment
+     */
+    @Transactional
+    public void rejectAssignmentWithWorkloadUpdate(Long doctorId, Long assignmentId, String reason) {
+        CaseAssignment assignment = caseAssignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new BusinessException("Assignment not found", HttpStatus.NOT_FOUND));
+
+        if (!assignment.getDoctorId().equals(doctorId)) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+
+        if (assignment.getStatus() != AssignmentStatus.PENDING) {
+            throw new BusinessException("Assignment cannot be rejected", HttpStatus.BAD_REQUEST);
+        }
+
+        assignment.setStatus(AssignmentStatus.REJECTED);
+        assignment.setRejectionReason(reason);
+        assignment.setRespondedAt(LocalDateTime.now());
+        caseAssignmentRepository.save(assignment);
+
+        Case medicalCase = assignment.getCaseEntity();
+        medicalCase.setRejectionCount(medicalCase.getRejectionCount() + 1);
+        caseRepository.save(medicalCase);
+
+        // Update doctor workload
+        try {
+            doctorServiceClient.updateDoctorWorkload(doctorId);
+            log.info("Updated workload for doctor {} after case rejection", doctorId);
+        } catch (Exception e) {
+            log.error("Failed to update doctor workload after rejection: {}", e.getMessage());
+        }
+
+        // Handle automatic reassignment
+        handleCaseReassignmentAfterRejection(medicalCase, assignment);
+    }
+
+    /**
+     * Handle case reassignment after rejection
+     */
+    private void handleCaseReassignmentAfterRejection(Case medicalCase, CaseAssignment rejectedAssignment) {
+        // Check if we still have enough doctors assigned
+        long activeAssignments = caseAssignmentRepository.findByCaseEntityId(medicalCase.getId())
+                .stream()
+                .filter(a -> a.getStatus() == AssignmentStatus.PENDING || a.getStatus() == AssignmentStatus.ACCEPTED)
+                .count();
+
+        if (activeAssignments < medicalCase.getMinDoctorsRequired()) {
+            log.info("Case {} below minimum doctor requirement after rejection, attempting reassignment",
+                    medicalCase.getId());
+
+            try {
+                // Find replacement doctor
+                List<DoctorCapacityDto> availableDoctors = findEligibleDoctorsWithWorkload(medicalCase);
+
+                // Filter out already assigned doctors
+                Set<Long> assignedDoctorIds = caseAssignmentRepository.findByCaseEntityId(medicalCase.getId())
+                        .stream()
+                        .map(CaseAssignment::getDoctorId)
+                        .collect(Collectors.toSet());
+
+                List<DoctorCapacityDto> newCandidates = availableDoctors.stream()
+                        .filter(doctor -> !assignedDoctorIds.contains(doctor.getDoctorId()))
+                        .collect(Collectors.toList());
+
+                if (!newCandidates.isEmpty()) {
+                    List<DoctorMatchingResultDto> matchingResults = calculateWorkloadAwareMatchingScores(
+                            medicalCase, newCandidates);
+
+                    if (!matchingResults.isEmpty()) {
+                        DoctorMatchingResultDto best = matchingResults.stream()
+                                .max(Comparator.comparing(DoctorMatchingResultDto::getTotalScore))
+                                .orElse(null);
+
+                        if (best != null) {
+                            // Create replacement assignment
+                            CaseAssignment replacement = CaseAssignment.builder()
+                                    .caseEntity(medicalCase)
+                                    .doctorId(best.getDoctorCapacity().getDoctorId())
+                                    .status(AssignmentStatus.PENDING)
+                                    .priority(rejectedAssignment.getPriority())
+                                    .assignedAt(LocalDateTime.now())
+                                    .expiresAt(calculateExpirationTime(medicalCase.getUrgencyLevel()))
+                                    .assignmentReason("Replacement after rejection: " + best.getMatchingReason())
+                                    .matchingScore(best.getTotalScore())
+                                    .build();
+
+                            caseAssignmentRepository.save(replacement);
+
+                            // Update workload for new doctor
+                            doctorServiceClient.updateDoctorWorkload(best.getDoctorCapacity().getDoctorId());
+
+                            log.info("Successfully assigned replacement doctor {} for case {} after rejection",
+                                    best.getDoctorCapacity().getDoctorId(), medicalCase.getId());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to find replacement doctor for case {} after rejection: {}",
+                        medicalCase.getId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Claim case with workload validation
+     */
+    @Transactional
+    public void claimCaseWithWorkloadValidation(Long caseId, Long doctorId, String note) {
+        try {
+            log.info("Doctor {} attempting to claim case {}", doctorId, caseId);
+
+            Case claimedCase = caseRepository.findById(caseId)
+                    .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+            if (claimedCase.getStatus() != CaseStatus.PENDING) {
+                throw new BusinessException("Case cannot be claimed", HttpStatus.BAD_REQUEST);
+            }
+
+            // Validate doctor workload capacity
+            try {
+                var capacityResponse = doctorServiceClient.getDoctorCapacity(doctorId);
+                if (capacityResponse != null && capacityResponse.getBody() != null) {
+                    DoctorCapacityDto capacity = capacityResponse.getBody().getData();
+
+                    if (!capacity.getIsAvailable()) {
+                        throw new BusinessException("Doctor is not available", HttpStatus.BAD_REQUEST);
+                    }
+
+                    if (!capacity.getEmergencyMode() &&
+                            capacity.getActiveCases() >= capacity.getMaxActiveCases()) {
+                        throw new BusinessException("Doctor workload capacity exceeded", HttpStatus.BAD_REQUEST);
+                    }
+                }
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                log.warn("Could not verify doctor capacity, proceeding with caution: {}", e.getMessage());
+            }
+
+            claimedCase.setStatus(CaseStatus.ASSIGNED);
+            claimedCase.setFirstAssignedAt(LocalDateTime.now());
+            caseRepository.save(claimedCase);
+
+            // Create case assignment
+            createOrUpdateCaseAssignmentWithWorkload(caseId, doctorId, note);
+
+            // Update doctor workload
+            doctorServiceClient.updateDoctorWorkload(doctorId);
+
+            log.info("Case {} successfully claimed by doctor {}", caseId, doctorId);
+        } catch (BusinessException e) {
+            log.warn("Business rule violation in case claiming: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error claiming case {} by doctor {}: {}",
+                    caseId, doctorId, e.getMessage(), e);
+            throw new BusinessException("Unable to claim case at this time",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Create or update case assignment with workload tracking
+     */
+    private void createOrUpdateCaseAssignmentWithWorkload(Long caseId, Long doctorId, String note) {
+        List<CaseAssignment> existingAssignments = caseAssignmentRepository.findByCaseEntityId(caseId);
+
+        CaseAssignment assignment;
+        if (existingAssignments.isEmpty()) {
+            assignment = CaseAssignment.builder()
+                    .caseEntity(caseRepository.getReferenceById(caseId))
+                    .doctorId(doctorId)
+                    .assignedAt(LocalDateTime.now())
+                    .assignmentReason(note)
+                    .status(AssignmentStatus.ACCEPTED)
+                    .priority(AssignmentPriority.PRIMARY)
+                    .build();
         } else {
-            reason.append(String.join(", ", strengths));
+            assignment = existingAssignments.get(0);
+            assignment.setDoctorId(doctorId);
+            assignment.setAssignedAt(LocalDateTime.now());
+            assignment.setAssignmentReason(note);
+            assignment.setStatus(AssignmentStatus.ACCEPTED);
         }
 
-        return reason.toString();
+        caseAssignmentRepository.save(assignment);
     }
 
     /**
-     * Validate that a case can be assigned
-     */
-    private void validateCaseForAssignment(Case medicalCase) {
-        if (medicalCase.getStatus() != CaseStatus.PENDING && medicalCase.getStatus() != CaseStatus.SUBMITTED) {
-            throw new BusinessException("Case is not in a state that allows assignment", HttpStatus.BAD_REQUEST);
-        }
-
-        // Check if patient has active subscription
-        Patient patient = medicalCase.getPatient();
-        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
-            throw new BusinessException("Patient must have active subscription", HttpStatus.PAYMENT_REQUIRED);
-        }
-
-        if (patient.getSubscriptionExpiry() != null && 
-            patient.getSubscriptionExpiry().isBefore(LocalDateTime.now())) {
-            throw new BusinessException("Patient subscription has expired", HttpStatus.PAYMENT_REQUIRED);
-        }
-    }
-
-    /**
-     * Handle case assignment expiration and reassignment
+     * Handle expired assignments with workload updates and reassignment
      */
     @Scheduled(fixedDelay = 300000) // Check every 5 minutes
-    public void handleExpiredAssignments() {
+    public void handleExpiredAssignmentsWithWorkloadUpdate() {
         List<CaseAssignment> expiredAssignments = caseAssignmentRepository
-            .findByStatusAndExpiresAtBefore(AssignmentStatus.PENDING, LocalDateTime.now());
+                .findByStatusAndExpiresAtBefore(AssignmentStatus.PENDING, LocalDateTime.now());
 
         for (CaseAssignment assignment : expiredAssignments) {
             assignment.setStatus(AssignmentStatus.EXPIRED);
             caseAssignmentRepository.save(assignment);
 
-            try{
-                doctorServiceClient.updateDoctorLoad(assignment.getDoctorId(), CaseStatus.PENDING, 1);
-            }catch (Exception e) {
-                log.error("Failed to update doctor work load.");
-                log.error(e.getMessage());
+            // Update doctor workload after assignment expiration
+            try {
+                doctorServiceClient.updateDoctorWorkload(assignment.getDoctorId());
+                log.info("Updated workload for doctor {} after assignment expiration", assignment.getDoctorId());
+            } catch (Exception e) {
+                log.error("Failed to update doctor workload after expiration for doctor {}: {}",
+                        assignment.getDoctorId(), e.getMessage());
             }
 
-
-            // Try to reassign if case still needs doctors
-            Case medicalCase = assignment.getCaseEntity();
-            long activeAssignments = medicalCase.getAssignments().stream()
-                .filter(a -> a.getStatus() == AssignmentStatus.PENDING || a.getStatus() == AssignmentStatus.ACCEPTED)
-                .count();
-
-            if (activeAssignments < medicalCase.getMinDoctorsRequired()) {
+            // Attempt automatic reassignment for critical cases
+            if (assignment.getCaseEntity().getUrgencyLevel() == UrgencyLevel.CRITICAL) {
                 try {
-                    assignCaseToMultipleDoctors(medicalCase.getId());
+                    log.info("Attempting automatic reassignment for critical case {} after expiration",
+                            assignment.getCaseEntity().getId());
+                    assignCaseToMultipleDoctors(assignment.getCaseEntity().getId());
                 } catch (Exception e) {
-                    log.error("Failed to reassign case {} after expiration", medicalCase.getId(), e);
+                    log.error("Failed automatic reassignment for critical case {}: {}",
+                            assignment.getCaseEntity().getId(), e.getMessage());
                 }
             }
         }
+    }
+
+    /**
+     * Get workload-aware assignment statistics
+     */
+    public Map<String, Object> getWorkloadAwareAssignmentStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+
+        try {
+            // Basic assignment statistics
+            long totalPendingAssignments = caseAssignmentRepository.countByStatus(AssignmentStatus.PENDING);
+            long totalAcceptedAssignments = caseAssignmentRepository.countByStatus(AssignmentStatus.ACCEPTED);
+            long totalRejectedAssignments = caseAssignmentRepository.countByStatus(AssignmentStatus.REJECTED);
+            long totalExpiredAssignments = caseAssignmentRepository.countByStatus(AssignmentStatus.EXPIRED);
+
+            stats.put("pendingAssignments", totalPendingAssignments);
+            stats.put("acceptedAssignments", totalAcceptedAssignments);
+            stats.put("rejectedAssignments", totalRejectedAssignments);
+            stats.put("expiredAssignments", totalExpiredAssignments);
+
+            // Calculate acceptance rate
+            long totalAssignments = totalAcceptedAssignments + totalRejectedAssignments + totalExpiredAssignments;
+            double acceptanceRate = totalAssignments > 0 ? (double) totalAcceptedAssignments / totalAssignments * 100 : 0;
+            stats.put("acceptanceRate", acceptanceRate);
+
+            // Workload-related statistics
+            try {
+                var systemStatsResponse = doctorServiceClient.getSystemWorkloadStatistics();
+                if (systemStatsResponse != null && systemStatsResponse.getBody() != null) {
+                    stats.put("systemWorkloadStats", systemStatsResponse.getBody().getData());
+                }
+            } catch (Exception e) {
+                log.warn("Could not retrieve system workload statistics: {}", e.getMessage());
+            }
+
+            stats.put("lastCalculated", LocalDateTime.now());
+
+        } catch (Exception e) {
+            log.error("Error calculating assignment statistics: {}", e.getMessage(), e);
+        }
+
+        return stats;
     }
 }

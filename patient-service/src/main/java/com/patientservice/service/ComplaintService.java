@@ -3,7 +3,6 @@ package com.patientservice.service;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.ComplaintDto;
 import com.patientservice.entity.Complaint;
-import com.patientservice.entity.ComplaintStatus;
 import com.patientservice.entity.Patient;
 import com.patientservice.repository.ComplaintRepository;
 import com.patientservice.repository.PatientRepository;

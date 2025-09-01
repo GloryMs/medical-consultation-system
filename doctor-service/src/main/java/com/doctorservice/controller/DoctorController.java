@@ -286,14 +286,14 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(doctors));
     }
 
-    @PutMapping("/{doctorId}/update-load/{caseStatus}")
-    public ResponseEntity<ApiResponse<Void>> updateDoctorLoad(@PathVariable Long doctorId,
-                                                       @PathVariable CaseStatus caseStatus,
-                                                              @RequestParam int flag) // 1 -> increase | 0 -> decrease
-    {
-        doctorService.updateDoctorWorkLoad(doctorId, caseStatus, flag);
-        return ResponseEntity.ok(ApiResponse.success(null, "A new case assigned for the doctor: "+ doctorId));
-    }
+//    @PutMapping("/{doctorId}/update-load/{caseStatus}")
+//    public ResponseEntity<ApiResponse<Void>> updateDoctorLoad(@PathVariable Long doctorId,
+//                                                       @PathVariable CaseStatus caseStatus,
+//                                                              @RequestParam int flag) // 1 -> increase | 0 -> decrease
+//    {
+//        doctorService.updateDoctorWorkLoad(doctorId, caseStatus, flag);
+//        return ResponseEntity.ok(ApiResponse.success(null, "A new case assigned for the doctor: "+ doctorId));
+//    }
 
     @GetMapping("/status/pending-verifications")
     public ResponseEntity<ApiResponse<List<PendingVerificationDto>>> getPendingVerifications(){

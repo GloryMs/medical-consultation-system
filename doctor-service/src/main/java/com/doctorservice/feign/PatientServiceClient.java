@@ -56,4 +56,29 @@ public interface PatientServiceClient {
     @GetMapping("/api/patients/case-assignments")
     ResponseEntity<ApiResponse<List<CaseAssignmentDto>>> findByDoctorIdAndStatus(@RequestParam Long doctorId,
                                                                                  @RequestParam String status);
+
+
+    @GetMapping("/cases/doctor/{doctorId}/active")
+    ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorActiveCases(@PathVariable("doctorId") Long doctorId);
+
+//    @PostMapping("/cases/{caseId}/reject")
+//    ResponseEntity<ApiResponse<Void>> rejectCase(
+//            @PathVariable("caseId") Long caseId,
+//            @RequestParam("doctorId") Long doctorId,
+//            @RequestParam("reason") String reason
+//    );
+
+    @PostMapping("/cases/{caseId}/fee")
+    ResponseEntity<ApiResponse<Void>> setCaseFee(
+            @PathVariable("caseId") Long caseId,
+            @RequestParam("consultationFee") java.math.BigDecimal consultationFee,
+            @RequestParam("reason") String reason
+    );
+
+    // New workload-specific endpoints
+    @GetMapping("/cases/doctor/{doctorId}/count/active")
+    ResponseEntity<ApiResponse<Integer>> getActiveCasesCount(@PathVariable("doctorId") Long doctorId);
+
+    @GetMapping("/cases/doctor/{doctorId}/metrics")
+    ResponseEntity<ApiResponse<Object>> getDoctorCaseMetrics(@PathVariable("doctorId") Long doctorId);
 }

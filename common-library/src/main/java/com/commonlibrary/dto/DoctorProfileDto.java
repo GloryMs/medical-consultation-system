@@ -76,4 +76,7 @@ public class DoctorProfileDto {
     private String hospitalAffiliation;
     private String qualifications;
     private String languages;
+
+    private BigDecimal caseRate;
+    private BigDecimal hourlyRate;
 }

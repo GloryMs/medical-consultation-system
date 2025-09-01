@@ -1,10 +1,10 @@
 package com.commonlibrary.dto;
 
 import com.commonlibrary.entity.CaseComplexity;
+import com.commonlibrary.entity.TimeSlot;
 import com.commonlibrary.entity.VerificationStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -12,43 +12,95 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Data
 @Getter
 public class DoctorDto {
 
-    private Long doctorId;
+    private Long userId;
     private String fullName;
-    private String primarySpecializationCode;
-    private Set<String> specializationCodes;
-    private Set<String> subSpecializationCodes;
-    private Set<String> diseaseExpertiseCodes;
-    private Set<String> symptomExpertiseCodes;
     private String licenseNumber;
-    private Integer yearsOfExperience;
-    private Set<String> certifications;
-    private String researchAreas;
-    private Integer maxConcurrentCases;
-    private Integer currentCaseLoad;
-    private Boolean acceptsSecondOpinions;
-    private Boolean acceptsComplexCases;
-    private Double averageRating;
-    private Integer totalConsultations;
-    private Integer acceptedCases;
-    private Integer rejectedCases;
-    private Double averageResponseTime;
-    private Set<String> preferredCaseTypes;
-    private CaseComplexity maxComplexityLevel;
-    private Boolean acceptsUrgentCases;
-    private BigDecimal baseConsultationFee;
-    private BigDecimal urgentCaseFee;
-    private BigDecimal complexCaseFee;
-    private Boolean isAvailable;
+    // ===== SPECIALIZATION FIELDS =====
+    private String primarySpecialization;
+    private Set<String> subSpecializations = new HashSet<>();
+    // ===== PRICING FIELDS =====
+    private BigDecimal hourlyRate;
+    private BigDecimal caseRate;
+    private BigDecimal emergencyRate;
+
+    // ===== VERIFICATION & STATUS =====
+    @Enumerated(EnumType.STRING)
     private VerificationStatus verificationStatus;
+    private Boolean isAvailable = true;
+    private Boolean emergencyMode = false;
+    private String emergencyModeReason;
+    private LocalDateTime emergencyModeEnabledAt;
     private LocalDateTime verifiedAt;
-    private String verifiedBy;
+    // ===== PERFORMANCE METRICS =====
+    private Integer consultationCount = 0;
+    private Double rating = 0.0;
+    private Integer totalRatings = 0;
+    private Double completionRate = 100.0; // Percentage of completed cases
+
+    // ===== WORKLOAD MANAGEMENT =====
+    private Integer activeCases = 0;
+    private Integer todayAppointments = 0;
+    private Double workloadPercentage = 0.0;
+    private LocalDateTime lastWorkloadUpdate;
+    private Integer maxActiveCases;
+    private Integer maxDailyAppointments;
+
+    // ===== AVAILABILITY SCHEDULE =====
+    private Set<TimeSlot> availableTimeSlots = new HashSet<>();
+    // ===== PROFESSIONAL INFORMATION =====
+    private String professionalSummary;
+    private Integer yearsOfExperience;
+    private Set<String> qualifications = new HashSet<>();
+    private Set<String> languages = new HashSet<>();
+    // ===== CONTACT INFORMATION =====
     private String phoneNumber;
     private String email;
-    private LocalDateTime createdAt;
+    private String hospitalAffiliation;
+    private String address;
+    private String city;
+    private String country;
+
+//Old Entity:
+//    private Long doctorId;
+//    private String fullName;
+//    private String primarySpecializationCode;
+//    private Set<String> specializationCodes;
+//    private Set<String> subSpecializationCodes;
+//    private Set<String> diseaseExpertiseCodes;
+//    private Set<String> symptomExpertiseCodes;
+//    private String licenseNumber;
+//    private Integer yearsOfExperience;
+//    private Set<String> certifications;
+//    private String researchAreas;
+//    private Integer maxConcurrentCases;
+//    private Integer currentCaseLoad;
+//    private Boolean acceptsSecondOpinions;
+//    private Boolean acceptsComplexCases;
+//    private Double averageRating;
+//    private Integer totalConsultations;
+//    private Integer acceptedCases;
+//    private Integer rejectedCases;
+//    private Double averageResponseTime;
+//    private Set<String> preferredCaseTypes;
+//    private CaseComplexity maxComplexityLevel;
+//    private Boolean acceptsUrgentCases;
+//    private BigDecimal baseConsultationFee;
+//    private BigDecimal urgentCaseFee;
+//    private BigDecimal complexCaseFee;
+//    private Boolean isAvailable;
+//    private VerificationStatus verificationStatus;
+//    private LocalDateTime verifiedAt;
+//    private String verifiedBy;
+//    private String phoneNumber;
+//    private String email;
+//    private LocalDateTime createdAt;
+
 }

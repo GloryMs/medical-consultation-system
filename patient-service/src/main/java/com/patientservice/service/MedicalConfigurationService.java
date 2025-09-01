@@ -1,16 +1,19 @@
 package com.patientservice.service;
 
+import com.commonlibrary.dto.CaseAnalysisRequest;
 import com.commonlibrary.dto.DiseaseDto;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.feign.MedicalConfigurationMainService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -102,8 +105,122 @@ public class MedicalConfigurationService {
         return medicalConfigurationMainService.getSpecializationsForDisease(diseaseCode);
     }
     
+//
+//    @CacheEvict(value = {"medical-configs", "diseases", "medications", "symptoms"}, allEntries = true)
+//    public void clearCache() {
+//        log.info("Medical configuration cache cleared");
+//    }
 
-    @CacheEvict(value = {"medical-configs", "diseases", "medications", "symptoms"}, allEntries = true)
+    // ===== NEW METHODS FOR CASE ASSIGNMENT =====
+
+    /**
+     * Get diseases that can be handled by a specialization
+     */
+    @Cacheable(value = "specialization-diseases", key = "#specialization")
+    public List<DiseaseDto> getDiseasesBySpecialization(String specialization) {
+        try {
+            return medicalConfigurationMainService.getDiseasesBySpecialization(specialization);
+        } catch (Exception e) {
+            log.error("Error getting diseases for specialization {}: {}", specialization, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Find compatible specializations for symptoms
+     */
+    @Cacheable(value = "symptom-specializations", key = "#symptomCodes.hashCode()")
+    public Set<String> findCompatibleSpecializations(List<String> symptomCodes) {
+        try {
+            return medicalConfigurationMainService.findCompatibleSpecializations(symptomCodes);
+        } catch (Exception e) {
+            log.error("Error finding compatible specializations for symptoms: {}", e.getMessage());
+            return Collections.emptySet();
+        }
+    }
+
+    /**
+     * Get disease-specialization relationships
+     */
+    @Cacheable(value = "disease-spec-relationships", key = "#diseaseCode")
+    public List<String> getDiseaseSpecializationRelationships(String diseaseCode) {
+        try {
+            return medicalConfigurationMainService.getDiseaseSpecializationRelationships(diseaseCode);
+        } catch (Exception e) {
+            log.error("Error getting disease-specialization relationships for {}: {}", diseaseCode, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Get symptoms for a disease
+     */
+    @Cacheable(value = "disease-symptoms", key = "#diseaseCode")
+    public Set<String> getSymptomsByDisease(String diseaseCode) {
+        try {
+            return medicalConfigurationMainService.getSymptomsByDisease(diseaseCode);
+        } catch (Exception e) {
+            log.error("Error getting symptoms for disease {}: {}", diseaseCode, e.getMessage());
+            return Collections.emptySet();
+        }
+    }
+
+    /**
+     * Get diseases for symptoms
+     */
+    public Set<String> getDiseasesBySymptoms(List<String> symptomCodes) {
+        try {
+            return medicalConfigurationMainService.getDiseasesBySymptoms(symptomCodes);
+        } catch (Exception e) {
+            log.error("Error getting diseases for symptoms: {}", e.getMessage());
+            return Collections.emptySet();
+        }
+    }
+
+    /**
+     * Get recommended specializations based on case data
+     */
+    public List<String> getRecommendedSpecializations(CaseAnalysisRequest caseData) {
+        try {
+            return medicalConfigurationMainService.getRecommendedSpecializations(caseData);
+        } catch (Exception e) {
+            log.error("Error getting recommended specializations: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Check if specialization is compatible with disease
+     */
+    @Cacheable(value = "spec-disease-compatibility", key = "#specialization + '_' + #diseaseCode")
+    public boolean isSpecializationCompatibleWithDisease(String specialization, String diseaseCode) {
+        try {
+            Boolean result = medicalConfigurationMainService.isSpecializationCompatibleWithDisease(specialization, diseaseCode);
+            return result != null ? result : false;
+        } catch (Exception e) {
+            log.error("Error checking specialization compatibility: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get disease complexity level
+     */
+    @Cacheable(value = "disease-complexity", key = "#diseaseCode")
+    public String getDiseaseComplexity(String diseaseCode) {
+        try {
+            return medicalConfigurationMainService.getDiseaseComplexity(diseaseCode);
+        } catch (Exception e) {
+            log.error("Error getting disease complexity for {}: {}", diseaseCode, e.getMessage());
+            return "MEDIUM"; // Default complexity
+        }
+    }
+
+    @CacheEvict(value = {"medical-configs", "diseases", "medications", "symptoms",
+            "disease-specializations", "specialization-diseases",
+            "symptom-specializations", "disease-spec-relationships",
+            "disease-symptoms", "spec-disease-compatibility",
+            "disease-complexity"}, allEntries = true)
     public void clearCache() {
         log.info("Medical configuration cache cleared");
     }

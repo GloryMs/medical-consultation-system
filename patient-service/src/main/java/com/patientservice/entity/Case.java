@@ -1,9 +1,6 @@
 package com.patientservice.entity;
 
-import com.commonlibrary.entity.BaseEntity;
-import com.commonlibrary.entity.CaseComplexity;
-import com.commonlibrary.entity.PaymentStatus;
-import com.commonlibrary.entity.UrgencyLevel;
+import com.commonlibrary.entity.*;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;

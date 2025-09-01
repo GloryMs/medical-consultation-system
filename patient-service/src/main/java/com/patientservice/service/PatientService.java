@@ -6,7 +6,6 @@ import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.*;
-import com.patientservice.entity.CaseStatus;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.PaymentServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
@@ -24,7 +23,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static com.patientservice.entity.CaseStatus.*;
+import static com.commonlibrary.entity.CaseStatus.*;
 
 @Service
 @RequiredArgsConstructor
@@ -356,7 +355,7 @@ public class PatientService {
         //medicalCase.setConsultationFee(amount);
         medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
         //medicalCase.setPaymentCompletedAt(LocalDateTime.now());
-        medicalCase.setStatus(CaseStatus.IN_PROGRESS);
+        medicalCase.setStatus(IN_PROGRESS);
 
         caseRepository.save(medicalCase);
     }
@@ -553,8 +552,7 @@ public class PatientService {
 
     // 6. Update Case Status Implementation (For internal use by other services)
     /*TODO
-    *  1- upodate the needed locations: Case/Case_Assingment tables
-    *  2- Instead of the trigger in DB, we must call loadDoctorWorkLoad() function (call it form DB)*/
+    *  must check here or before the payment status (validation)*/
     @Transactional
     public void updateCaseStatus(Long caseId, String status, Long doctorId) {
         Case medicalCase = caseRepository.findById(caseId)
@@ -563,7 +561,26 @@ public class PatientService {
         CaseStatus newStatus = CaseStatus.valueOf(status);
         String oldStatus = medicalCase.getStatus().toString();
         medicalCase.setStatus(newStatus);
-//
+
+        CaseAssignment caseAssignment = medicalCase.getAssignments().
+                stream().filter(p ->
+                        p.getDoctorId().equals(doctorId)).findFirst().orElse(null);
+        if( caseAssignment != null ){
+            CaseAssignment updatedCaseAssignment;
+            updatedCaseAssignment = caseAssignment;
+            if( newStatus == ACCEPTED ){
+                updatedCaseAssignment.setStatus(AssignmentStatus.ACCEPTED);
+            }
+            else if( newStatus == REJECTED){
+                updatedCaseAssignment.setStatus(AssignmentStatus.PENDING);
+            }
+            else if( updatedCaseAssignment.getExpiresAt().isBefore(LocalDateTime.now()) ){
+                updatedCaseAssignment.setStatus(AssignmentStatus.EXPIRED);
+            }
+
+            caseAssignmentRepository.save(updatedCaseAssignment);
+        }
+
 //        if (newStatus == CaseStatus.ACCEPTED) {
 //            medicalCase.setAcceptedAt(LocalDateTime.now());
 //            medicalCase.setAssignedDoctorId(doctorId);
@@ -603,7 +620,7 @@ public class PatientService {
         // Update case status if this is the primary assignment
         if (caseAssignment.getPriority() == AssignmentPriority.PRIMARY) {
             Case medicalCase = caseAssignment.getCaseEntity();
-            medicalCase.setStatus(CaseStatus.ACCEPTED);
+            medicalCase.setStatus(ACCEPTED);
             caseRepository.save(medicalCase);
         }
     }
@@ -713,11 +730,11 @@ public class PatientService {
         activeStatusList.add(CaseStatus.PENDING);
         activeStatusList.add(CaseStatus.SUBMITTED);
         activeStatusList.add(CaseStatus.ASSIGNED);
-        activeStatusList.add(CaseStatus.ACCEPTED);
+        activeStatusList.add(ACCEPTED);
         activeStatusList.add(CaseStatus.SCHEDULED);
         activeStatusList.add(CaseStatus.PAYMENT_PENDING);
-        activeStatusList.add(CaseStatus.IN_PROGRESS);
-        activeStatusList.add(CaseStatus.CONSULTATION_COMPLETE);
+        activeStatusList.add(IN_PROGRESS);
+        activeStatusList.add(CONSULTATION_COMPLETE);
         activeStatusList.add(CaseStatus.REJECTED);
 
         Long activeCasesCount = caseRepository.countByStatusIn(activeStatusList);
@@ -796,7 +813,7 @@ public class PatientService {
 
         // Update case to indicate payment is complete
         medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
-        medicalCase.setStatus(CaseStatus.IN_PROGRESS);
+        medicalCase.setStatus(IN_PROGRESS);
         caseRepository.save(medicalCase);
 
         log.info("Case payment completed for case: {}", caseId);

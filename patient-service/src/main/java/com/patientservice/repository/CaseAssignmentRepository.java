@@ -26,5 +26,6 @@ public interface CaseAssignmentRepository extends JpaRepository<CaseAssignment, 
             "CA.doctorId = :doctorId AND CA.status = :status")
     List<CaseAssignment> findByDoctorIdAndStatus(Long doctorId, String status);
 
+    long countByStatus(AssignmentStatus status);
 
 }
