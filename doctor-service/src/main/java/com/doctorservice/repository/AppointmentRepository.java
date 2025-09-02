@@ -1,5 +1,6 @@
 package com.doctorservice.repository;
 
+import com.commonlibrary.entity.AssignmentStatus;
 import com.doctorservice.entity.Appointment;
 import com.commonlibrary.entity.AppointmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -65,19 +66,21 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     @Query("SELECT a FROM Appointment a WHERE " +
             "a.scheduledTime BETWEEN :startTime AND :endTime AND " +
-            "a.status IN ('SCHEDULED', 'CONFIRMED', 'RESCHEDULED') AND " +
+            "a.status IN :statuses AND " + ////('SCHEDULED', 'RESCHEDULED, CONFIRMED')
             "a.doctor.id = :doctorId")
     List<Appointment> findConflictingAppointments(
             @Param("doctorId") Long doctorId,
             @Param("startTime") LocalDateTime startTime,
+            @Param("statuses") List<AppointmentStatus> statuses,
             @Param("endTime") LocalDateTime endTime
     );
 
     @Query("SELECT COUNT(a) FROM Appointment a WHERE " +
             "a.doctor.id = :doctorId AND " +
             "DATE(a.scheduledTime) = CURRENT_DATE AND " +
-            "a.status NOT IN ('CANCELLED', 'NO_SHOW')")
-    long countTodayAppointmentsByDoctor(@Param("doctorId") Long doctorId);
+            "a.status NOT IN :statuses") //('CANCELLED', 'NO_SHOW')
+    long countTodayAppointmentsByDoctor(@Param("doctorId") Long doctorId,
+                                        @Param("statuses") List<AppointmentStatus> statuses);
 
     @Query("SELECT AVG(a.duration) FROM Appointment a WHERE " +
             "a.doctor.id = :doctorId AND " +

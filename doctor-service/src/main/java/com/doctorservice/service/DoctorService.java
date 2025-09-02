@@ -44,8 +44,6 @@ public class DoctorService {
         if (doctorRepository.existsByLicenseNumber(dto.getLicenseNumber())) {
             throw new BusinessException("License number already registered", HttpStatus.CONFLICT);
         }
-        /* TODO
-        *   Set some default values for the new Created Profile*/
 
         Doctor doctor = Doctor.builder()
                 .userId(userId)
