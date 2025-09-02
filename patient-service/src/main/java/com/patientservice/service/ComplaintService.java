@@ -1,5 +1,6 @@
 package com.patientservice.service;
 
+import com.commonlibrary.entity.ComplaintStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.ComplaintDto;
 import com.patientservice.entity.Complaint;

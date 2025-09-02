@@ -4,6 +4,7 @@ package com.patientservice.feign;
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.AppointmentDto;
 import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.entity.CaseStatus;
 import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.dto.DoctorCapacityDto;
 import org.springframework.cloud.openfeign.FeignClient;

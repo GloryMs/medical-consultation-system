@@ -162,11 +162,11 @@ public class AdminService {
 
     public PendingVerificationDto convertToPendingVerificationDto(DoctorDto doctor) {
         PendingVerificationDto pendingVerificationDto = new PendingVerificationDto();
-        pendingVerificationDto.setDoctorId(doctor.getDoctorId());
+        pendingVerificationDto.setDoctorId(doctor.getUserId());
         pendingVerificationDto.setFullName(doctor.getFullName());
         pendingVerificationDto.setLicenseNumber(doctor.getLicenseNumber());
-        pendingVerificationDto.setSpecialization(doctor.getPrimarySpecializationCode());
-        pendingVerificationDto.setSubmittedAt(doctor.getCreatedAt());
+        pendingVerificationDto.setSpecialization(doctor.getPrimarySpecialization());
+        //pendingVerificationDto.setSubmittedAt(doctor.getcr());
         pendingVerificationDto.setDocumentsUrl("To be changed .. added by me :)");
          return pendingVerificationDto;
     }
@@ -192,13 +192,13 @@ public class AdminService {
 
     public DoctorDetailsDto convertToDoctorDetailsDto(DoctorDto doctor){
         DoctorDetailsDto doctorDetailsDto = new DoctorDetailsDto();
-        doctorDetailsDto.setId(doctor.getDoctorId());
+        doctorDetailsDto.setId(doctor.getUserId());
         doctorDetailsDto.setFullName(doctor.getFullName());
         doctorDetailsDto.setLicenseNumber(doctor.getLicenseNumber());
-        doctorDetailsDto.setPrimarySpecialization(doctor.getPrimarySpecializationCode());
+        doctorDetailsDto.setPrimarySpecialization(doctor.getPrimarySpecialization());
         doctorDetailsDto.setSubSpecialization("Sub Specialization .. Added by me");
-        doctorDetailsDto.setAverageRating(doctor.getAverageRating());
-        doctorDetailsDto.setConsultationCount(doctor.getTotalConsultations());
+        doctorDetailsDto.setAverageRating(doctor.getRating());
+        doctorDetailsDto.setConsultationCount(doctor.getConsultationCount());
         return doctorDetailsDto;
     }
 

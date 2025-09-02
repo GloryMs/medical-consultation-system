@@ -117,7 +117,7 @@ public class DoctorController {
     public ResponseEntity<ApiResponse<List<CaseDto>>> browseCasesPool(
             @RequestHeader("X-User-Id") Long userId,
             @RequestParam String specialization) {
-        List<CaseDto> cases = caseAssignmentRepo.getCasesPool(specialization).getBody().getData();
+        List<CaseDto> cases = doctorService.browseCasesPool(userId, specialization);
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 

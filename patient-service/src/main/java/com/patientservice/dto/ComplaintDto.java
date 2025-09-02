@@ -1,5 +1,7 @@
 package com.patientservice.dto;
 
+import com.commonlibrary.entity.ComplaintPriority;
+import com.commonlibrary.entity.ComplaintType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;

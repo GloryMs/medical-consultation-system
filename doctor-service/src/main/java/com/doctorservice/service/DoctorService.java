@@ -227,17 +227,19 @@ public class DoctorService {
         return patientServiceClient.getCasesByDoctorId(doctor.getId()).getBody().getData();
     }
 
-
-    /*TODO
-    *  browseCasesPool now work now, must be fixed by getting the specialization from DB */
-    // 13. Browse Cases Pool Implementation
     public List<CaseDto> browseCasesPool(Long userId, String specialization) {
+        List<CaseDto> cases = new ArrayList<>();
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        //String spec = specialization != null ? specialization : doctor.getPrimarySpecialization();
-        String spec = "Must be from Specialization Table";
-        return patientServiceClient.getCasesPool(spec).getBody().getData();
+        String spec = specialization != null ? specialization : doctor.getPrimarySpecialization();
+        try{
+            cases = patientServiceClient.getCasesPool(spec).getBody().getData();
+        } catch (Exception e) {
+            log.error("Error fetching cases based on doctor specialization");
+            log.error(e.getMessage());
+        }
+        return cases;
     }
 
     // 15. Reject Case Implementation

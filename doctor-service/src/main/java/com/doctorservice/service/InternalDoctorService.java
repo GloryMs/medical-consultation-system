@@ -43,10 +43,10 @@ public class InternalDoctorService {
         dto.setId(doctor.getId());
         dto.setFullName(doctor.getFullName());
         dto.setLicenseNumber(doctor.getLicenseNumber());
-        dto.setPrimarySpecialization(doctor.getPrimarySpecializationCode());
+        dto.setPrimarySpecialization(doctor.getPrimarySpecialization());
         dto.setSubSpecialization("Sub Specialization .. Added by me");
-        dto.setAverageRating(doctor.getAverageRating());
-        dto.setConsultationCount(doctor.getTotalConsultations());
+        dto.setAverageRating(doctor.getRating());
+        dto.setConsultationCount(doctor.getConsultationCount());
         
         return dto;
     }
@@ -71,7 +71,7 @@ public class InternalDoctorService {
         // Get doctor rating
         Doctor doctor = doctorRepository.findById(doctorId).orElse(null);
         if (doctor != null) {
-            performance.put("averageRating", doctor.getAverageRating());
+            performance.put("averageRating", doctor.getRating());
         }
         
         // Add other metrics
