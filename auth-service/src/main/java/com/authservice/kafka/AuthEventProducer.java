@@ -18,29 +18,33 @@ public class AuthEventProducer {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public void sendUserRegistrationEvent(Long userId, String email, String role) {
-        // Send welcome notification
-        NotificationDto welcomeNotification = NotificationDto.builder()
-                .senderId(0L) // System notification
-                .receiverId(userId)
-                .title("Welcome to Medical Consultation System")
-                .message("Welcome! Your account has been created successfully. Please complete your profile.")
-                .type(NotificationType.WELCOME)
-                .sendEmail(true)
-                .recipientEmail(email)
-                .build();
+        try{
+            // Send welcome notification
+            NotificationDto welcomeNotification = NotificationDto.builder()
+                    .senderId(0L) // System notification
+                    .receiverId(userId)
+                    .title("Welcome to Medical Consultation System")
+                    .message("Welcome! Your account has been created successfully. Please complete your profile.")
+                    .type(NotificationType.WELCOME)
+                    .sendEmail(true)
+                    .recipientEmail(email)
+                    .build();
 
-        kafkaTemplate.send("notification-topic", welcomeNotification);
-        log.info("Welcome notification sent for user: {}", email);
+            kafkaTemplate.send("notification-topic", welcomeNotification);
+            log.info("Welcome notification sent for user: {}", email);
 
-        // Send user registration event
-        Map<String, Object> registrationEvent = new HashMap<>();
-        registrationEvent.put("userId", userId);
-        registrationEvent.put("email", email);
-        registrationEvent.put("role", role);
-        registrationEvent.put("timestamp", System.currentTimeMillis());
+            // Send user registration event
+            Map<String, Object> registrationEvent = new HashMap<>();
+            registrationEvent.put("userId", userId);
+            registrationEvent.put("email", email);
+            registrationEvent.put("role", role);
+            registrationEvent.put("timestamp", System.currentTimeMillis());
 
-        kafkaTemplate.send("user-registration-topic", registrationEvent);
-        log.info("User registration event sent for: {}", email);
+            kafkaTemplate.send("user-registration-topic", registrationEvent);
+            log.info("User registration event sent for: {}", email);
+        }catch(Exception e){
+            log.error("Can not send user registration event", e);
+        }
     }
 
     public void sendPasswordResetEvent(String email, String temporaryPassword) {

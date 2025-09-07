@@ -1,6 +1,7 @@
 package com.adminservice.kafka;
 
 import com.adminservice.service.AdminService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -15,7 +16,7 @@ public class AdminEventConsumer {
 
     private final AdminService adminService;
 
-    @KafkaListener(topics = "user-registration-topic", groupId = "admin-registration-group")
+    @KafkaListener(topics = "user-registration-topic",groupId = "admin-group")
     public void handleUserRegistration(Map<String, Object> registrationEvent) {
         try {
             Long userId = Long.valueOf(registrationEvent.get("userId").toString());
@@ -34,7 +35,7 @@ public class AdminEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "payment-completed-topic", groupId = "admin-payment-group")
+    @KafkaListener(topics = "payment-completed-topic", groupId = "admin-group")
     public void handlePaymentCompleted(Map<String, Object> paymentEvent) {
         try {
             String paymentType = paymentEvent.get("paymentType").toString();
