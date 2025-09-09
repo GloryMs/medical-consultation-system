@@ -60,15 +60,15 @@ public class DoctorProfileDto {
 
     @DecimalMin(value = "0.0", message = "Fee cannot be negative")
     @DecimalMax(value = "10000.0", message = "Fee cannot exceed $10,000")
-    private BigDecimal baseConsultationFee;
+    private Double baseConsultationFee;
 
     @DecimalMin(value = "0.0", message = "Fee cannot be negative")
     @DecimalMax(value = "15000.0", message = "Fee cannot exceed $15,000")
-    private BigDecimal urgentCaseFee;
+    private Double urgentCaseFee;
 
     @DecimalMin(value = "0.0", message = "Fee cannot be negative")
     @DecimalMax(value = "20000.0", message = "Fee cannot exceed $20,000")
-    private BigDecimal complexCaseFee;
+    private Double complexCaseFee;
 
     private VerificationStatus verificationStatus;
     private String phoneNumber;
@@ -77,6 +77,7 @@ public class DoctorProfileDto {
     private String qualifications;
     private String languages;
 
-    private BigDecimal caseRate;
-    private BigDecimal hourlyRate;
+    private Double caseRate;
+    private Double hourlyRate;
+    private Double emergencyRate;
 }

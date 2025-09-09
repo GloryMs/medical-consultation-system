@@ -7,8 +7,6 @@ import com.commonlibrary.entity.VerificationStatus;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
-
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -43,14 +41,10 @@ public class Doctor extends BaseEntity {
     private Set<String> subSpecializations = new HashSet<>();
 
     // ===== PRICING FIELDS =====
-    @Column(precision = 10, scale = 2)
-    private BigDecimal hourlyRate;
 
-    @Column(precision = 10, scale = 2)
-    private BigDecimal caseRate;
-
-    @Column(precision = 10, scale = 2)
-    private BigDecimal emergencyRate;
+    private Double hourlyRate;
+    private Double caseRate;
+    private Double emergencyRate;
 
     // ===== VERIFICATION & STATUS =====
     @Enumerated(EnumType.STRING)
@@ -73,12 +67,12 @@ public class Doctor extends BaseEntity {
     @Column(nullable = false)
     private Integer consultationCount = 0;
 
-    @Column(precision = 3, scale = 2)
+    //@Column(precision = 3, scale = 2)
     private Double rating = 0.0;
 
     private Integer totalRatings = 0;
 
-    @Column(precision = 5, scale = 2)
+    //@Column(precision = 5, scale = 2)
     private Double completionRate = 100.0; // Percentage of completed cases
 
     // ===== WORKLOAD MANAGEMENT =====
@@ -88,7 +82,7 @@ public class Doctor extends BaseEntity {
     @Column(nullable = false)
     private Integer todayAppointments = 0;
 
-    @Column(precision = 5, scale = 2)
+    //@Column(precision = 5, scale = 2)
     private Double workloadPercentage = 0.0;
 
     private LocalDateTime lastWorkloadUpdate;

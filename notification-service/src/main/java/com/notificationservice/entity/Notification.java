@@ -47,4 +47,5 @@ public class Notification extends BaseEntity {
     private NotificationPriority priority;
 
     private String recipientEmail;
+    private String recipientPhone;
 }

@@ -52,6 +52,7 @@ public class DoctorService {
                 .primarySpecialization(dto.getPrimarySpecializationCode())
                 .subSpecializations(dto.getSubSpecializationCodes())
                 .caseRate(dto.getCaseRate())
+                .emergencyRate(dto.getEmergencyRate())
                 .hourlyRate(dto.getHourlyRate())
                 .verificationStatus(VerificationStatus.PENDING)
                 .emergencyRate(dto.getComplexCaseFee())

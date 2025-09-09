@@ -24,6 +24,7 @@ public class NotificationDto {
     private String actionUrl;
     private NotificationPriority priority;
     private String recipientEmail;
+    private String recipientPhone;
     private Boolean sendEmail;
     private Boolean isRead;
     private Boolean emailSent;

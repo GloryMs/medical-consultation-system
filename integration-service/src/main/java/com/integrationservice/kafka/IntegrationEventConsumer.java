@@ -1,5 +1,6 @@
 package com.integrationservice.kafka;
 
+import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationType;
 import com.integrationservice.service.SmsService;
 import com.integrationservice.service.WhatsAppIntegrationService;
@@ -19,11 +20,11 @@ public class IntegrationEventConsumer {
     private final WhatsAppIntegrationService whatsAppService;
 
     @KafkaListener(topics = "notification-topic", groupId = "integration-group")
-    public void handleNotificationForSms(Map<String, Object> notificationEvent) {
+    public void handleNotificationForSms(NotificationDto notificationDto) {
         try {
-            NotificationType type =  NotificationType.valueOf(notificationEvent.get("type").toString());
-            String message = notificationEvent.get("message").toString();
-            String recipientPhone = (String) notificationEvent.get("recipientPhone");
+            NotificationType type =  NotificationType.valueOf(notificationDto.getType().toString());
+            String message = notificationDto.getMessage();
+            String recipientPhone = notificationDto.getRecipientPhone();
             
             // Send SMS for urgent notifications
             if ("HIGH".equals(type.name()) && recipientPhone != null) {
@@ -41,10 +42,10 @@ public class IntegrationEventConsumer {
         try {
             Long caseId = Long.valueOf(caseEvent.get("caseId").toString());
             String newStatus = caseEvent.get("newStatus").toString();
-            
-            // Trigger external integrations based on case status
+
+            /*TODO Trigger external integrations based on case status  */
             if ("COMPLETED".equals(newStatus)) {
-                // Could trigger billing system, reporting system, etc.
+                /*TODO Could trigger billing system, reporting system, etc.  */
                 log.info("Case {} completed - triggering external integrations", caseId);
             }
             

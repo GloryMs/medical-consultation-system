@@ -77,9 +77,10 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     @Query("SELECT COUNT(a) FROM Appointment a WHERE " +
             "a.doctor.id = :doctorId AND " +
-            "DATE(a.scheduledTime) = CURRENT_DATE AND " +
+            "DATE(a.scheduledTime) = :currentDate AND " +
             "a.status NOT IN :statuses") //('CANCELLED', 'NO_SHOW')
     long countTodayAppointmentsByDoctor(@Param("doctorId") Long doctorId,
+                                        @Param("currentDate") LocalDateTime currentDate,
                                         @Param("statuses") List<AppointmentStatus> statuses);
 
     @Query("SELECT AVG(a.duration) FROM Appointment a WHERE " +
