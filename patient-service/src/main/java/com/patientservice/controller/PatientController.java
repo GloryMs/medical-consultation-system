@@ -2,13 +2,12 @@ package com.patientservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.AppointmentDto;
+import com.commonlibrary.dto.ComplaintDto;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
-import com.patientservice.entity.Complaint;
+import com.patientservice.feign.ComplaintServiceClient;
 import com.patientservice.repository.CaseAssignmentRepository;
-import com.patientservice.repository.ComplaintRepository;
-import com.patientservice.service.ComplaintService;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
 import jakarta.validation.Valid;
@@ -30,10 +29,9 @@ import java.util.stream.Collectors;
 public class PatientController {
 
     private final PatientService patientService;
-    private final ComplaintService complaintService;
     private final ReportService reportService;
     private final CaseAssignmentRepository assignmentRepository;
-    private final ComplaintRepository complaintRepository;
+    private final ComplaintServiceClient complaintServiceClient;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<PatientProfileDto>> createProfile(
@@ -111,28 +109,30 @@ public class PatientController {
 
     // 7. Submit Complaint - MISSING ENDPOINT
     @PostMapping("/complaints")
-    public ResponseEntity<ApiResponse<Complaint>> submitComplaint(
-            @RequestHeader("X-User-Id") Long userId,
+    public ResponseEntity<ApiResponse<Void>> submitComplaint(
             @Valid @RequestBody ComplaintDto dto) {
-        Complaint complaint = complaintService.submitComplaint(userId, dto);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(complaint, "Complaint submitted successfully"));
+        boolean success = false;
+        success = complaintServiceClient.submitComplaint(dto).getBody().isSuccess();
+        if( success){
+            return ResponseEntity.ok(ApiResponse.success(null, "Complaint submitted"));
+        }
+        return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint .."));
     }
 
     // 8. View My Complaints - MISSING ENDPOINT
     @GetMapping("/complaints")
-    public ResponseEntity<ApiResponse<List<Complaint>>> getMyComplaints(
+    public ResponseEntity<ApiResponse<List<ComplaintDto>>> getMyComplaints(
             @RequestHeader("X-User-Id") Long userId) {
-        List<Complaint> complaints = complaintService.getPatientComplaints(userId);
+        List<ComplaintDto> complaints = complaintServiceClient.getPatientComplaintsById(userId).getBody().getData();
         return ResponseEntity.ok(ApiResponse.success(complaints));
     }
 
-    @GetMapping("/complaints/{complaintId}")
-    public ResponseEntity<ApiResponse<Complaint>> getComplaintByI( @PathVariable Long complaintId ) {
-         Complaint complaint = complaintRepository.findById(complaintId).orElseThrow(() ->
-                 new BusinessException("No complaints found", HttpStatus.NOT_FOUND));
-         return ResponseEntity.ok(ApiResponse.success(complaint));
-    }
+//    @GetMapping("/complaints/{complaintId}")
+//    public ResponseEntity<ApiResponse<Complaint>> getComplaintByI( @PathVariable Long complaintId ) {
+//         Complaint complaint = complaintRepository.findById(complaintId).orElseThrow(() ->
+//                 new BusinessException("No complaints found", HttpStatus.NOT_FOUND));
+//         return ResponseEntity.ok(ApiResponse.success(complaint));
+//    }
 
     // 9. Generate Patient Report - MISSING ENDPOINT
     @GetMapping("/reports/medical-history")

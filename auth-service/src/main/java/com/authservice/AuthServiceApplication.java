@@ -12,7 +12,6 @@ import org.springframework.kafka.annotation.EnableKafka;
 //@EnableJpaAuditing
 @EnableKafka
 @EntityScan(basePackages = {"com.commonlibrary.entity", "com.authservice.entity"})
-
 public class AuthServiceApplication {
 
     public static void main(String[] args) {

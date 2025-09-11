@@ -36,7 +36,6 @@ public class AdminService {
     private final SystemConfigRepository systemConfigRepository;
     private final StaticContentRepository staticContentRepository;
     private final UserRepository userRepository;
-    private final NotificationServiceClient notificationServiceClient;
     private final AdminEventProducer adminEventProducer;
 
     public DashboardDto getDashboard() {
@@ -301,21 +300,6 @@ public class AdminService {
         staticContentRepository.updateContent(dto.getPage(), dto.getContent());
     }
 
-    // 36. Get All Complaints Implementation
-    public List<Complaint> getAllComplaints(String status, String priority) {
-        if (status != null && priority != null) {
-            return complaintRepository.findByStatusAndPriority(
-                    ComplaintStatus.valueOf(status),
-                    ComplaintPriority.valueOf(priority));
-        } else if (status != null) {
-            return complaintRepository.findByStatus(ComplaintStatus.valueOf(status));
-        } else if (priority != null) {
-            return complaintRepository.findByPriority(ComplaintPriority.valueOf(priority));
-        } else {
-            return complaintRepository.findAll();
-        }
-    }
-
     // 37. System Usage Analytics Implementation
     public SystemUsageAnalyticsDto getSystemUsageAnalytics(String period) {
         SystemUsageAnalyticsDto analytics = new SystemUsageAnalyticsDto();
@@ -349,26 +333,6 @@ public class AdminService {
         return analytics;
     }
 
-    // 38. Respond to Complaint Implementation
-    @Transactional
-    public void respondToComplaint(Long complaintId, ComplaintResponseDto dto) {
-        Complaint complaint = complaintRepository.findById(complaintId)
-                .orElseThrow(() -> new RuntimeException("Complaint not found"));
-
-        complaint.setAdminResponse(dto.getResponse());
-        complaint.setStatus(ComplaintStatus.valueOf(dto.getStatus()));
-        complaint.setResolvedAt(LocalDateTime.now());
-
-        complaintRepository.save(complaint);
-
-        // Notify the patient
-        notificationServiceClient.sendNotification(
-                0L, // System notification
-                complaint.getPatientId(),
-                "Complaint Response",
-                "Your complaint has been reviewed. Status: " + dto.getStatus()
-        );
-    }
 
     // Payment-related methods
     public List<PaymentRecordDto> getAllPaymentRecords(LocalDate startDate, LocalDate endDate) {

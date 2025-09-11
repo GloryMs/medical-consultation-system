@@ -6,6 +6,7 @@ import com.adminservice.entity.SystemConfig;
 import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
 import com.adminservice.service.AdminService;
+import com.adminservice.service.ComplaintService;
 import com.commonlibrary.dto.*;
 import com.commonlibrary.dto.PendingVerificationDto;
 import com.commonlibrary.dto.UserDto;
@@ -27,6 +28,7 @@ public class AdminController {
     private final AdminService adminService;
     private final CommonConfigClient configService;
     private final AuthServiceClient authServiceClient;
+    private final ComplaintService complaintService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardDto>> getDashboard() {
@@ -139,11 +141,36 @@ public class AdminController {
 
     // 36. Get All Complaints - MISSING ENDPOINT
     @GetMapping("/complaints")
-    public ResponseEntity<ApiResponse<List<Complaint>>> getAllComplaints(
+    public ResponseEntity<ApiResponse<List<ComplaintDto>>> getAllComplaints(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String priority) {
-        List<Complaint> complaints = adminService.getAllComplaints(status, priority);
+        List<ComplaintDto> complaints = complaintService.getAllComplaints(status, priority);
         return ResponseEntity.ok(ApiResponse.success(complaints));
+    }
+
+    @PostMapping("/complaints")
+    public ResponseEntity<ApiResponse<Void>> submitComplaint(@RequestBody ComplaintDto complaintDto) {
+        Complaint complaint = complaintService.submitComplaint(complaintDto);
+        if( complaint != null ){
+            return ResponseEntity.ok(ApiResponse.success(null, "Complaint submitted"));
+        }
+            return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint .."));
+    }
+
+    @GetMapping("/complaints/patientId")
+    public ResponseEntity<ApiResponse<List<ComplaintDto>>> getPatientComplaintsById(
+            @PathVariable Long patientId) {
+        List<ComplaintDto> complaints = complaintService.getPatientComplaints(patientId);
+        return ResponseEntity.ok(ApiResponse.success(complaints));
+    }
+
+    // 38. Respond to Complaint - MISSING ENDPOINT
+    @PostMapping("/complaints/{complaintId}/respond")
+    public ResponseEntity<ApiResponse<Void>> respondToComplaint(
+            @PathVariable Long complaintId,
+            @Valid @RequestBody ComplaintResponseDto dto) {
+        complaintService.respondToComplaint(complaintId, dto);
+        return ResponseEntity.ok(ApiResponse.success(null, "Response sent"));
     }
 
     // 37. System Usage Analytics - MISSING ENDPOINT
@@ -152,15 +179,6 @@ public class AdminController {
             @RequestParam(defaultValue = "MONTHLY") String period) {
         SystemUsageAnalyticsDto analytics = adminService.getSystemUsageAnalytics(period);
         return ResponseEntity.ok(ApiResponse.success(analytics));
-    }
-
-    // 38. Respond to Complaint - MISSING ENDPOINT
-    @PostMapping("/complaints/{complaintId}/respond")
-    public ResponseEntity<ApiResponse<Void>> respondToComplaint(
-            @PathVariable Long complaintId,
-            @Valid @RequestBody ComplaintResponseDto dto) {
-        adminService.respondToComplaint(complaintId, dto);
-        return ResponseEntity.ok(ApiResponse.success(null, "Response sent"));
     }
 
     // View All Payment Records - Already exists in original implementation
