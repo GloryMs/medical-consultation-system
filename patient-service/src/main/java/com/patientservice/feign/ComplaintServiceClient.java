@@ -14,7 +14,7 @@ import java.util.List;
 @FeignClient(name = "admin-service")
 public interface ComplaintServiceClient {
 
-    @GetMapping("/api/admin/complaints/patientId")
+    @GetMapping("/api/admin/complaints/{patientId}")
     ResponseEntity<ApiResponse<List<ComplaintDto>>> getPatientComplaintsById(
             @PathVariable Long patientId);
 

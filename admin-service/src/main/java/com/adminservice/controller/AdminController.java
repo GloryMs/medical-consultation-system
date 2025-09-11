@@ -157,7 +157,7 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint .."));
     }
 
-    @GetMapping("/complaints/patientId")
+    @GetMapping("/complaints/{patientId}")
     public ResponseEntity<ApiResponse<List<ComplaintDto>>> getPatientComplaintsById(
             @PathVariable Long patientId) {
         List<ComplaintDto> complaints = complaintService.getPatientComplaints(patientId);
