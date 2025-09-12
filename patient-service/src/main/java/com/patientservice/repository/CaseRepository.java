@@ -19,6 +19,8 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
     List<Case> findCaseByRequiredSpecializationAndStatus(String specialization, CaseStatus caseStatus);
 
     Long countByStatus(CaseStatus status);
+    Long countByPatientIdAndStatus(Long patientId, CaseStatus status);
+    Long countByStatusInAndPatientId(List<CaseStatus> statuses, Long patientId);
     Long countByStatusIn(List<CaseStatus> statuses);
     Long countByPatientId(Long patientId);
 

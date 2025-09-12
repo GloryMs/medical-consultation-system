@@ -3,6 +3,7 @@ package com.patientservice.controller;
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.AppointmentDto;
 import com.commonlibrary.dto.ComplaintDto;
+import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
@@ -152,9 +153,9 @@ public class PatientController {
     }
 
     @GetMapping("/cases")
-    public ResponseEntity<ApiResponse<List<Case>>> getMyCases(
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getMyCases(
             @RequestHeader("X-User-Id") Long userId) {
-        List<Case> cases = patientService.getPatientCases(userId);
+        List<CaseDto> cases = patientService.getPatientCases(userId);
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
@@ -249,6 +250,13 @@ public class PatientController {
         PatientDashboardDto patientDashboardDto = new PatientDashboardDto();
         patientDashboardDto = patientService.getPatientDashboard(patientId);
         return ResponseEntity.ok(ApiResponse.success(patientDashboardDto));
+    }
+
+    @GetMapping ("/notifications/{patientId}")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long patientId){
+        List<NotificationDto> notificationsDto = new ArrayList<>();
+        notificationsDto = patientService.getMyNotifications(patientId);
+        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
     }
 
 }

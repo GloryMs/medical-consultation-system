@@ -13,6 +13,7 @@ import com.patientservice.kafka.PatientEventProducer;
 import com.patientservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -231,11 +232,11 @@ public class PatientService {
 //        return caseRepository.save(saved);
 //    }
 
-    public List<Case> getPatientCases(Long userId) {
+    public List<CaseDto> getPatientCases(Long userId) {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
-        return caseRepository.findByPatientId(patient.getId());
+        return caseRepository.findByPatientId(patient.getId()).stream().map(this::convertToCaseDto).collect(Collectors.toList());
     }
 
     public List<CaseDto> getCasesforDoctor(Long doctorId) {
@@ -261,14 +262,8 @@ public class PatientService {
 
     public CaseDto convertToCaseDto(Case newCase){
         CaseDto caseDto = new CaseDto();
-        caseDto.setId(newCase.getId());
-        caseDto.setCaseTitle(newCase.getCaseTitle());
-        caseDto.setDescription(newCase.getDescription());
-        caseDto.setRequiredSpecialization(newCase.getRequiredSpecialization());
-        caseDto.setCreatedAt(newCase.getCreatedAt());
-        caseDto.setUrgencyLevel(newCase.getUrgencyLevel().toString());
-        caseDto.setStatus(newCase.getStatus().toString());
-        caseDto.setPatientId(newCase.getPatient().getId());
+        ModelMapper modelMapper=new ModelMapper();
+        caseDto = modelMapper.map(newCase, CaseDto.class);
         return caseDto;
     }
 
@@ -777,8 +772,8 @@ public class PatientService {
             statusList.add(SCHEDULED);
             statusList.add(CONSULTATION_COMPLETE);
             stats.setTotalCases( caseRepository.countByPatientId(patientId) );
-            stats.setActiveCases( caseRepository.countByStatusIn(statusList) );
-            stats.setCompletedCases(caseRepository.countByStatus(CLOSED));
+            stats.setActiveCases( caseRepository.countByStatusInAndPatientId(statusList, patientId) );
+            stats.setCompletedCases(caseRepository.countByPatientIdAndStatus(patientId ,CLOSED));
             dto.setStats(stats);
             List<Case> recentCases = caseRepository.findLastSubmittedCases(patientId, 3);
             dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
@@ -791,6 +786,18 @@ public class PatientService {
             log.error(e.getMessage());
         }
         return dto;
+    }
+
+    public List<NotificationDto> getMyNotifications(Long patientId){
+        List<NotificationDto> dtos = new ArrayList<>();
+        try{
+            dtos = notificationServiceClient.getUserNotifications(patientId).getBody().
+                    getData().stream().map(this::convertToNotficationDto).toList();
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+
+        return dtos;
     }
 
     @Transactional
