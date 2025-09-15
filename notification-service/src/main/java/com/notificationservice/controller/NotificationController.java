@@ -28,16 +28,16 @@ public class NotificationController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<ApiResponse<List<Notification>>> getUserNotifications(
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(
             @PathVariable Long userId) {
-        List<Notification> notifications = notificationService.getUserNotifications(userId);
+        List<NotificationDto> notifications = notificationService.getUserNotifications(userId);
         return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 
     @GetMapping("/user/{userId}/unread")
-    public ResponseEntity<ApiResponse<List<Notification>>> getUnreadNotifications(
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUnreadNotifications(
             @PathVariable Long userId) {
-        List<Notification> notifications = notificationService.getUnreadNotifications(userId);
+        List<NotificationDto> notifications = notificationService.getUnreadNotifications(userId);
         return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 

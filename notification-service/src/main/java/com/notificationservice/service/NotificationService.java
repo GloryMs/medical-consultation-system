@@ -6,12 +6,14 @@ import com.commonlibrary.entity.NotificationPriority;
 import com.notificationservice.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -63,12 +65,21 @@ public class NotificationService {
         }
     }
 
-    public List<Notification> getUserNotifications(Long userId) {
-        return notificationRepository.findByReceiverIdOrderByCreatedAtDesc(userId);
+    public List<NotificationDto> getUserNotifications(Long userId) {
+        return notificationRepository.findByReceiverIdOrderByCreatedAtDesc(userId).stream().
+                map(this::convertToNotificationDto).collect(Collectors.toList());
     }
 
-    public List<Notification> getUnreadNotifications(Long userId) {
-        return notificationRepository.findByReceiverIdAndIsReadFalseOrderByCreatedAtDesc(userId);
+    public List<NotificationDto> getUnreadNotifications(Long userId) {
+        return notificationRepository.findByReceiverIdAndIsReadFalseOrderByCreatedAtDesc(userId).stream().
+                map(this::convertToNotificationDto).collect(Collectors.toList());
+    }
+
+    public NotificationDto convertToNotificationDto(Notification notification) {
+        NotificationDto notificationDto = new NotificationDto();
+        ModelMapper modelMapper = new ModelMapper();
+        notificationDto = modelMapper.map(notification, NotificationDto.class);
+        return notificationDto;
     }
 
     @Transactional

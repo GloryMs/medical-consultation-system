@@ -1,9 +1,7 @@
 package com.doctorservice.controller;
 
-import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.dto.DoctorDto;
-import com.commonlibrary.dto.DoctorProfileDto;
-import com.commonlibrary.dto.PendingVerificationDto;
 import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.entity.CaseStatus;
 import com.commonlibrary.entity.VerificationStatus;
@@ -65,16 +63,16 @@ public class DoctorController {
     }
 
     @GetMapping("/appointments")
-    public ResponseEntity<ApiResponse<List<Appointment>>> getAppointments(
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAppointments(
             @RequestHeader("X-User-Id") Long userId) {
-        List<Appointment> appointments = doctorService.getDoctorAppointments(userId);
+        List<AppointmentDto> appointments = doctorService.getDoctorAppointments(userId);
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
     @GetMapping("/appointments/{patientId}")
-    public ResponseEntity<ApiResponse<List<Appointment>>> getPatientAppointments(
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointments(
             @PathVariable Long patientId) {
-        List<Appointment> appointments = doctorService.getPatientAppointments(patientId);
+        List<AppointmentDto> appointments = doctorService.getPatientAppointments(patientId);
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 

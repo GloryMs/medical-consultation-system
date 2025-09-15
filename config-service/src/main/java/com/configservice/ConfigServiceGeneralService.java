@@ -66,8 +66,6 @@ public class ConfigServiceGeneralService {
         return medicalConfigurations;
     }
 
-
-
     public DiseaseDto convertToDiseasesDto(Disease disease) {
         return modelMapper.map(disease, DiseaseDto.class);
     }

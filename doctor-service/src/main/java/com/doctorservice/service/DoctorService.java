@@ -1,5 +1,6 @@
 package com.doctorservice.service;
 
+import com.commonlibrary.dto.AppointmentDto;
 import com.commonlibrary.dto.DoctorProfileDto;
 import com.commonlibrary.entity.AppointmentStatus;
 import com.commonlibrary.entity.CaseStatus;
@@ -14,6 +15,7 @@ import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.feign.PatientServiceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,17 +110,25 @@ public class DoctorService {
         return saved;
     }
 
-    public List<Appointment> getDoctorAppointments(Long userId) {
+    public List<AppointmentDto> getDoctorAppointments(Long userId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        return appointmentRepository.findByDoctorId(doctor.getId());
+        return appointmentRepository.findByDoctorId(doctor.getId()).stream().map(this::convertToAppointmentDto).toList();
     }
 
-    public List<Appointment> getPatientAppointments(Long patientId) {
-        List<Appointment> patientAppointments = new ArrayList<>();
-        patientAppointments = appointmentRepository.findByPatientId(patientId);
+    public List<AppointmentDto> getPatientAppointments(Long patientId) {
+        List<AppointmentDto> patientAppointments = new ArrayList<>();
+        patientAppointments = appointmentRepository.findByPatientId(patientId).
+                stream().map(this::convertToAppointmentDto).toList();
         return patientAppointments;
+    }
+
+    public AppointmentDto convertToAppointmentDto(Appointment appointment) {
+        AppointmentDto appointmentDto = new AppointmentDto();
+        ModelMapper modelMapper = new ModelMapper();
+        appointmentDto = modelMapper.map(appointment, AppointmentDto.class);
+        return appointmentDto;
     }
 
     @Transactional

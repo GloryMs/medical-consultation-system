@@ -295,13 +295,6 @@ public class PatientService {
         caseRepository.save(medicalCase);
     }
 
-    public List<AppointmentDto> getByPatientAppointments (Long patientId){
-        List<AppointmentDto>  appointments = new ArrayList<>();
-        appointments = getPatientAppointments(patientId).stream().
-                map(this::convertToAppointmentDto).collect(Collectors.toList());
-        return appointments;
-    }
-
     public AppointmentDto convertToAppointmentDto(AppointmentDto newAppointment){
         AppointmentDto appointmentDto = new AppointmentDto();
         appointmentDto.setCaseId(newAppointment.getCaseId());
@@ -762,6 +755,14 @@ public class PatientService {
     }
 
     public PatientDashboardDto getPatientDashboard(Long patientId){
+
+        /*TODO
+          below lines must be deleted, the query for the patient, and get its ID to be used to get the appointments.
+         */
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+        Long userId = patient.getUserId();
+
         PatientDashboardDto dto = new PatientDashboardDto();
         try{
             List<CaseStatus> statusList = new ArrayList<>();
@@ -777,13 +778,13 @@ public class PatientService {
             dto.setStats(stats);
             List<Case> recentCases = caseRepository.findLastSubmittedCases(patientId, 3);
             dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
-            dto.setUpcomingAppointments(getByPatientAppointments(patientId));
-            List<NotificationDto> recentNotifications = notificationServiceClient.getUserNotifications(patientId)
-                    .getBody().getData().stream().map(this::convertToNotficationDto).toList();
+            dto.setUpcomingAppointments(getPatientAppointments(userId));
+            List<NotificationDto> recentNotifications = getMyNotifications(patientId);
             dto.setRecentNotifications(recentNotifications);
         }catch(Exception e){
             log.error("Failed to get patient dashboard");
             log.error(e.getMessage());
+            e.printStackTrace();
         }
         return dto;
     }

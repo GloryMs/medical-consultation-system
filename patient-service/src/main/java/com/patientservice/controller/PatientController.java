@@ -185,7 +185,7 @@ public class PatientController {
     public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAppointments(
             @RequestHeader("X-User-Id") Long userId){
         List<AppointmentDto> appointments = new ArrayList<>();
-        appointments = patientService.getByPatientAppointments(userId);
+        appointments = patientService.getPatientAppointments(userId);
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 

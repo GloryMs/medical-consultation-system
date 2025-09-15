@@ -3,6 +3,7 @@ package com.doctorservice.entity;
 import com.commonlibrary.entity.AppointmentStatus;
 import com.commonlibrary.entity.BaseEntity;
 import com.commonlibrary.entity.ConsultationType;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -22,6 +23,7 @@ public class Appointment extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "doctor_id", nullable = false)
+    @JsonBackReference
     private Doctor doctor;
 
     @Column(nullable = false)
