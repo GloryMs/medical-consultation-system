@@ -1,14 +1,17 @@
 package com.paymentservice.service;
 
+import com.commonlibrary.dto.PaymentDto;
+import com.commonlibrary.entity.PaymentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.paymentservice.dto.PaymentHistoryDto;
 import com.paymentservice.dto.PaymentReceiptDto;
-import com.paymentservice.dto.ProcessPaymentDto;
+import com.commonlibrary.dto.ProcessPaymentDto;
 import com.paymentservice.entity.Payment;
-import com.paymentservice.entity.PaymentStatus;
+import com.commonlibrary.entity.PaymentMethod;
 import com.paymentservice.kafka.PaymentEventProducer;
 import com.paymentservice.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,14 +32,14 @@ public class PaymentService {
     private final PaymentEventProducer paymentEventProducer;
 
     @Transactional
-    public Payment processPayment(ProcessPaymentDto dto) {
+    public PaymentDto processPayment(ProcessPaymentDto dto) {
         Payment payment = Payment.builder()
                 .patientId(dto.getPatientId())
                 .doctorId(dto.getDoctorId())
                 .caseId(dto.getCaseId())
                 .paymentType(dto.getPaymentType())
                 .amount(dto.getAmount())
-                .paymentMethod(dto.getPaymentMethod())
+                .paymentMethod(PaymentMethod.valueOf(dto.getPaymentMethod()))
                 .status(PaymentStatus.PENDING)
                 .currency("USD")
                 .build();
@@ -61,7 +64,9 @@ public class PaymentService {
                 saved.getTransactionId()
         );
 
-        return saved;
+        ModelMapper modelMapper = new ModelMapper();
+
+        return modelMapper.map(saved, PaymentDto.class);
     }
 
     private void simulatePaymentProcessing(Payment payment) {
@@ -101,7 +106,7 @@ public class PaymentService {
         receipt.setAmount(payment.getAmount());
         receipt.setPlatformFee(payment.getPlatformFee());
         receipt.setTotalAmount(payment.getAmount());
-        receipt.setPaymentMethod(payment.getPaymentMethod());
+        receipt.setPaymentMethod( payment.getPaymentMethod().name());
         receipt.setStatus(payment.getStatus().toString());
         receipt.setCurrency(payment.getCurrency());
 
@@ -198,7 +203,7 @@ public class PaymentService {
         dto.setPaymentType(payment.getPaymentType().toString());
         dto.setAmount(payment.getAmount());
         dto.setStatus(payment.getStatus().toString());
-        dto.setPaymentMethod(payment.getPaymentMethod());
+        dto.setPaymentMethod(payment.getPaymentMethod().name());
         dto.setProcessedAt(payment.getProcessedAt());
 
         String description = payment.getPaymentType().name().equals("SUBSCRIPTION")

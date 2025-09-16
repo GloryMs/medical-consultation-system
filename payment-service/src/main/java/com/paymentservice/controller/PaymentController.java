@@ -1,9 +1,10 @@
 package com.paymentservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.PaymentDto;
 import com.paymentservice.dto.PaymentHistoryDto;
 import com.paymentservice.dto.PaymentReceiptDto;
-import com.paymentservice.dto.ProcessPaymentDto;
+import com.commonlibrary.dto.ProcessPaymentDto;
 import com.paymentservice.entity.Payment;
 import com.paymentservice.service.PaymentService;
 import jakarta.validation.Valid;
@@ -24,9 +25,9 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping("/process")
-    public ResponseEntity<ApiResponse<Payment>> processPayment(
+    public ResponseEntity<ApiResponse<PaymentDto>> processPayment(
             @Valid @RequestBody ProcessPaymentDto dto) {
-        Payment payment = paymentService.processPayment(dto);
+        PaymentDto payment = paymentService.processPayment(dto);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(payment, "Payment processed successfully"));
     }

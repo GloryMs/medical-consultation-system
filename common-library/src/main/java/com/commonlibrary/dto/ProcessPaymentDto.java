@@ -1,6 +1,6 @@
-package com.paymentservice.dto;
+package com.commonlibrary.dto;
 
-import com.paymentservice.entity.PaymentType;
+import com.commonlibrary.entity.PaymentType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 

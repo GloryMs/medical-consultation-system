@@ -723,7 +723,7 @@ public class SmartCaseAssignmentService {
      */
     private DoctorDto convertToLegacyDoctorDto(DoctorCapacityDto capacity) {
         DoctorDto legacy = new DoctorDto();
-        legacy.setUserId(capacity.getDoctorId());
+        legacy.setId(capacity.getDoctorId());
         legacy.setFullName(capacity.getFullName());
         legacy.setPrimarySpecialization(capacity.getPrimarySpecialization());
         legacy.setRating(capacity.getAverageRating());

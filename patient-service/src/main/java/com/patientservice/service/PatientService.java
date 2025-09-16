@@ -2,6 +2,8 @@ package com.patientservice.service;
 
 import com.commonlibrary.dto.AppointmentDto;
 import com.commonlibrary.dto.NotificationDto;
+import com.commonlibrary.dto.PaymentDto;
+import com.commonlibrary.dto.ProcessPaymentDto;
 import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
@@ -324,11 +326,11 @@ public class PatientService {
     }
 
     @Transactional
-    public void payConsultationFee(Long userId, Long caseId, BigDecimal amount) {
+    public void payConsultationFee(Long userId, ProcessPaymentDto paymentDto ) {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
-        Case medicalCase = caseRepository.findById(caseId)
+        Case medicalCase = caseRepository.findById(paymentDto.getCaseId())
                 .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
 
         if (!medicalCase.getPatient().getId().equals(patient.getId())) {
@@ -339,13 +341,20 @@ public class PatientService {
             throw new BusinessException("Payment not required at this stage", HttpStatus.BAD_REQUEST);
         }
 
-        // Simulate payment processing
-        //medicalCase.setConsultationFee(amount);
-        medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
-        //medicalCase.setPaymentCompletedAt(LocalDateTime.now());
-        medicalCase.setStatus(IN_PROGRESS);
+        // Simulate payment processing first:
 
-        caseRepository.save(medicalCase);
+         PaymentDto updatedPayment =  paymentServiceClient.processPayment(paymentDto).getBody().getData();
+
+        //update case status:
+        if( updatedPayment!=null ){
+            medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
+            medicalCase.setStatus(IN_PROGRESS);
+            caseRepository.save(medicalCase);
+
+            //Update Appointment status to be CONFIRMED
+            doctorServiceClient.confirmAppointment(updatedPayment.getCaseId(), updatedPayment.getPatientId(),
+                    updatedPayment.getDoctorId());
+        }
     }
 
     private void processPayment(Subscription subscription, Patient patient) {
@@ -562,23 +571,18 @@ public class PatientService {
             else if( newStatus == REJECTED){
                 updatedCaseAssignment.setStatus(AssignmentStatus.PENDING);
             }
+            else if( newStatus == IN_PROGRESS){
+                medicalCase.setPaymentStatus(PaymentStatus.COMPLETED);
+            }
+            else if (newStatus == CaseStatus.CONSULTATION_COMPLETE || newStatus == CaseStatus.CLOSED) {
+                medicalCase.setClosedAt(LocalDateTime.now());
+            }
             else if( updatedCaseAssignment.getExpiresAt().isBefore(LocalDateTime.now()) ){
                 updatedCaseAssignment.setStatus(AssignmentStatus.EXPIRED);
             }
 
             caseAssignmentRepository.save(updatedCaseAssignment);
         }
-
-//        if (newStatus == CaseStatus.ACCEPTED) {
-//            medicalCase.setAcceptedAt(LocalDateTime.now());
-//            medicalCase.setAssignedDoctorId(doctorId);
-//        } else if (newStatus == CaseStatus.SCHEDULED) {
-//            medicalCase.setScheduledAt(LocalDateTime.now());
-//        } else if (newStatus == CaseStatus.IN_PROGRESS) {
-//            medicalCase.setPaymentCompletedAt(LocalDateTime.now());
-//        } else if (newStatus == CaseStatus.CONSULTATION_COMPLETE || newStatus == CaseStatus.CLOSED) {
-//            medicalCase.setClosedAt(LocalDateTime.now());
-//        }
 
         caseRepository.save(medicalCase);
 

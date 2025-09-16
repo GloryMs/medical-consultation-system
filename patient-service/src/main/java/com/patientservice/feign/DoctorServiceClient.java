@@ -34,7 +34,7 @@ public interface DoctorServiceClient {
     /**
      * Get doctors by specialization with their workload capacity information
      */
-    @GetMapping("/specialization/{specialization}/with-capacity")
+    @GetMapping("/api/doctors/specialization/{specialization}/with-capacity")
     ResponseEntity<ApiResponse<List<DoctorCapacityDto>>> getAvailableDoctorsBySpecializationWithCapacity(
             @PathVariable("specialization") String specialization,
             @RequestParam(defaultValue = "20") int limit
@@ -43,7 +43,7 @@ public interface DoctorServiceClient {
     /**
      * Get emergency-available doctors (can override workload limits)
      */
-    @GetMapping("/emergency-available")
+    @GetMapping("/api/doctors/emergency-available")
     ResponseEntity<ApiResponse<List<DoctorCapacityDto>>> getEmergencyAvailableDoctors(
             @RequestParam(required = false) String specialization,
             @RequestParam(defaultValue = "10") int limit
@@ -52,7 +52,7 @@ public interface DoctorServiceClient {
     /**
      * Get doctor's current workload and capacity information
      */
-    @GetMapping("/workload/{doctorId}/capacity")
+    @GetMapping("/api/doctors/workload/{doctorId}/capacity")
     ResponseEntity<ApiResponse<DoctorCapacityDto>> getDoctorCapacity(
             @PathVariable("doctorId") Long doctorId
     );
@@ -60,7 +60,7 @@ public interface DoctorServiceClient {
     /**
      * Get multiple doctors' capacity information for batch operations
      */
-    @PostMapping("/workload/batch-capacity")
+    @PostMapping("/api/doctors/workload/batch-capacity")
     ResponseEntity<ApiResponse<List<DoctorCapacityDto>>> getBatchDoctorCapacity(
             @RequestBody List<Long> doctorIds
     );
@@ -76,7 +76,7 @@ public interface DoctorServiceClient {
     /**
      * Check if doctor is available at specific time
      */
-    @GetMapping("/workload/{doctorId}/availability")
+    @GetMapping("/api/doctors/workload/{doctorId}/availability")
     ResponseEntity<ApiResponse<Map<String, Object>>> checkDoctorAvailability(
             @PathVariable("doctorId") Long doctorId,
             @RequestParam("requestedTime") String requestedTime
@@ -85,7 +85,7 @@ public interface DoctorServiceClient {
     /**
      * Enable emergency mode for a doctor
      */
-    @PostMapping("/workload/{doctorId}/emergency-mode")
+    @PostMapping("/api/doctors/workload/{doctorId}/emergency-mode")
     ResponseEntity<ApiResponse<String>> enableEmergencyMode(
             @PathVariable("doctorId") Long doctorId,
             @RequestBody Map<String, String> request
@@ -197,5 +197,9 @@ public interface DoctorServiceClient {
         // Delegate to new workload update method
         return updateDoctorWorkload(doctorId);
     }
+
+    @PutMapping("/api/doctors/appointments/confirm")
+    ResponseEntity<ApiResponse<Void>> confirmAppointment(
+            @RequestParam Long caseId, @RequestParam Long patientId, @RequestParam Long doctorId);
 
 }

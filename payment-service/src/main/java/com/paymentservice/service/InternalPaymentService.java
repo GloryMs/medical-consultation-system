@@ -1,7 +1,7 @@
 package com.paymentservice.service;
 
+import com.commonlibrary.entity.PaymentStatus;
 import com.paymentservice.entity.Payment;
-import com.paymentservice.entity.PaymentStatus;
 import com.paymentservice.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

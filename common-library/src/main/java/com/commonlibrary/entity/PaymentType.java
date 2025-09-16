@@ -1,4 +1,4 @@
-package com.paymentservice.entity;
+package com.commonlibrary.entity;
 
 public enum PaymentType {
     SUBSCRIPTION,

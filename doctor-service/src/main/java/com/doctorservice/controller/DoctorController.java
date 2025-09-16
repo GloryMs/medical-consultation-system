@@ -149,6 +149,13 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment rescheduled"));
     }
 
+    @PutMapping("/appointments/confirm")
+    public ResponseEntity<ApiResponse<Void>> confirmAppointment(
+            @RequestParam Long caseId, @RequestParam Long patientId, @RequestParam Long doctorId) {
+        doctorService.confirmAppointment(caseId, patientId, doctorId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Appointment confirmed"));
+    }
+
     // 18. Get Today's Appointments - MISSING ENDPOINT
     @GetMapping("/appointments/today")
     public ResponseEntity<ApiResponse<List<Appointment>>> getTodayAppointments(

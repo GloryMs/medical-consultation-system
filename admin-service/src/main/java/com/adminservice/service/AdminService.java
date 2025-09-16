@@ -161,7 +161,7 @@ public class AdminService {
 
     public PendingVerificationDto convertToPendingVerificationDto(DoctorDto doctor) {
         PendingVerificationDto pendingVerificationDto = new PendingVerificationDto();
-        pendingVerificationDto.setDoctorId(doctor.getUserId());
+        pendingVerificationDto.setDoctorId(doctor.getId());
         pendingVerificationDto.setFullName(doctor.getFullName());
         pendingVerificationDto.setLicenseNumber(doctor.getLicenseNumber());
         pendingVerificationDto.setSpecialization(doctor.getPrimarySpecialization());
@@ -191,6 +191,7 @@ public class AdminService {
 
     public DoctorDetailsDto convertToDoctorDetailsDto(DoctorDto doctor){
         DoctorDetailsDto doctorDetailsDto = new DoctorDetailsDto();
+        doctorDetailsDto.setId(doctor.getUserId());
         doctorDetailsDto.setId(doctor.getUserId());
         doctorDetailsDto.setFullName(doctor.getFullName());
         doctorDetailsDto.setLicenseNumber(doctor.getLicenseNumber());

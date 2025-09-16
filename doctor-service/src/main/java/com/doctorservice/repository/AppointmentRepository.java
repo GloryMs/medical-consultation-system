@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
@@ -19,6 +20,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     List<Appointment> findByDoctorIdAndScheduledTimeBetween(Long doctorId, LocalDateTime start, LocalDateTime end);
     List<Appointment> findByCaseId(Long caseId);
     List<Appointment> findByPatientId(Long patientId);
+    Optional<Appointment> findByCaseIdAndPatientIdAndDoctorId(Long caseId, Long patientId, Long doctorId);
 
     Long countByDoctorIdAndScheduledTimeBetween(Long doctorId, LocalDateTime start, LocalDateTime end);
 

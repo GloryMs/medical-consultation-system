@@ -8,6 +8,7 @@ import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
+import com.doctorservice.kafka.DoctorEventProducer;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.CalendarAvailabilityRepository;
 import com.doctorservice.repository.ConsultationReportRepository;
@@ -36,6 +37,7 @@ public class DoctorService {
     private final PatientServiceClient patientServiceClient;
     private final ConsultationReportRepository consultationReportRepository;
     private final CalendarAvailabilityRepository calendarAvailabilityRepository;
+    private final DoctorEventProducer doctorEventProducer;
 
     @Transactional
     public DoctorProfileDto createProfile(Long userId, DoctorProfileDto dto) {
@@ -105,7 +107,11 @@ public class DoctorService {
         Appointment saved = appointmentRepository.save(appointment);
 
         // Update case status to SCHEDULED
-        patientServiceClient.updateCaseStatus(dto.getCaseId(), "SCHEDULED", doctor.getId());
+        patientServiceClient.updateCaseStatus(dto.getCaseId(), "PAYMENT_PENDING", doctor.getId()); // Was SCHEDULED
+
+        //Send notification to Patient:
+        doctorEventProducer.SendCaseScheduleUpdate(dto.getPatientId(), dto.getCaseId(),
+                dto.getScheduledTime(), doctor.getFullName());
 
         return saved;
     }
@@ -294,6 +300,21 @@ public class DoctorService {
         appointment.setRescheduleCount(appointment.getRescheduleCount() + 1);
         appointment.setStatus(AppointmentStatus.RESCHEDULED);
 
+        appointmentRepository.save(appointment);
+    }
+
+    @Transactional
+    public void confirmAppointment(Long caseId, Long patientId, Long doctorId) {
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        Appointment appointment = appointmentRepository.findByCaseIdAndPatientIdAndDoctorId(caseId, patientId, doctorId)
+                .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
+
+        if (!appointment.getDoctor().getId().equals(doctor.getId())) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+        appointment.setStatus(AppointmentStatus.CONFIRMED);
         appointmentRepository.save(appointment);
     }
 

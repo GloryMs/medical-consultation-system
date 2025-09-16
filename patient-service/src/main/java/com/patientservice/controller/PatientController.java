@@ -1,9 +1,6 @@
 package com.patientservice.controller;
 
-import com.commonlibrary.dto.ApiResponse;
-import com.commonlibrary.dto.AppointmentDto;
-import com.commonlibrary.dto.ComplaintDto;
-import com.commonlibrary.dto.NotificationDto;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
@@ -13,6 +10,7 @@ import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/patients")
 @RequiredArgsConstructor
@@ -192,9 +191,8 @@ public class PatientController {
     @PostMapping("/cases/{caseId}/pay")
     public ResponseEntity<ApiResponse<Void>> payConsultationFee(
             @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long caseId,
-            @RequestParam BigDecimal amount) {
-        patientService.payConsultationFee(userId, caseId, amount);
+            @Valid @RequestBody ProcessPaymentDto dto) {
+        patientService.payConsultationFee(userId, dto);
         return ResponseEntity.ok(ApiResponse.success(null, "Payment completed successfully"));
     }
 

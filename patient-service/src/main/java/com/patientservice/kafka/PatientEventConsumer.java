@@ -15,7 +15,7 @@ public class PatientEventConsumer {
 
     private final PatientService patientService;
 
-    @KafkaListener(topics = "payment-completed-topic", groupId = "patient-payment-group")
+    @KafkaListener(topics = "payment-completed-topic", groupId = "patient-group")
     public void handlePaymentCompleted(Map<String, Object> paymentEvent) {
         try {
             Long patientId = Long.valueOf(paymentEvent.get("patientId").toString());
@@ -31,7 +31,7 @@ public class PatientEventConsumer {
             if ("SUBSCRIPTION".equals(paymentType)) {
                 patientService.activateSubscriptionAfterPayment(patientId);
             } else if ("CONSULTATION".equals(paymentType) && caseId != null) {
-                patientService.updateCaseAfterPayment(caseId, patientId);
+                //patientService.updateCaseAfterPayment(caseId, patientId);
             }
             
         } catch (Exception e) {
@@ -39,7 +39,7 @@ public class PatientEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "user-registration-topic", groupId = "patient-registration-group")
+    @KafkaListener(topics = "user-registration-topic", groupId = "patient-group")
     public void handleUserRegistration(Map<String, Object> registrationEvent) {
         try {
             Long userId = Long.valueOf(registrationEvent.get("userId").toString());
