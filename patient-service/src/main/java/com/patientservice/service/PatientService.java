@@ -450,6 +450,7 @@ public class PatientService {
             status.setAmount(activeSubscription.getAmount());
             status.setAutoRenew(activeSubscription.getAutoRenew());
             status.setPaymentMethod(activeSubscription.getPaymentMethod());
+            status.setCreatedAt(activeSubscription.getCreatedAt());
         }
 
         return status;
@@ -750,11 +751,8 @@ public class PatientService {
 
     public NotificationDto convertToNotficationDto(NotificationDto notification){
         NotificationDto dto = new NotificationDto();
-        dto.setMessage(notification.getMessage());
-        dto.setTitle(notification.getTitle());
-        dto.setSenderId(notification.getSenderId());
-        dto.setActionUrl(notification.getActionUrl());
-        dto.setRecipientEmail(notification.getRecipientEmail());
+        ModelMapper modelMapper = new ModelMapper();
+        dto = modelMapper.map(notification, NotificationDto.class);
         return dto;
     }
 
@@ -783,6 +781,7 @@ public class PatientService {
             List<Case> recentCases = caseRepository.findLastSubmittedCases(patientId, 3);
             dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
             dto.setUpcomingAppointments(getPatientAppointments(userId));
+            stats.setUpcomingAppointments(dto.getUpcomingAppointments().stream().count());
             List<NotificationDto> recentNotifications = getMyNotifications(patientId);
             dto.setRecentNotifications(recentNotifications);
         }catch(Exception e){
@@ -796,12 +795,10 @@ public class PatientService {
     public List<NotificationDto> getMyNotifications(Long patientId){
         List<NotificationDto> dtos = new ArrayList<>();
         try{
-            dtos = notificationServiceClient.getUserNotifications(patientId).getBody().
-                    getData().stream().map(this::convertToNotficationDto).toList();
+            dtos = notificationServiceClient.getUserNotifications(patientId).getBody().getData();
         } catch (Exception e) {
             log.error(e.getMessage());
         }
-
         return dtos;
     }
 

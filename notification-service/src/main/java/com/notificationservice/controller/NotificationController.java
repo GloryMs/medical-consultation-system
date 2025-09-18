@@ -41,10 +41,10 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 
-    @PutMapping("/{notificationId}/read")
+    @PutMapping("/{notificationId}/{userId}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @PathVariable Long notificationId,
-            @RequestHeader("X-User-Id") Long userId) {
+            @PathVariable Long userId) {
         notificationService.markAsRead(notificationId, userId);
         return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
     }

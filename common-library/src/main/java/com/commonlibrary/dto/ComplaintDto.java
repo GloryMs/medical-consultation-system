@@ -16,4 +16,5 @@ public class ComplaintDto {
     private String adminResponse;
     private Long assignedTo;
     private LocalDateTime resolvedAt;
+    private LocalDateTime createdAt;
 }

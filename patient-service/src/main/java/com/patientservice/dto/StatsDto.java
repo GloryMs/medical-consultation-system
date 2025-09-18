@@ -11,4 +11,5 @@ public class StatsDto {
     Long totalCases;
     Long activeCases;
     Long completedCases;
+    Long upcomingAppointments;
 }

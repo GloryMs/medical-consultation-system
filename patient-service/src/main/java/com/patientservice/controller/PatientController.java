@@ -5,6 +5,7 @@ import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
 import com.patientservice.feign.ComplaintServiceClient;
+import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.repository.CaseAssignmentRepository;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
@@ -32,6 +33,7 @@ public class PatientController {
     private final ReportService reportService;
     private final CaseAssignmentRepository assignmentRepository;
     private final ComplaintServiceClient complaintServiceClient;
+    private final NotificationServiceClient notificationServiceClient;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<PatientProfileDto>> createProfile(
@@ -255,6 +257,21 @@ public class PatientController {
         List<NotificationDto> notificationsDto = new ArrayList<>();
         notificationsDto = patientService.getMyNotifications(patientId);
         return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+    }
+
+    @PutMapping("/notifications/{notificationId}/{userId}/read")
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
+            @PathVariable Long notificationId,
+            @PathVariable Long userId){
+        notificationServiceClient.markAsRead(notificationId, userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
+    }
+
+    @PutMapping("/notifications/{userId}/read-all")
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
+            @PathVariable  Long userId) {
+        notificationServiceClient.markAllAsRead(userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
 
 }

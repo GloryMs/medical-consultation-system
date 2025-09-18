@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public class SubscriptionStatusDto {
     private SubscriptionStatus status;
     private LocalDateTime expiryDate;
+    private LocalDateTime createdAt;
     private Boolean isActive;
     private PlanType planType;
     private BigDecimal amount;
