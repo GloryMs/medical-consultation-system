@@ -17,14 +17,14 @@ public class AuthEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void sendUserRegistrationEvent(Long userId, String email, String role) {
+    public void sendUserRegistrationEvent(Long userId, String email, String role, String fullName) {
         try{
             // Send welcome notification
             NotificationDto welcomeNotification = NotificationDto.builder()
                     .senderId(0L) // System notification
                     .receiverId(userId)
                     .title("Welcome to Medical Consultation System")
-                    .message("Welcome! Your account has been created successfully. Please complete your profile.")
+                    .message("Hi "+ fullName +", Welcome! Your account has been created successfully. Please complete your profile.")
                     .type(NotificationType.WELCOME)
                     .sendEmail(true)
                     .recipientEmail(email)
@@ -38,6 +38,7 @@ public class AuthEventProducer {
             registrationEvent.put("userId", userId);
             registrationEvent.put("email", email);
             registrationEvent.put("role", role);
+            registrationEvent.put("fullName", fullName);
             registrationEvent.put("timestamp", System.currentTimeMillis());
 
             kafkaTemplate.send("user-registration-topic", registrationEvent);

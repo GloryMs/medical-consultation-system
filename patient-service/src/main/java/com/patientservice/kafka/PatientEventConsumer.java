@@ -45,12 +45,15 @@ public class PatientEventConsumer {
             Long userId = Long.valueOf(registrationEvent.get("userId").toString());
             String email = registrationEvent.get("email").toString();
             String role = registrationEvent.get("role").toString();
+            String fullName = registrationEvent.get("fullName").toString();
             
             log.info("User registration event received: {}, role: {}", email, role);
+
+            System.out.println("Start handling kafka event of new user registration: " + email);
             
             // Only handle patient registrations
             if ("PATIENT".equals(role)) {
-                patientService.initializePatientProfile(userId, email);
+                patientService.initializePatientProfile(userId, email, fullName);
             }
             
         } catch (Exception e) {

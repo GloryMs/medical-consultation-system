@@ -41,6 +41,8 @@ public class User extends BaseEntity {
 
     private String timeZone;
 
+    private String fullName;
+
     @Column(nullable = false)
     private Boolean isDeleted = false;
 

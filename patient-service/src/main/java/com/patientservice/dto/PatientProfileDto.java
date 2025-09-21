@@ -11,10 +11,7 @@ import java.time.LocalDate;
 public class PatientProfileDto {
     private Long id;
     private Long userId;
-
-    @NotBlank(message = "Full name is required")
     private String fullName;
-
     private LocalDate dateOfBirth;
     private Gender gender;
     private String medicalHistory;
@@ -25,6 +22,7 @@ public class PatientProfileDto {
     private String allergies;
     private String chronicConditions;
     private String phoneNumber;
+    private String email;
     private String address;
     private String city;
     private String country;

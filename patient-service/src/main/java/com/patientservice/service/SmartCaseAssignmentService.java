@@ -761,7 +761,7 @@ public class SmartCaseAssignmentService {
         }
 
         Patient patient = medicalCase.getPatient();
-        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+        if ( patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
             throw new BusinessException("Patient must have active subscription", HttpStatus.PAYMENT_REQUIRED);
         }
 

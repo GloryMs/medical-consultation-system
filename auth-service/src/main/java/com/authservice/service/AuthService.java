@@ -49,6 +49,7 @@ public class AuthService {
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .status(UserStatus.PENDING_VERIFICATION)
+                .fullName(request.getFullName())
                 .emailVerified(false)
                 .isDeleted(false)
                 .timeZone("UTC")
@@ -61,8 +62,11 @@ public class AuthService {
         authEventProducer.sendUserRegistrationEvent(
                 user.getId(),
                 user.getEmail(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.getFullName()
         );
+
+        System.out.println("New user registration .. kafka event sent: " + savedUser.getEmail());
 
         // Create role-specific profile based on user role
         createRoleSpecificProfile(savedUser, request);
@@ -105,6 +109,7 @@ public class AuthService {
                 .role(user.getRole().name())
                 .userId(user.getId())
                 .email(user.getEmail())
+                .fullName(user.getFullName())
                 .build();
     }
 

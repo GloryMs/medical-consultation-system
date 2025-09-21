@@ -58,6 +58,11 @@ public class PatientService {
         *   Re-Enable validation function()*/
         //validateCaseSubmission(patient, dto);
 
+        // Validate subscription
+        if (patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+            throw new BusinessException("Active subscription required", HttpStatus.PAYMENT_REQUIRED);
+        }
+
         Case medicalCase = Case.builder()
                 .patient(patient)
                 .caseTitle(dto.getCaseTitle())
@@ -90,6 +95,8 @@ public class PatientService {
         CompletableFuture.runAsync(() -> {
             try {
                 Thread.sleep(1000); // Small delay to ensure transaction is committed
+                System.out.println("A new Case has been added, Case#: " + saved.getId() + "\n");
+                System.out.println("Smart Case Assignment started asynchronously @: " + LocalDateTime.now() + "\n");
                 assignmentService.assignCaseToMultipleDoctors(saved.getId());
             } catch (Exception e) {
                 System.out.println("Failed to assign case {} automatically: " +  saved.getId());
@@ -441,17 +448,20 @@ public class PatientService {
                 .orElse(null);
 
         SubscriptionStatusDto status = new SubscriptionStatusDto();
-        status.setStatus(patient.getSubscriptionStatus());
-        status.setExpiryDate(patient.getSubscriptionExpiry());
-        status.setIsActive(patient.getSubscriptionStatus() == SubscriptionStatus.ACTIVE);
+
 
         if (activeSubscription != null) {
+            status.setStatus(patient.getSubscriptionStatus());
+            status.setExpiryDate(patient.getSubscriptionExpiry());
+            status.setIsActive(patient.getSubscriptionStatus() == SubscriptionStatus.ACTIVE);
             status.setPlanType(activeSubscription.getPlanType());
             status.setAmount(activeSubscription.getAmount());
             status.setAutoRenew(activeSubscription.getAutoRenew());
             status.setPaymentMethod(activeSubscription.getPaymentMethod());
             status.setCreatedAt(activeSubscription.getCreatedAt());
         }
+        else
+            throw new BusinessException("You have No Active Subscription ...", HttpStatus.NOT_FOUND);
 
         return status;
     }
@@ -829,23 +839,26 @@ public class PatientService {
     }
 
     @Transactional
-    public void initializePatientProfile(Long userId, String email) {
+    public void initializePatientProfile(Long userId, String email, String fullName) {
         // Check if patient profile already exists
         if (patientRepository.findByUserId(userId).isPresent()) {
             log.info("Patient profile already exists for user: {}", userId);
+            System.out.println("Patient profile already exists for user: " + email);
             return;
         }
 
         // Create basic patient profile
         Patient patient = Patient.builder()
                 .userId(userId)
-                //.email(email)
+                .email(email)
+                .fullName(fullName)
                 .subscriptionStatus(SubscriptionStatus.PENDING)
                 .accountLocked(true)
                 .casesSubmitted(0)
                 .build();
 
         patientRepository.save(patient);
+        System.out.println("Patient profile initialized for user: " + email);
         log.info("Patient profile initialized for user: {}", userId);
     }
 }

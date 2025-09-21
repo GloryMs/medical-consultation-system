@@ -9,10 +9,7 @@ import java.math.BigDecimal;
 @Data
 public class SubscriptionDto {
     private Long id;
-
-    @NotNull(message = "Plan type is required")
     private PlanType planType;
-
     private BigDecimal amount;
     private String paymentMethod;
     private Boolean autoRenew;
