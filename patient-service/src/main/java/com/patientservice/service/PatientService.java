@@ -766,14 +766,13 @@ public class PatientService {
         return dto;
     }
 
-    public PatientDashboardDto getPatientDashboard(Long patientId){
+    public PatientDashboardDto getPatientDashboard(Long userId){
 
         /*TODO
           below lines must be deleted, the query for the patient, and get its ID to be used to get the appointments.
          */
-        Patient patient = patientRepository.findById(patientId)
+        Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
-        Long userId = patient.getUserId();
 
         PatientDashboardDto dto = new PatientDashboardDto();
         try{
@@ -784,15 +783,15 @@ public class PatientService {
             statusList.add(IN_PROGRESS);
             statusList.add(SCHEDULED);
             statusList.add(CONSULTATION_COMPLETE);
-            stats.setTotalCases( caseRepository.countByPatientId(patientId) );
-            stats.setActiveCases( caseRepository.countByStatusInAndPatientId(statusList, patientId) );
-            stats.setCompletedCases(caseRepository.countByPatientIdAndStatus(patientId ,CLOSED));
+            stats.setTotalCases( caseRepository.countByPatientId(patient.getId()) );
+            stats.setActiveCases( caseRepository.countByStatusInAndPatientId(statusList, patient.getId()) );
+            stats.setCompletedCases(caseRepository.countByPatientIdAndStatus(patient.getId() ,CLOSED));
             dto.setStats(stats);
-            List<Case> recentCases = caseRepository.findLastSubmittedCases(patientId, 3);
+            List<Case> recentCases = caseRepository.findLastSubmittedCases(patient.getId(), 3);
             dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
             dto.setUpcomingAppointments(getPatientAppointments(userId));
             stats.setUpcomingAppointments(dto.getUpcomingAppointments().stream().count());
-            List<NotificationDto> recentNotifications = getMyNotifications(patientId);
+            List<NotificationDto> recentNotifications = getMyNotifications(userId);
             dto.setRecentNotifications(recentNotifications);
         }catch(Exception e){
             log.error("Failed to get patient dashboard");
