@@ -7,14 +7,18 @@ import com.patientservice.entity.Case;
 import com.patientservice.feign.ComplaintServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.repository.CaseAssignmentRepository;
+import com.patientservice.service.DocumentService;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.ReportService;
+import com.patientservice.util.CreateCaseDtoBuilder;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -34,6 +38,8 @@ public class PatientController {
     private final CaseAssignmentRepository assignmentRepository;
     private final ComplaintServiceClient complaintServiceClient;
     private final NotificationServiceClient notificationServiceClient;
+    private final DocumentService documentService;
+    private final CreateCaseDtoBuilder dtoBuilder;
 
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<PatientProfileDto>> createProfile(
@@ -144,13 +150,100 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(report));
     }
 
-    @PostMapping("/cases")
+//    @PostMapping("/cases")
+//    public ResponseEntity<ApiResponse<Case>> createCase(
+//            @RequestHeader("X-User-Id") Long userId,
+//            @Valid @RequestBody CreateCaseDto dto) {
+//        Case medicalCase = patientService.createCase(userId, dto);
+//        return ResponseEntity.status(HttpStatus.CREATED)
+//                .body(ApiResponse.success(medicalCase, "Case submitted successfully"));
+//    }
+
+    /**
+     * Updated CreateCase endpoint with file upload support
+     */
+    @PostMapping(value = "/cases", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<Case>> createCase(
             @RequestHeader("X-User-Id") Long userId,
-            @Valid @RequestBody CreateCaseDto dto) {
-        Case medicalCase = patientService.createCase(userId, dto);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(medicalCase, "Case submitted successfully"));
+            @RequestParam("caseTitle") String caseTitle,
+            @RequestParam("description") String description,
+            @RequestParam(value = "primaryDiseaseCode", required = false) String primaryDiseaseCode,
+            @RequestParam(value = "secondaryDiseaseCodes", required = false) List<String> secondaryDiseaseCodes,
+            @RequestParam(value = "symptomCodes", required = false) List<String> symptomCodes,
+            @RequestParam(value = "currentMedicationCodes", required = false) List<String> currentMedicationCodes,
+            @RequestParam("requiredSpecialization") String requiredSpecialization,
+            @RequestParam(value = "secondarySpecializations", required = false) List<String> secondarySpecializations,
+            @RequestParam(value = "urgencyLevel", required = false) String urgencyLevel,
+            @RequestParam(value = "complexity", required = false) String complexity,
+            @RequestParam(value = "requiresSecondOpinion", required = false) Boolean requiresSecondOpinion,
+            @RequestParam(value = "minDoctorsRequired", required = false) Integer minDoctorsRequired,
+            @RequestParam(value = "maxDoctorsAllowed", required = false) Integer maxDoctorsAllowed,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files) {
+
+        try {
+            // Build DTO from request parameters
+            CreateCaseDto dto = dtoBuilder.buildCreateCaseDto(
+                    caseTitle, description, primaryDiseaseCode, secondaryDiseaseCodes,
+                    symptomCodes, currentMedicationCodes, requiredSpecialization,
+                    secondarySpecializations, urgencyLevel, complexity,
+                    requiresSecondOpinion, minDoctorsRequired, maxDoctorsAllowed, files
+            );
+
+            Case medicalCase = patientService.createCase(userId, dto);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success(medicalCase, "Case submitted successfully with files"));
+
+        } catch (Exception e) {
+            log.error("Error creating case with files for user {}: {}", userId, e.getMessage(), e);
+            throw new BusinessException("Failed to create case: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Update case attachments - Allow patients to upload additional files to existing case
+     */
+    @PostMapping(value = "/cases/{caseId}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<CaseAttachmentsDto>> updateCaseAttachments(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long caseId,
+            @RequestParam("files") List<MultipartFile> files) {
+
+        try {
+            log.info("Updating attachments for case {} by user {} with {} files", caseId, userId, files.size());
+
+            CaseAttachmentsDto result = patientService.updateCaseAttachments(userId, caseId, files);
+
+            return ResponseEntity.ok(
+                    ApiResponse.success(result,
+                            String.format("Successfully uploaded %d additional files to case", files.size()))
+            );
+
+        } catch (Exception e) {
+            log.error("Error updating case attachments for case {} by user {}: {}",
+                    caseId, userId, e.getMessage(), e);
+            throw new BusinessException("Failed to update case attachments: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Get case attachments summary
+     */
+    @GetMapping("/cases/{caseId}/attachments")
+    public ResponseEntity<ApiResponse<CaseAttachmentsDto>> getCaseAttachments(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long caseId) {
+
+        try {
+            CaseAttachmentsDto attachments = patientService.getCaseAttachments(userId, caseId);
+            return ResponseEntity.ok(ApiResponse.success(attachments));
+
+        } catch (Exception e) {
+            log.error("Error retrieving case attachments for case {} by user {}: {}",
+                    caseId, userId, e.getMessage(), e);
+            throw new BusinessException("Failed to retrieve case attachments: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @GetMapping("/cases")
@@ -273,5 +366,6 @@ public class PatientController {
         notificationServiceClient.markAllAsRead(userId);
         return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
+
 
 }

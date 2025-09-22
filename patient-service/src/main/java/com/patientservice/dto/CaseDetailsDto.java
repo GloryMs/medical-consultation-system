@@ -28,5 +28,27 @@ public class CaseDetailsDto {
     private LocalDateTime paymentCompletedAt;
     private LocalDateTime closedAt;
     private String rejectionReason;
+
+    // Enhanced document information
     private List<Document> documents;
+    private Integer documentCount;
+    private Long totalDocumentSize; // Total size of all documents
+
+    // File access information
+    private List<DocumentAccessDto> documentAccess;
+
+    @Data
+    public static class DocumentAccessDto {
+        private Long documentId;
+        private String fileName;
+        private String mimeType;
+        private Double fileSizeKB;
+        private String documentType;
+        private String accessUrl;
+        private String downloadUrl;
+        private Boolean isEncrypted;
+        private Boolean isCompressed;
+        private LocalDateTime uploadedAt;
+        private String description;
+    }
 }

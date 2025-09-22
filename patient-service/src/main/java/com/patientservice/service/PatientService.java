@@ -19,6 +19,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -46,6 +47,7 @@ public class PatientService {
     private final CaseAssignmentRepository assignmentRepository;
     private final DoctorServiceClient doctorServiceClient;
     private final PatientEventProducer patientEventProducer;
+    private final DocumentService documentService;
 
     //@Override
     @Transactional
@@ -86,6 +88,23 @@ public class PatientService {
                 .build();
 
         Case saved = caseRepository.save(medicalCase);
+
+        // Process and save uploaded files
+        if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
+            try {
+                List<Document> documents = documentService.processAndSaveFiles(
+                        dto.getFiles(), medicalCase, userId);
+
+                log.info("Successfully processed {} files for case {}",
+                        documents.size(), medicalCase.getId());
+            } catch (Exception e) {
+                log.error("Error processing files for case {}: {}", medicalCase.getId(), e.getMessage(), e);
+                // Delete the case if file processing fails
+                caseRepository.delete(medicalCase);
+                throw new BusinessException("Failed to process uploaded files: " + e.getMessage(),
+                        HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
 
         // Update case status to PENDING and trigger smart assignment
         saved.setStatus(CaseStatus.PENDING);
@@ -240,6 +259,7 @@ public class PatientService {
 //        saved.setStatus(CaseStatus.PENDING);
 //        return caseRepository.save(saved);
 //    }
+
 
     public List<CaseDto> getPatientCases(Long userId) {
         Patient patient = patientRepository.findByUserId(userId)
@@ -859,5 +879,221 @@ public class PatientService {
         patientRepository.save(patient);
         System.out.println("Patient profile initialized for user: " + email);
         log.info("Patient profile initialized for user: {}", userId);
+    }
+
+    // Additional methods to add to PatientService.java
+
+    /**
+     * Enhanced getCaseDetailsWithFiles method with complete file access information
+     */
+    public CaseDetailsDto getCaseDetailsWithFiles(Long userId, Long caseId) {
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+        if (!medicalCase.getPatient().getId().equals(patient.getId())) {
+            throw new BusinessException("Unauthorized access to case", HttpStatus.FORBIDDEN);
+        }
+
+        CaseDetailsDto details = new CaseDetailsDto();
+        details.setId(medicalCase.getId());
+        details.setCaseTitle(medicalCase.getCaseTitle());
+        details.setDescription(medicalCase.getDescription());
+        details.setStatus(medicalCase.getStatus());
+        details.setUrgencyLevel(medicalCase.getUrgencyLevel());
+        details.setPaymentStatus(medicalCase.getPaymentStatus());
+        details.setCreatedAt(medicalCase.getCreatedAt());
+//        details.setSubmittedAt(medicalCase.getSubmittedAt());
+//        details.setFirstAssignedAt(medicalCase.getFirstAssignedAt());
+//        details.setLastAssignedAt(medicalCase.getLastAssignedAt());
+        details.setClosedAt(medicalCase.getClosedAt());
+
+        // Get documents with enhanced access information
+        List<Document> documents = documentService.getCaseDocuments(caseId, userId);
+        details.setDocuments(documents);
+        details.setDocumentCount(documents.size());
+
+        // Calculate total document size
+        long totalSize = documents.stream()
+                .mapToLong(doc -> doc.getOriginalFileSize() != null ? doc.getOriginalFileSize().longValue() : 0L)
+                .sum();
+        details.setTotalDocumentSize(totalSize);
+
+        // Create document access information
+        List<CaseDetailsDto.DocumentAccessDto> documentAccess = documents.stream()
+                .map(this::mapToDocumentAccess)
+                .collect(Collectors.toList());
+        details.setDocumentAccess(documentAccess);
+
+        log.info("Case details retrieved with {} documents ({}KB total) for case: {} by user: {}",
+                documents.size(), totalSize / 1024, caseId, userId);
+
+        return details;
+    }
+
+    /**
+     * Map Document entity to DocumentAccessDto for enhanced client access
+     */
+    private CaseDetailsDto.DocumentAccessDto mapToDocumentAccess(Document document) {
+        CaseDetailsDto.DocumentAccessDto accessDto = new CaseDetailsDto.DocumentAccessDto();
+        accessDto.setDocumentId(document.getId());
+        accessDto.setFileName(document.getFileName());
+        accessDto.setMimeType(document.getMimeType());
+        accessDto.setFileSizeKB(document.getOriginalFileSize() != null ? document.getOriginalFileSize() / 1024 : 0);
+        accessDto.setDocumentType(document.getDocumentType().name());
+        accessDto.setAccessUrl(String.format("/api/files/%d", document.getId()));
+        accessDto.setDownloadUrl(String.format("/api/patients/documents/%d/download", document.getId()));
+        accessDto.setIsEncrypted(document.getIsEncrypted());
+        accessDto.setIsCompressed(document.getIsCompressed());
+        accessDto.setUploadedAt(document.getCreatedAt());
+        accessDto.setDescription(document.getDescription());
+        return accessDto;
+    }
+
+    // Add these methods to PatientService.java
+
+    /**
+     * Update case attachments - Add additional files to existing case
+     */
+    @Transactional
+    public CaseAttachmentsDto updateCaseAttachments(Long userId, Long caseId, List<MultipartFile> files) {
+        log.info("Updating case {} attachments for user {} with {} files", caseId, userId, files.size());
+
+        // Validate user access to case and case state
+        documentService.validateCaseFileAccess(caseId, userId);
+
+        // Validate patient profile and subscription
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        if (patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+            throw new BusinessException("Active subscription required to upload files", HttpStatus.PAYMENT_REQUIRED);
+        }
+
+        try {
+            // Add files to the case
+            List<Document> newDocuments = documentService.addFilesToCase(files, caseId, userId);
+
+            // Create summary with new files information
+            CaseAttachmentsDto result = documentService.createAttachmentsSummaryWithNewFiles(caseId, userId, newDocuments);
+
+            // Send notification about new files
+            //CompletableFuture.runAsync(() -> sendFileUploadNotification(caseId, userId, newDocuments.size()));
+
+            // Log the successful operation
+            log.info("Successfully updated case {} with {} new attachments for user {}",
+                    caseId, newDocuments.size(), userId);
+
+            return result;
+
+        } catch (BusinessException e) {
+            log.warn("Business rule violation in case attachment update: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error updating case {} attachments for user {}: {}",
+                    caseId, userId, e.getMessage(), e);
+            throw new BusinessException("Unable to update case attachments at this time",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Get case attachments summary
+     */
+    public CaseAttachmentsDto getCaseAttachments(Long userId, Long caseId) {
+        log.info("Retrieving case {} attachments for user {}", caseId, userId);
+
+        // Validate user access to case
+        documentService.validateCaseFileAccess(caseId, userId);
+
+        try {
+            CaseAttachmentsDto attachments = documentService.getCaseAttachmentsSummary(caseId, userId);
+
+            // Set case title from database
+            Case medicalCase = caseRepository.findById(caseId)
+                    .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+            attachments.setCaseTitle(medicalCase.getCaseTitle());
+
+            log.info("Retrieved {} attachments for case {} by user {}",
+                    attachments.getTotalDocuments(), caseId, userId);
+
+            return attachments;
+
+        } catch (Exception e) {
+            log.error("Error retrieving case {} attachments for user {}: {}",
+                    caseId, userId, e.getMessage(), e);
+            throw new BusinessException("Failed to retrieve case attachments", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
+    /*TODO Fix below send notification
+    /**
+     * Send notification when new files are uploaded to a case
+     */
+//    private void sendFileUploadNotification(Long caseId, Long userId, int fileCount) {
+//        try {
+//            Case medicalCase = caseRepository.findById(caseId).orElse(null);
+//            if (medicalCase == null) {
+//                log.warn("Case not found for notification: {}", caseId);
+//                return;
+//            }
+//
+//            NotificationDto notification = NotificationDto.builder()
+//                    .receiverId(userId)
+//                    .title("New Files Uploaded")
+//                    .message(String.format("Successfully uploaded %d new file(s) to case '%s'",
+//                            fileCount, medicalCase.getCaseTitle()))
+//                    .type(NotificationType.CASE)
+//                    .build();
+//
+//            notificationServiceClient.sendNotification(notification);
+//
+//            // Also notify assigned doctors if case is assigned
+//            if (medicalCase.getStatus() == CaseStatus.ASSIGNED ||
+//                    medicalCase.getStatus() == CaseStatus.ACCEPTED ||
+//                    medicalCase.getStatus() == CaseStatus.IN_PROGRESS) {
+//
+//                List<CaseAssignment> assignments = caseAssignmentRepository.findByCaseEntityId(caseId);
+//                for (CaseAssignment assignment : assignments) {
+//                    if (assignment.getStatus() == AssignmentStatus.ACCEPTED) {
+//                        NotificationDto doctorNotification = NotificationDto.builder()
+//                                .receiverId(assignment.getDoctorId())
+//                                .title("New Files Added to Case")
+//                                .message(String.format("Patient uploaded %d new file(s) to case '%s'",
+//                                        fileCount, medicalCase.getCaseTitle()))
+//                                .type("CASE_FILE_UPDATE")
+//                                .build();
+//
+//                        notificationServiceClient.sendNotification(doctorNotification);
+//                    }
+//                }
+//            }
+//
+//        } catch (Exception e) {
+//            log.error("Failed to send file upload notification for case {}: {}", caseId, e.getMessage(), e);
+//        }
+//    }
+
+    /**
+     * Validate if case allows file uploads based on its current status
+     */
+    private void validateCaseAllowsFileUploads(Case medicalCase) {
+        Set<CaseStatus> allowedStatuses = Set.of(
+                CaseStatus.PENDING,
+                CaseStatus.ASSIGNED,
+                CaseStatus.ACCEPTED,
+                CaseStatus.SCHEDULED,
+                CaseStatus.PAYMENT_PENDING,
+                CaseStatus.IN_PROGRESS
+        );
+
+        if (!allowedStatuses.contains(medicalCase.getStatus())) {
+            throw new BusinessException(
+                    String.format("Cannot upload files to case with status: %s", medicalCase.getStatus()),
+                    HttpStatus.BAD_REQUEST);
+        }
     }
 }
