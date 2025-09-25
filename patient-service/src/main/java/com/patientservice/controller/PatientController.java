@@ -1,6 +1,7 @@
 package com.patientservice.controller;
 
 import com.commonlibrary.dto.*;
+import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
@@ -14,6 +15,7 @@ import com.patientservice.util.CreateCaseDtoBuilder;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.internal.bytebuddy.implementation.bind.annotation.AllArguments;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -199,6 +201,19 @@ public class PatientController {
         }
     }
 
+    @PutMapping("/cases/{caseId}")
+    public ResponseEntity<ApiResponse<Void>> updateCase(@PathVariable Long caseId,
+                                                        @RequestBody  UpdateCaseDto updatedCase){
+        try{
+            patientService.updateCase(caseId, updatedCase );
+        } catch (Exception e) {
+            log.error("Error while updating case# {} : {}", caseId, e.getMessage(), e);
+            throw new BusinessException("Failed to update provided case " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return ResponseEntity.ok(ApiResponse.success(null, "Case updated successfully without files"));
+    }
+
     /**
      * Update case attachments - Allow patients to upload additional files to existing case
      */
@@ -250,6 +265,13 @@ public class PatientController {
     public ResponseEntity<ApiResponse<List<CaseDto>>> getMyCases(
             @RequestHeader("X-User-Id") Long userId) {
         List<CaseDto> cases = patientService.getPatientCases(userId);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
+    @GetMapping("/cases/doctor/{doctorId}/active")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorActiveCases(
+            @PathVariable("doctorId") Long doctorId){
+        List<CaseDto> cases = patientService.getDoctorActiveCases(doctorId);
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
@@ -326,7 +348,7 @@ public class PatientController {
                     .stream().map(PatientService::assignmentDtoCovert).collect(Collectors.toList());
         }
         else
-            assignments = assignmentRepository.findByDoctorIdAndStatus(doctorId, status)
+            assignments = assignmentRepository.findByDoctorIdAndStatus(doctorId, AssignmentStatus.valueOf(status))
                 .stream().map(PatientService::assignmentDtoCovert).collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(assignments));
     }

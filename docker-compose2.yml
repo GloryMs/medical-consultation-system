@@ -205,6 +205,8 @@ services:
     depends_on:
       - eureka-server
       - postgres
+    volumes:
+      - /patient_upload:/uploads:rw
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/medical_patient_db

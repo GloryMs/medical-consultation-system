@@ -14,7 +14,8 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
     @Query("SELECT C FROM Case C")
     List<Case> findAllCases();
     List<Case> findByPatientId(Long patientId);
-    //List<Case> findByPatientIdAndStatus(Long patientId, CaseStatus status);
+
+    List<Case> findByPatientIdAndStatus(Long patientId, CaseStatus status);
     //List<Case> findByAssignedDoctorId(Long doctorId);
     List<Case> findCaseByRequiredSpecializationAndStatus(String specialization, CaseStatus caseStatus);
 

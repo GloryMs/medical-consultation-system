@@ -2,11 +2,13 @@ package com.patientservice.kafka;
 
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationType;
+import com.patientservice.service.SmartCaseAssignmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -56,6 +58,17 @@ public class PatientEventProducer {
 
         kafkaTemplate.send("notification-topic", notification);
         log.info("Subscription notification sent for patient: {}", patientId);
+    }
+
+    public void sendStartSmartCaseAssignmentService(Long caseId){
+
+        Map<String, Object> caseEvent = new HashMap<>();
+        caseEvent.put("caseId", caseId);
+        caseEvent.put("timestamp", System.currentTimeMillis());
+
+        kafkaTemplate.send("case-create-assign-topic", caseEvent);
+        log.info("Trigger SmartCaseAssignmentService for case: {}", caseId);
+
     }
 
     public void sendRescheduleRequestEvent(Long caseId, Long patientId, Long doctorId, String reason) {

@@ -1,11 +1,13 @@
 package com.patientservice.kafka;
 
 import com.patientservice.service.PatientService;
+import com.patientservice.service.SmartCaseAssignmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Component
@@ -14,6 +16,7 @@ import java.util.Map;
 public class PatientEventConsumer {
 
     private final PatientService patientService;
+    private final SmartCaseAssignmentService assignmentService;
 
     @KafkaListener(topics = "payment-completed-topic", groupId = "patient-group")
     public void handlePaymentCompleted(Map<String, Object> paymentEvent) {
@@ -36,6 +39,24 @@ public class PatientEventConsumer {
             
         } catch (Exception e) {
             log.error("Error processing payment completed event: {}", e.getMessage(), e);
+        }
+    }
+
+    @KafkaListener(topics = "case-create-assign-topic", groupId = "patient-group")
+    public void handleCaseAssignmentTrigger(Map<String, Object> caseEvetn){
+        try {
+            Long caseId = caseEvetn.get("caseId") != null ?
+                    Long.valueOf(caseEvetn.get("caseId").toString()) : null;
+            //TODO  this sleep must be replaced with validation to insure that case was inserted ok.
+            Thread.sleep(1000); // Small delay to ensure transaction is committed
+            System.out.println("Kafka - A new Case has been added, Case#: " + caseId + "\n");
+            System.out.println("Kafka - Smart Case Assignment started asynchronously @: " +
+                    LocalDateTime.now() + "\n");
+            assignmentService.assignCaseToMultipleDoctors(caseId);
+        } catch (Exception e) {
+            System.out.println("Kafka - Failed to handle assign new case automatically");
+            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
     }
 

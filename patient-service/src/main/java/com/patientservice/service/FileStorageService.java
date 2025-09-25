@@ -68,7 +68,11 @@ public class FileStorageService {
 
         byte[] decryptedData = encryptionService.readDecryptedFile(filePath.toString());
         log.info("File retrieved and decrypted: {}", storedPath);
-        
+
+        System.out.println("Retrieving File: " + storedPath);
+        System.out.println("Decrypted File size: " + decryptedData.length);
+
+
         return decryptedData;
     }
 

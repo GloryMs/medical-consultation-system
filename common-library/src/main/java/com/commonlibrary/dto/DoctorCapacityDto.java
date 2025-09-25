@@ -24,8 +24,8 @@ public class DoctorCapacityDto {
     private Double workloadPercentage;
     
     // Availability information
-    private Boolean isAvailable;
-    private Boolean emergencyMode;
+    private Boolean isAvailable = true;
+    private Boolean emergencyMode = false;
     private String emergencyModeReason;
     private LocalDateTime nextAvailableSlot;
     
@@ -33,11 +33,9 @@ public class DoctorCapacityDto {
     private Double averageRating;
     private Integer consultationCount;
     private Double completionRate;
-    
-    // Real-time status
-    private LocalDateTime lastWorkloadUpdate;
-    private Boolean hasCapacityForNewCase;
-    private Boolean hasCapacityForUrgentCase;
+
+    //private boolean hasCapacityForNewCase = true;
+    private Boolean hasCapacityForUrgentCase = false;
     
     // Additional metadata for matching
     private Double matchingScore; // Calculated by assignment algorithm
@@ -50,7 +48,7 @@ public class DoctorCapacityDto {
     private Integer estimatedAvailableSlots;
     
     public boolean canAcceptCase() {
-        return isAvailable && (emergencyMode || hasCapacityForNewCase);
+        return isAvailable && emergencyMode ;
     }
     
     public boolean canAcceptUrgentCase() {
@@ -60,7 +58,7 @@ public class DoctorCapacityDto {
     public boolean isOverloaded() {
         return workloadPercentage > 85.0;
     }
-    
+
     public boolean isLightlyLoaded() {
         return workloadPercentage < 50.0;
     }

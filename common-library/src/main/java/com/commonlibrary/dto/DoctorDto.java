@@ -71,39 +71,4 @@ public class DoctorDto {
     private String city;
     private String country;
 
-//Old Entity:
-//    private Long doctorId;
-//    private String fullName;
-//    private String primarySpecializationCode;
-//    private Set<String> specializationCodes;
-//    private Set<String> subSpecializationCodes;
-//    private Set<String> diseaseExpertiseCodes;
-//    private Set<String> symptomExpertiseCodes;
-//    private String licenseNumber;
-//    private Integer yearsOfExperience;
-//    private Set<String> certifications;
-//    private String researchAreas;
-//    private Integer maxConcurrentCases;
-//    private Integer currentCaseLoad;
-//    private Boolean acceptsSecondOpinions;
-//    private Boolean acceptsComplexCases;
-//    private Double averageRating;
-//    private Integer totalConsultations;
-//    private Integer acceptedCases;
-//    private Integer rejectedCases;
-//    private Double averageResponseTime;
-//    private Set<String> preferredCaseTypes;
-//    private CaseComplexity maxComplexityLevel;
-//    private Boolean acceptsUrgentCases;
-//    private BigDecimal baseConsultationFee;
-//    private BigDecimal urgentCaseFee;
-//    private BigDecimal complexCaseFee;
-//    private Boolean isAvailable;
-//    private VerificationStatus verificationStatus;
-//    private LocalDateTime verifiedAt;
-//    private String verifiedBy;
-//    private String phoneNumber;
-//    private String email;
-//    private LocalDateTime createdAt;
-
 }

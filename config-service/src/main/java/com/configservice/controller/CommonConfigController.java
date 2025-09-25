@@ -74,6 +74,12 @@ public class CommonConfigController {
         return ResponseEntity.ok(diseases);
     }
 
+    @GetMapping("/diseases/{icdCode}")
+    public DiseaseDto getDiseaseByCode(@PathVariable String icdCode){
+        DiseaseDto disease = configServiceGeneralService.getDiseasesByCode(icdCode);
+        return disease;
+    }
+
     /**
      * Find compatible specializations for given symptoms
      */

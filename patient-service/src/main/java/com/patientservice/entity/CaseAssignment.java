@@ -3,6 +3,7 @@ package com.patientservice.entity;
 import com.commonlibrary.entity.AssignmentPriority;
 import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.entity.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -16,8 +17,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class CaseAssignment extends BaseEntity {
     
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "case_id", nullable = false)
+    @JsonBackReference
     private Case caseEntity;
     
     @Column(nullable = false)

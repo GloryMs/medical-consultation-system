@@ -34,8 +34,8 @@ public interface DoctorServiceClient {
     /**
      * Get doctors by specialization with their workload capacity information
      */
-    @GetMapping("/api/doctors/specialization/{specialization}/with-capacity")
-    ResponseEntity<ApiResponse<List<DoctorCapacityDto>>> getAvailableDoctorsBySpecializationWithCapacity(
+    @GetMapping("/api/doctors-internal/specialization/{specialization}/with-capacity")
+    List<DoctorCapacityDto> getAvailableDoctorsBySpecializationWithCapacity(
             @PathVariable("specialization") String specialization,
             @RequestParam(defaultValue = "20") int limit
     );
@@ -68,7 +68,7 @@ public interface DoctorServiceClient {
     /**
      * Update doctor workload (trigger recalculation)
      */
-    @PostMapping("/workload/{doctorId}/update")
+    @PostMapping("/api/internal/doctors/workload/{doctorId}/update")
     ResponseEntity<ApiResponse<String>> updateDoctorWorkload(
             @PathVariable("doctorId") Long doctorId
     );

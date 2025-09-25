@@ -113,13 +113,12 @@ public class PatientService {
         // Trigger smart case assignment asynchronously
         CompletableFuture.runAsync(() -> {
             try {
-                Thread.sleep(1000); // Small delay to ensure transaction is committed
-                System.out.println("A new Case has been added, Case#: " + saved.getId() + "\n");
-                System.out.println("Smart Case Assignment started asynchronously @: " + LocalDateTime.now() + "\n");
-                assignmentService.assignCaseToMultipleDoctors(saved.getId());
+                // 🔥 NEW: Send Kafka event after saving new case to trigger SmartCaseAssignmentService
+                patientEventProducer.sendStartSmartCaseAssignmentService(saved.getId());
             } catch (Exception e) {
-                System.out.println("Failed to assign case {} automatically: " +  saved.getId());
-                e.fillInStackTrace();
+                System.out.println("Failed to assign case automatically: " +  saved.getId());
+                System.out.println(e.getMessage());
+                e.printStackTrace();
             }
         });
 
@@ -260,6 +259,33 @@ public class PatientService {
 //        return caseRepository.save(saved);
 //    }
 
+    public List<CaseDto> getDoctorActiveCases ( Long doctorId ){
+        List<CaseDto> cases = new ArrayList<>();
+        List<Case> tempCases = new ArrayList<>();
+        List<CaseAssignment> assignments = new ArrayList<>();
+
+        assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.ACCEPTED );
+        System.out.println("Getting assignments for doctor: " + doctorId);
+        System.out.println("Doctor assignments count: " + assignments.size());
+        if( assignments != null && !assignments.isEmpty() ){
+            //Get related cases
+            assignments.stream().filter(a->
+                    a.getCaseEntity().getStatus().equals(ASSIGNED) ||
+                            a.getCaseEntity().getStatus().equals(ACCEPTED) ||
+                            a.getCaseEntity().getStatus().equals(SCHEDULED) ||
+                            a.getCaseEntity().getStatus().equals(PAYMENT_PENDING) ||
+                            a.getCaseEntity().getStatus().equals(IN_PROGRESS)).findFirst().
+                    ifPresent(c->{
+                            tempCases.add(c.getCaseEntity());
+                        }
+                    );
+            if( tempCases != null && !tempCases.isEmpty() ){
+                cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
+                System.out.println("Doctor active assigned cases count: " + cases.size());
+            }
+        }
+        return cases;
+    }
 
     public List<CaseDto> getPatientCases(Long userId) {
         Patient patient = patientRepository.findByUserId(userId)
@@ -516,6 +542,13 @@ public class PatientService {
         //details.setClosedAt(medicalCase.getClosedAt());
         //details.setRejectionReason(medicalCase.getRejectionReason());
 
+        details.setPrimaryDiseaseCode(medicalCase.getPrimaryDiseaseCode());
+        details.setSecondaryDiseaseCodes(medicalCase.getSecondaryDiseaseCodes());
+        details.setSymptomCodes(medicalCase.getSymptomCodes());
+        details.setCurrentMedicationCodes(medicalCase.getCurrentMedicationCodes());
+        details.setRequiredSpecialization(medicalCase.getRequiredSpecialization());
+        details.setSecondarySpecializations(medicalCase.getSecondarySpecializations());
+
         // Add documents if any
         List<Document> documents = documentRepository.findByCaseId(caseId);
         details.setDocuments(documents);
@@ -622,6 +655,42 @@ public class PatientService {
                 caseId, oldStatus, status,
                 medicalCase.getPatient().getId(), doctorId
         );
+    }
+
+    @Transactional
+    public void updateCase( Long caseId, UpdateCaseDto updatedCase ){
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+        //Check if Case Status allows the update (must be: )
+        if( medicalCase.getStatus() == SUBMITTED || medicalCase.getStatus() == PENDING ){
+
+            if(updatedCase.getCaseTitle() != null)
+                medicalCase.setCaseTitle(updatedCase.getCaseTitle());
+            if(updatedCase.getDescription() != null)
+                medicalCase.setDescription(updatedCase.getDescription());
+            if(updatedCase.getPrimaryDiseaseCode() != null)
+                medicalCase.setPrimaryDiseaseCode(updatedCase.getPrimaryDiseaseCode());
+            if(updatedCase.getSecondaryDiseaseCodes() != null)
+                medicalCase.setSecondaryDiseaseCodes(updatedCase.getSecondaryDiseaseCodes());
+            if(updatedCase.getSymptomCodes() != null)
+                medicalCase.setSymptomCodes(updatedCase.getSymptomCodes());
+            if(updatedCase.getCurrentMedicationCodes() != null)
+                medicalCase.setCurrentMedicationCodes(updatedCase.getCurrentMedicationCodes());
+            if(updatedCase.getRequiredSpecialization() != null)
+                medicalCase.setRequiredSpecialization(updatedCase.getRequiredSpecialization());
+            if(updatedCase.getSecondarySpecializations() != null)
+                medicalCase.setSecondarySpecializations(updatedCase.getSecondarySpecializations());
+            if(updatedCase.getUrgencyLevel() != null)
+                medicalCase.setUrgencyLevel(updatedCase.getUrgencyLevel());
+            if(updatedCase.getComplexity() != null)
+                medicalCase.setComplexity(updatedCase.getComplexity());
+
+            // Commit the update:
+            caseRepository.save(medicalCase);
+        }
+        else{
+            throw new BusinessException("Current Case Status doesn't allow the update", HttpStatus.UNAUTHORIZED);
+        }
     }
 
     @Transactional

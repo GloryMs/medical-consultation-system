@@ -53,6 +53,15 @@ public class ConfigServiceGeneralService {
         return symptoms;
     }
 
+    public DiseaseDto getDiseasesByCode( String icdCode ){
+        DiseaseDto dto = new DiseaseDto();
+        Disease disease = diseaseRepository.findByIcdCodeAndIsActiveTrue(icdCode).orElse(null);
+        if( disease != null ){
+            dto = convertToDiseasesDto(disease);
+        }
+        return dto;
+    }
+
     public List<SymptomDto> findSymptomsByIsActiveAndBodySystem(String bodySystem){
         List<SymptomDto> symptoms = symptomRepository.findByBodySystemAndIsActiveTrueOrderByName(bodySystem).
                 stream().map(this::convertToSymptomDto).toList();

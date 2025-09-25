@@ -37,8 +37,10 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long> {
             "d.primarySpecialization = :specialization AND " +
             "d.activeCases < d.maxActiveCases AND " +
             "d.todayAppointments < d.maxDailyAppointments " +
-            "ORDER BY d.workloadPercentage ASC, d.rating DESC")
-    List<Doctor> findAvailableDoctorsBySpecialization(@Param("specialization") String specialization);
+            "ORDER BY d.workloadPercentage ASC, d.rating DESC " +
+            "LIMIT :limit")
+    List<Doctor> findAvailableDoctorsBySpecialization(@Param("specialization") String specialization,
+                                                      @Param("limit") int limit);
 
     @Query("SELECT d FROM Doctor d WHERE " +
             "d.verificationStatus = 'VERIFIED' AND " +

@@ -1,7 +1,7 @@
 package com.doctorservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
-import com.doctorservice.dto.DoctorCapacityDto;
+import com.commonlibrary.dto.DoctorCapacityDto;
 import com.doctorservice.dto.DoctorWorkloadDto;
 import com.doctorservice.service.DoctorWorkloadService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,7 @@ import java.util.List;
 
 // Internal DoctorWorkloadController for service-to-service communication
 @RestController
-@RequestMapping("/internal/doctors/workload")
+@RequestMapping("/api/internal/doctors/workload")
 @RequiredArgsConstructor
 @Slf4j
 public class InternalDoctorWorkloadController {
@@ -27,10 +27,9 @@ public class InternalDoctorWorkloadController {
      */
     @PostMapping("/{doctorId}/update")
     public ResponseEntity<ApiResponse<String>> updateWorkloadInternal(
-            @PathVariable Long doctorId,
-            @RequestHeader(value = "X-Service-Name", required = false) String serviceName) {
+            @PathVariable Long doctorId) {
 
-        log.info("Internal workload update triggered for doctor {} by service: {}", doctorId, serviceName);
+        log.info("Internal workload update triggered for doctor {} ", doctorId);
         workloadService.loadDoctorWorkload(doctorId);
         return ResponseEntity.ok(ApiResponse.success("Workload updated"));
     }
@@ -63,7 +62,6 @@ public class InternalDoctorWorkloadController {
                 .todayAppointments(workload.getTodayAppointments())
                 .maxDailyAppointments(workload.getMaxDailyAppointments())
                 .workloadPercentage(workload.getWorkloadPercentage())
-                .rating(workload.getAverageRating())
                 .consultationCount(workload.getConsultationCount())
                 .isAvailable(workload.getIsAvailable())
                 .emergencyMode(workload.getEmergencyMode())
@@ -75,7 +73,7 @@ public class InternalDoctorWorkloadController {
     /**
      * Get multiple doctors' capacity for batch operations
      */
-    @PostMapping("/batch-capacity")
+    @GetMapping("/batch-capacity")
     public ResponseEntity<ApiResponse<List<DoctorCapacityDto>>> getBatchCapacity(
             @RequestBody List<Long> doctorIds) {
 
@@ -96,7 +94,6 @@ public class InternalDoctorWorkloadController {
                     .todayAppointments(workload.getTodayAppointments())
                     .maxDailyAppointments(workload.getMaxDailyAppointments())
                     .workloadPercentage(workload.getWorkloadPercentage())
-                    .rating(workload.getAverageRating())
                     .consultationCount(workload.getConsultationCount())
                     .isAvailable(workload.getIsAvailable())
                     .emergencyMode(workload.getEmergencyMode())

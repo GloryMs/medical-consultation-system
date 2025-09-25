@@ -1,5 +1,6 @@
 package com.doctorservice.service;
 
+import com.commonlibrary.dto.DoctorDto;
 import com.doctorservice.dto.DoctorDetailsDto;
 import com.commonlibrary.dto.PendingVerificationDto;
 import com.doctorservice.entity.Doctor;
@@ -8,10 +9,12 @@ import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.ConsultationReportRepository;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,4 +100,36 @@ public class InternalDoctorService {
         // In real implementation, this would query payment service
         return 5000.0; // Placeholder
     }
+
+    public List<DoctorDto> getDoctorsBySpecialization (String specialization, int limit) {
+        List<DoctorDto> doctors = new ArrayList<>();
+        List<Doctor> doctorList = doctorRepository.findAvailableDoctorsBySpecialization( specialization, limit );
+        if( doctorList != null && !doctorList.isEmpty() ) {
+            doctors = doctorList.stream().map(this :: convertToDoctorDto).toList();
+        }
+        return doctors;
+    }
+
+    public DoctorDto convertToDoctorDto(Doctor doctor){
+        DoctorDto dto = new DoctorDto();
+        ModelMapper modelMapper = new ModelMapper();
+        dto = modelMapper.map(doctor, DoctorDto.class);
+        return dto;
+    }
+
+    public DoctorDetailsDto convertToDoctorDetailsDto(Doctor doctor) {
+
+        DoctorDetailsDto dto = new DoctorDetailsDto();
+        dto.setId(doctor.getId());
+        dto.setUserId(doctor.getUserId());
+        dto.setFullName(doctor.getFullName());
+        dto.setLicenseNumber(doctor.getLicenseNumber());
+        dto.setPrimarySpecialization(doctor.getPrimarySpecialization());
+        dto.setSubSpecialization(doctor.getPrimarySpecialization());
+        dto.setAverageRating(doctor.getRating());
+        dto.setConsultationCount(doctor.getConsultationCount());
+
+        return dto;
+    }
+
 }

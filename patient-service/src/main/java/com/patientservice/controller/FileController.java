@@ -2,6 +2,7 @@ package com.patientservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.exception.BusinessException;
+import com.patientservice.entity.Document;
 import com.patientservice.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +30,11 @@ public class FileController {
         
         try {
             byte[] fileContent = documentService.getFileContent(documentId, userId);
-            
-            // Get document metadata for proper headers
-            var documents = documentService.getCaseDocuments(null, userId);
-            var document = documents.stream()
-                    .filter(doc -> doc.getId().equals(documentId))
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException("Document not found", HttpStatus.NOT_FOUND));
+
+            Document document = documentService.getDocumentById( documentId );
+            if( document == null ) {
+                throw new BusinessException("Document not found", HttpStatus.NOT_FOUND);
+            }
 
             // Set appropriate headers based on file type
             HttpHeaders headers = new HttpHeaders();

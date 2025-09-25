@@ -28,7 +28,7 @@ public class Patient extends BaseEntity {
 
     private LocalDate dateOfBirth;
 
-    @OneToMany(mappedBy = "patient", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "patient", fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonManagedReference
     private List<Case> medicalCase;
 

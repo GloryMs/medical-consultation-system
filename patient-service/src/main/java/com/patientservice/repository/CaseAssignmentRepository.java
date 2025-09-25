@@ -22,9 +22,9 @@ public interface CaseAssignmentRepository extends JpaRepository<CaseAssignment, 
     long countActiveCasesByDoctor(@Param("doctorId") Long doctorId,
                                   @Param("statuses") List<AssignmentStatus> statuses);
 
-    @Query("SELECT CA FROM CaseAssignment CA WHERE " +
-            "CA.doctorId = :doctorId AND CA.status = :status")
-    List<CaseAssignment> findByDoctorIdAndStatus(Long doctorId, String status);
+//    @Query("SELECT CA FROM CaseAssignment CA WHERE " +
+//            "CA.doctorId = :doctorId AND CA.status = :status")
+//    List<CaseAssignment> findByDoctorIdAndStatus(Long doctorId, String status);
 
     long countByStatus(AssignmentStatus status);
 

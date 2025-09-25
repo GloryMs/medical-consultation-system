@@ -22,9 +22,9 @@ public class CaseDto {
     private CaseStatus status;
     private String requiredSpecialization;
     private LocalDateTime createdAt;
-    private Patient patient;
-    private List<Document> documents;
-    private List<CaseAssignment> assignments = new ArrayList<>();
+//    private Patient patient;
+//    private List<Document> documents;
+//    private List<CaseAssignment> assignments = new ArrayList<>();
     private String primaryDiseaseCode;
     private Set<String> secondaryDiseaseCodes;
     private Set<String> symptomCodes;

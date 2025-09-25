@@ -137,6 +137,20 @@ public class DocumentService {
         return documents;
     }
 
+    public Document getDocumentById(Long id) {
+        Document document = documentRepository.findById(id).orElse(null);
+
+        // Additional security check can be added here
+        if(document == null) {
+            log.info("Failed retrieved  document with di {} for case: {}", document.getId(),
+                    document.getMedicalCase().getId());
+            System.out.println("Failed to retrieved  document with di: " +  document.getId() +
+                    ", for case: "+document.getMedicalCase().getId());
+        }
+
+        return document;
+    }
+
     /**
      * Delete a document
      */
@@ -194,6 +208,7 @@ public class DocumentService {
             return true;
         }
 
+        /*TODO */
         // Doctor can access if assigned to the case
         // This would require checking case assignments
         // For now, allow if user uploaded the document

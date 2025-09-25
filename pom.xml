@@ -33,6 +33,19 @@
 		<module>integration-service</module>
 		<module>common-library</module>
 	</modules>
+	<dependencies>
+<!--		<dependency>
+			<groupId>sy.injaz</groupId>
+			<artifactId>ExceptionSuite</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+
+		<dependency>
+			<groupId>sy.injaz</groupId>
+			<artifactId>LoggingSuite</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+			</dependency>-->
+	</dependencies>
 
 	<dependencyManagement>
 		<dependencies>

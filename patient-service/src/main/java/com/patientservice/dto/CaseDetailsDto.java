@@ -9,6 +9,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Data
 public class CaseDetailsDto {
@@ -28,6 +29,13 @@ public class CaseDetailsDto {
     private LocalDateTime paymentCompletedAt;
     private LocalDateTime closedAt;
     private String rejectionReason;
+
+    private String primaryDiseaseCode;
+    private Set<String> secondaryDiseaseCodes;
+    private Set<String> symptomCodes;
+    private Set<String> currentMedicationCodes;
+    private String requiredSpecialization;
+    private Set<String> secondarySpecializations;
 
     // Enhanced document information
     private List<Document> documents;

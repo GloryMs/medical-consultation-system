@@ -28,7 +28,8 @@ public class Case extends BaseEntity {
     @JsonManagedReference
     private List<Document> documents;
 
-    @OneToMany(mappedBy = "caseEntity", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "caseEntity", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<CaseAssignment> assignments = new ArrayList<>();
 
     @Column(nullable = false)

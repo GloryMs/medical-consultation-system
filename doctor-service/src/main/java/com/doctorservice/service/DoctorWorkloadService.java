@@ -130,15 +130,16 @@ public class DoctorWorkloadService {
                 .doctorId(doctorId)
                 .isAvailable(doctor.getIsAvailable())
                 .activeCases(metrics.getActiveCases())
-                .maxActiveCases(maxActiveCases)
+                .maxActiveCases(doctor.getMaxActiveCases())
                 .todayAppointments(metrics.getTodayAppointments())
-                .maxDailyAppointments(maxDailyAppointments)
+                .maxDailyAppointments(doctor.getMaxDailyAppointments())
                 .thisWeekAppointments(metrics.getThisWeekAppointments())
                 .consultationCount(doctor.getConsultationCount())
                 .averageRating(doctor.getRating())
                 .workloadPercentage(calculateWorkloadPercentage(metrics))
                 .nextAvailableSlot(findNextAvailableSlot(doctor))
                 .upcomingAppointments(getUpcomingAppointments(doctorId, 5))
+                .emergencyMode(doctor.getEmergencyMode())
                 .build();
     }
 
