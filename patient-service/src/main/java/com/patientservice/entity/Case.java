@@ -100,4 +100,6 @@ public class Case extends BaseEntity {
     private LocalDateTime closedAt;
     private Integer assignmentAttempts = 0;
     private Integer rejectionCount = 0;
+    @Column(columnDefinition = "boolean default false")
+    private Boolean isDeleted = false;
 }

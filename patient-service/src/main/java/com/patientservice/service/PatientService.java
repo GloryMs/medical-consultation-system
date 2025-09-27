@@ -291,13 +291,13 @@ public class PatientService {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
-        return caseRepository.findByPatientId(patient.getId()).stream().map(this::convertToCaseDto).collect(Collectors.toList());
+        return caseRepository.findByPatientIdAndIsDeletedFalse(patient.getId()).stream().map(this::convertToCaseDto).collect(Collectors.toList());
     }
 
     public List<CaseDto> getCasesforDoctor(Long doctorId) {
         List<CaseAssignment> caseAssignments =  assignmentRepository.findByDoctorId( doctorId);
         List<Case> casesForDoctor = new ArrayList<>();
-        List<Case> allCasses = caseRepository.findAllCases();
+        List<Case> allCasses = caseRepository.findAllCasesByIsDeletedFalse();
 
         for (CaseAssignment caseAssignment : caseAssignments) {
             Case newCase = allCasses.stream().
@@ -310,7 +310,7 @@ public class PatientService {
 
     public List<CaseDto> getCasesPool(String specialization){
         List<CaseDto> caseDtos = new ArrayList<>();
-        caseDtos = caseRepository.findCaseByRequiredSpecializationAndStatus(specialization,
+        caseDtos = caseRepository.findCaseByRequiredSpecializationAndStatusAndIsDeletedFalse(specialization,
                         CaseStatus.PENDING).stream().map(this::convertToCaseDto).toList();
         return caseDtos;
     }
@@ -829,14 +829,14 @@ public class PatientService {
         activeStatusList.add(CONSULTATION_COMPLETE);
         activeStatusList.add(CaseStatus.REJECTED);
 
-        Long activeCasesCount = caseRepository.countByStatusIn(activeStatusList);
-        Long completedCasesCount = caseRepository.countByStatus(CONSULTATION_COMPLETE);
-        Long inProgressCasesCunt = caseRepository.countByStatus(IN_PROGRESS);
+        Long activeCasesCount = caseRepository.countByStatusInAndIsDeletedFalse(activeStatusList);
+        Long completedCasesCount = caseRepository.countByStatusAndIsDeletedFalse(CONSULTATION_COMPLETE);
+        Long inProgressCasesCunt = caseRepository.countByStatusAndIsDeletedFalse(IN_PROGRESS);
         Long activeSubscriptionsCount = patientRepository.countBySubscriptionStatus(SubscriptionStatus.ACTIVE);
         //Long averageCaseResolutionTime = Long.valueOf(caseRepository.calculateAverageResolutionTime());
 
         activeStatusList.add(CaseStatus.CLOSED);
-        Long totalCasesCount = caseRepository.countByStatusIn(activeStatusList);
+        Long totalCasesCount = caseRepository.countByStatusInAndIsDeletedFalse(activeStatusList);
 
         metrics.put("totalCasesCount", totalCasesCount);
         metrics.put("activeCasesCount", activeCasesCount);
@@ -872,9 +872,9 @@ public class PatientService {
             statusList.add(IN_PROGRESS);
             statusList.add(SCHEDULED);
             statusList.add(CONSULTATION_COMPLETE);
-            stats.setTotalCases( caseRepository.countByPatientId(patient.getId()) );
-            stats.setActiveCases( caseRepository.countByStatusInAndPatientId(statusList, patient.getId()) );
-            stats.setCompletedCases(caseRepository.countByPatientIdAndStatus(patient.getId() ,CLOSED));
+            stats.setTotalCases( caseRepository.countByPatientIdAndIsDeletedFalse(patient.getId()) );
+            stats.setActiveCases( caseRepository.countByStatusInAndPatientIdAndIsDeletedFalse(statusList, patient.getId()) );
+            stats.setCompletedCases(caseRepository.countByPatientIdAndStatusAndIsDeletedFalse(patient.getId() ,CLOSED));
             dto.setStats(stats);
             List<Case> recentCases = caseRepository.findLastSubmittedCases(patient.getId(), 3);
             dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
@@ -898,6 +898,39 @@ public class PatientService {
             log.error(e.getMessage());
         }
         return dtos;
+    }
+
+    @Transactional
+    public void deleteCase(Long caseId, Long userId){
+        //validate if case existed:
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+        //validate if case belongs to the provided user and that user existed:
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        if(!Objects.equals(medicalCase.getPatient().getId(), patient.getId())){
+            throw new BusinessException("You are not authorized to deleted this case",
+                            HttpStatus.UNAUTHORIZED);
+        }
+        //validate if case eligible for delete
+        if( medicalCase.getStatus().equals(SUBMITTED) || medicalCase.getStatus().equals(REJECTED)
+                ||  medicalCase.getStatus().equals(PENDING) ){
+
+            //Handel delete case
+            //1- remove it from assignments
+            List<CaseAssignment> caseAssignments = medicalCase.getAssignments();
+            if(caseAssignments != null && !caseAssignments.isEmpty()){
+                caseAssignmentRepository.deleteAll(caseAssignments);
+            }
+            //2- update case isDeleted field
+            medicalCase.setIsDeleted(true);
+            caseRepository.save(medicalCase);
+        }
+        else{
+            throw new BusinessException("Case can not be deleted because its status preventing that.",
+                    HttpStatus.UNAUTHORIZED);
+        }
     }
 
     @Transactional

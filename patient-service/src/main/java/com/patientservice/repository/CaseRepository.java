@@ -13,22 +13,24 @@ import java.util.List;
 public interface CaseRepository extends JpaRepository<Case, Long> {
     @Query("SELECT C FROM Case C")
     List<Case> findAllCases();
+    List<Case> findAllCasesByIsDeletedFalse();
     List<Case> findByPatientId(Long patientId);
+    List<Case> findByPatientIdAndIsDeletedFalse(Long patientId);
 
     List<Case> findByPatientIdAndStatus(Long patientId, CaseStatus status);
     //List<Case> findByAssignedDoctorId(Long doctorId);
-    List<Case> findCaseByRequiredSpecializationAndStatus(String specialization, CaseStatus caseStatus);
+    List<Case> findCaseByRequiredSpecializationAndStatusAndIsDeletedFalse(String specialization, CaseStatus caseStatus);
 
-    Long countByStatus(CaseStatus status);
-    Long countByPatientIdAndStatus(Long patientId, CaseStatus status);
-    Long countByStatusInAndPatientId(List<CaseStatus> statuses, Long patientId);
-    Long countByStatusIn(List<CaseStatus> statuses);
-    Long countByPatientId(Long patientId);
+    Long countByStatusAndIsDeletedFalse(CaseStatus status);
+    Long countByPatientIdAndStatusAndIsDeletedFalse(Long patientId, CaseStatus status);
+    Long countByStatusInAndPatientIdAndIsDeletedFalse(List<CaseStatus> statuses, Long patientId);
+    Long countByStatusInAndIsDeletedFalse(List<CaseStatus> statuses);
+    Long countByPatientIdAndIsDeletedFalse(Long patientId);
 
 //    @Query("SELECT AVG(AGE(c.closedAt, c.createdAt)) FROM Case c WHERE c.status = 'CLOSED'")
 //    String calculateAverageResolutionTime();
 
-    @Query("SELECT c FROM Case c WHERE c.patient.id = :patientId ORDER BY c.submittedAt DESC LIMIT :limit ")
+    @Query("SELECT c FROM Case c WHERE c.patient.id = :patientId AND c.isDeleted != true ORDER BY c.submittedAt DESC LIMIT :limit ")
     List<Case> findLastSubmittedCases(@Param("patientId") Long patientId, @Param("limit") int limit);
 //    List<Case> findTopByOrderBySubmittedAtDesc(int limit);
 

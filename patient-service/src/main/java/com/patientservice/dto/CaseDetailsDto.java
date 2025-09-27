@@ -29,6 +29,7 @@ public class CaseDetailsDto {
     private LocalDateTime paymentCompletedAt;
     private LocalDateTime closedAt;
     private String rejectionReason;
+    private Boolean isDeleted = false;
 
     private String primaryDiseaseCode;
     private Set<String> secondaryDiseaseCodes;
@@ -58,5 +59,6 @@ public class CaseDetailsDto {
         private Boolean isCompressed;
         private LocalDateTime uploadedAt;
         private String description;
+
     }
 }

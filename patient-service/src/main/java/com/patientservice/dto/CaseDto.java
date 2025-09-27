@@ -42,4 +42,5 @@ public class CaseDto {
     private LocalDateTime closedAt;
     private Integer assignmentAttempts = 0;
     private Integer rejectionCount = 0;
+    private Boolean isDeleted = false;
 }

@@ -117,6 +117,13 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(null, "Case status updated"));
     }
 
+    @PutMapping("/cases/{caseId}/delete")
+    public ResponseEntity<ApiResponse<Void>> deleteCase(@PathVariable Long caseId,
+                                                        @RequestHeader("X-User-Id") Long userId) {
+        patientService.deleteCase(caseId, userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Case deleted - id: " + caseId));
+    }
+
     // 7. Submit Complaint - MISSING ENDPOINT
     @PostMapping("/complaints")
     public ResponseEntity<ApiResponse<Void>> submitComplaint(

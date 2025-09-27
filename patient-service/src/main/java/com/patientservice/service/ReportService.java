@@ -24,7 +24,7 @@ public class ReportService {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
-        List<Case> cases = caseRepository.findByPatientId(patient.getId());
+        List<Case> cases = caseRepository.findByPatientIdAndIsDeletedFalse(patient.getId());
 
         PatientReportDto report = new PatientReportDto();
         report.setPatientName(patient.getFullName());
