@@ -1,5 +1,6 @@
 package com.patientservice.kafka;
 
+import com.commonlibrary.dto.CaseFeeUpdateEvent;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.SmartCaseAssignmentService;
 import lombok.RequiredArgsConstructor;
@@ -79,6 +80,23 @@ public class PatientEventConsumer {
             
         } catch (Exception e) {
             log.error("Error processing user registration event: {}", e.getMessage(), e);
+        }
+    }
+
+    @KafkaListener(topics = "case-fee-update-topic", groupId = "patient-service-group")
+    public void handleCaseFeeUpdate(CaseFeeUpdateEvent event) {
+        try {
+            log.info("Received case fee update event for case: {} with fee: ${}",
+                    event.getCaseId(), event.getConsultationFee());
+
+            patientService.updateCaseConsultationFee(event.getCaseId(),
+                    event.getConsultationFee(), event.getFeeSetAt());
+
+            log.info("Successfully updated consultation fee for case: {}", event.getCaseId());
+
+        } catch (Exception e) {
+            log.error("Error processing case fee update event for case {}: {}",
+                    event.getCaseId(), e.getMessage(), e);
         }
     }
 }

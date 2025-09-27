@@ -1,17 +1,13 @@
-package com.patientservice.dto;
+package com.commonlibrary.dto;
 
 import com.commonlibrary.entity.CaseComplexity;
 import com.commonlibrary.entity.CaseStatus;
 import com.commonlibrary.entity.PaymentStatus;
 import com.commonlibrary.entity.UrgencyLevel;
-import com.patientservice.entity.CaseAssignment;
-import com.patientservice.entity.Document;
-import com.patientservice.entity.Patient;
-import jakarta.persistence.*;
 import lombok.Data;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 
 @Data
@@ -22,9 +18,6 @@ public class CaseDto {
     private CaseStatus status;
     private String requiredSpecialization;
     private LocalDateTime createdAt;
-//    private Patient patient;
-//    private List<Document> documents;
-//    private List<CaseAssignment> assignments = new ArrayList<>();
     private String primaryDiseaseCode;
     private Set<String> secondaryDiseaseCodes;
     private Set<String> symptomCodes;
@@ -43,4 +36,6 @@ public class CaseDto {
     private Integer assignmentAttempts = 0;
     private Integer rejectionCount = 0;
     private Boolean isDeleted = false;
+    private BigDecimal consultationFee;
+    private LocalDateTime feeSetAt;
 }

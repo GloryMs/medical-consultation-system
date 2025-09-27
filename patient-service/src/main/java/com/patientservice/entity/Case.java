@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -92,6 +94,11 @@ public class Case extends BaseEntity {
 
     @Column(nullable = false)
     private Integer maxDoctorsAllowed = 3;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal consultationFee; // Fee set by doctor for this specific case
+
+    private LocalDateTime feeSetAt; // When the doctor set the fee
 
     // Metadata
     private LocalDateTime submittedAt;

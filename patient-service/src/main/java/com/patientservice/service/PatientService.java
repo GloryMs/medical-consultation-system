@@ -1,9 +1,6 @@
 package com.patientservice.service;
 
-import com.commonlibrary.dto.AppointmentDto;
-import com.commonlibrary.dto.NotificationDto;
-import com.commonlibrary.dto.PaymentDto;
-import com.commonlibrary.dto.ProcessPaymentDto;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
@@ -259,10 +256,12 @@ public class PatientService {
 //        return caseRepository.save(saved);
 //    }
 
-    public List<CaseDto> getDoctorActiveCases ( Long doctorId ){
+    public List<CaseDto> getDoctorActiveCases (Long doctorId ){
         List<CaseDto> cases = new ArrayList<>();
         List<Case> tempCases = new ArrayList<>();
         List<CaseAssignment> assignments = new ArrayList<>();
+
+        //Todo : Below condition must be checked again, that not only this assignment status should be checked...
 
         assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.ACCEPTED );
         System.out.println("Getting assignments for doctor: " + doctorId);
@@ -460,6 +459,58 @@ public class PatientService {
         dto.setCountry(patient.getCountry());
         dto.setPostalCode(patient.getPostalCode());
         return dto;
+    }
+
+    public CustomPatientDto getCustomPatientInformation( Long caseId, Long doctorId ){
+        CustomPatientDto customPatientDto = new CustomPatientDto();
+        //Check if the Case Existed:
+        Case medicalCase = caseRepository.findByIdAndIsDeletedFalse(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+        //check case assignment if case belongs to the provided doctorId:
+        CaseAssignment assignments = caseAssignmentRepository.findByCaseEntityAndDoctorId(medicalCase,
+                doctorId).orElse(null);
+        if(assignments == null){
+            throw new BusinessException("No match between Doctor and Provided Case", HttpStatus.NOT_FOUND);
+        }
+        else{
+            Patient patient = patientRepository.findById(medicalCase.getPatient().getId()).
+                    orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+            ModelMapper modelMapper = new ModelMapper();
+            customPatientDto = modelMapper.map(patient, CustomPatientDto.class);
+        }
+        return customPatientDto;
+    }
+
+    /**
+     * Update case consultation fee (called via Kafka event)
+     */
+    @Transactional
+    public void updateCaseConsultationFee(Long caseId, BigDecimal consultationFee, LocalDateTime feeSetAt) {
+        try {
+            Case medicalCase = caseRepository.findById(caseId)
+                    .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+            // Validate case status
+            if (medicalCase.getStatus() != CaseStatus.ACCEPTED) {
+                log.warn("Attempting to set fee for case {} with status: {}", caseId, medicalCase.getStatus());
+                // Don't throw exception, just log warning as this is async processing
+                return;
+            }
+
+            // Update consultation fee
+            medicalCase.setConsultationFee(consultationFee);
+            medicalCase.setFeeSetAt(feeSetAt);
+
+            // Save updated case
+            caseRepository.save(medicalCase);
+
+            log.info("Consultation fee updated for case {}: ${}", caseId, consultationFee);
+
+        } catch (Exception e) {
+            log.error("Error updating consultation fee for case {}: {}", caseId, e.getMessage(), e);
+            throw e;
+        }
     }
 
     // 1. Update Profile Implementation

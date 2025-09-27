@@ -1,5 +1,6 @@
 package com.patientservice.repository;
 
+import com.patientservice.entity.Case;
 import com.patientservice.entity.CaseAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import com.commonlibrary.entity.*;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CaseAssignmentRepository extends JpaRepository<CaseAssignment, Long> {
@@ -15,8 +17,10 @@ public interface CaseAssignmentRepository extends JpaRepository<CaseAssignment, 
     List<CaseAssignment> findByDoctorId(Long doctorId);
     List<CaseAssignment> findByDoctorIdAndStatus(Long doctorId, AssignmentStatus status);
     boolean existsByCaseEntityIdAndDoctorId(Long caseId, Long doctorId);
-    List<CaseAssignment> findByStatusAndExpiresAtBefore(AssignmentStatus status, LocalDateTime dateTime);
-    
+    List<CaseAssignment> findByStatusAndExpiresAtBefore(AssignmentStatus status, LocalDateTime dateTim);
+
+    Optional<CaseAssignment> findByCaseEntityAndDoctorId(Case caseEntity, Long doctorId);
+
     @Query("SELECT COUNT(ca) FROM CaseAssignment ca WHERE " +
             "ca.doctorId = :doctorId AND ca.status IN :statuses")
     long countActiveCasesByDoctor(@Param("doctorId") Long doctorId,

@@ -1,7 +1,7 @@
 package com.doctorservice.controller;
 
 import com.commonlibrary.dto.*;
-import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.dto.CaseDto;
 import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.entity.CaseStatus;
 import com.commonlibrary.entity.VerificationStatus;
@@ -45,6 +45,32 @@ public class DoctorController {
                 .body(ApiResponse.success(profile, "Profile created successfully"));
     }
 
+    /**
+     * Update Doctor Profile
+     * Updates the doctor's profile information
+     */
+    @PutMapping("/profile")
+    public ResponseEntity<ApiResponse<DoctorProfileDto>> updateProfile(
+            @RequestHeader("X-User-Id") Long userId,
+            @Valid @RequestBody DoctorProfileDto dto) {
+        DoctorProfileDto updatedProfile = doctorService.updateProfile(userId, dto);
+        return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
+    }
+
+    /**
+     * Set consultation fee for a specific case
+     * Called by doctor after accepting assignment when no hourlyRate or caseRate is set
+     */
+    @PostMapping("/cases/{caseId}/set-fee")
+    public ResponseEntity<ApiResponse<Void>> setCaseFee(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long caseId,
+            @Valid @RequestBody SetCaseFeeDto dto) {
+
+        doctorService.setCaseFee(userId, caseId, dto.getConsultationFee());
+        return ResponseEntity.ok(ApiResponse.success(null, "Consultation fee set successfully"));
+    }
+
     @PostMapping("/cases/{caseId}/accept")
     public ResponseEntity<ApiResponse<Void>> acceptCase(
             @RequestHeader("X-User-Id") Long userId,
@@ -85,7 +111,7 @@ public class DoctorController {
                 .body(ApiResponse.success(report, "Report created successfully"));
     }
 
-    // 10. Get Doctor Profile - MISSING ENDPOINT
+    // 10. Get Doctor Profile
     @GetMapping("/profile/{doctorId}")
     public ResponseEntity<ApiResponse<DoctorProfileDto>> getProfile(
             @PathVariable Long doctorId) {
@@ -93,7 +119,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
-    // 11. Update Availability - MISSING ENDPOINT
+    // 11. Update Availability
     @PutMapping("/availability")
     public ResponseEntity<ApiResponse<Void>> updateAvailability(
             @RequestHeader("X-User-Id") Long userId,
@@ -102,7 +128,29 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Availability updated"));
     }
 
-    // 12. Get Assigned Cases - MISSING ENDPOINT
+    /**
+     * Get current availability status
+     */
+    @GetMapping("/availability/status")
+    public ResponseEntity<ApiResponse<AvailabilityStatusDto>> getAvailabilityStatus(
+            @RequestHeader("X-User-Id") Long userId) {
+        AvailabilityStatusDto status = doctorService.getAvailabilityStatus(userId);
+        return ResponseEntity.ok(ApiResponse.success(status));
+    }
+
+    /**
+     * Quick toggle availability
+     */
+    @PostMapping("/availability/toggle")
+    public ResponseEntity<ApiResponse<Void>> toggleAvailability(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam Boolean isAvailable,
+            @RequestParam(required = false) String reason) {
+        doctorService.toggleAvailability(userId, isAvailable, reason);
+        return ResponseEntity.ok(ApiResponse.success(null, "Availability toggled successfully"));
+    }
+
+    // 12. Get Assigned Cases
     @GetMapping("/cases/assigned")
     public ResponseEntity<ApiResponse<List<CaseDto>>> getAssignedCases(
             @RequestHeader("X-User-Id") Long userId) {
@@ -110,7 +158,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
-    // 13. Browse Cases Pool - MISSING ENDPOINT
+    // 13. Browse Cases Pool
     @GetMapping("/cases/pool")
     public ResponseEntity<ApiResponse<List<CaseDto>>> browseCasesPool(
             @RequestHeader("X-User-Id") Long userId,
@@ -119,27 +167,27 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
-    // 15. Reject Case - MISSING ENDPOINT
-    @PostMapping("/cases/{caseId}/reject")
-    public ResponseEntity<ApiResponse<Void>> rejectCase(
-            @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long caseId,
-            @Valid @RequestBody RejectCaseDto dto) {
-        doctorService.rejectCase(userId, caseId, dto.getReason());
-        return ResponseEntity.ok(ApiResponse.success(null, "Case rejected"));
-    }
+    // 15. Reject Case
+//    @PostMapping("/cases/{caseId}/reject")
+//    public ResponseEntity<ApiResponse<Void>> rejectCase(
+//            @RequestHeader("X-User-Id") Long userId,
+//            @PathVariable Long caseId,
+//            @Valid @RequestBody RejectCaseDto dto) {
+//        doctorService.rejectCase(userId, caseId, dto.getReason());
+//        return ResponseEntity.ok(ApiResponse.success(null, "Case rejected"));
+//    }
 
-    // 16. Set Dynamic Fee for Case - MISSING ENDPOINT
-    @PostMapping("/cases/{caseId}/set-fee")
-    public ResponseEntity<ApiResponse<Void>> setDynamicFee(
-            @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long caseId,
-            @Valid @RequestBody SetFeeDto dto) {
-        doctorService.setDynamicFee(userId, caseId, dto);
-        return ResponseEntity.ok(ApiResponse.success(null, "Fee set successfully"));
-    }
+    // 16. Set Dynamic Fee for Case
+//    @PostMapping("/cases/{caseId}/set-fee")
+//    public ResponseEntity<ApiResponse<Void>> setDynamicFee(
+//            @RequestHeader("X-User-Id") Long userId,
+//            @PathVariable Long caseId,
+//            @Valid @RequestBody SetFeeDto dto) {
+//        doctorService.setDynamicFee(userId, caseId, dto);
+//        return ResponseEntity.ok(ApiResponse.success(null, "Fee set successfully"));
+//    }
 
-    // 17. Reschedule Appointment - MISSING ENDPOINT
+    // 17. Reschedule Appointment
     @PutMapping("/appointments/{appointmentId}/reschedule")
     public ResponseEntity<ApiResponse<Void>> rescheduleAppointment(
             @RequestHeader("X-User-Id") Long userId,
@@ -156,7 +204,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment confirmed"));
     }
 
-    // 18. Get Today's Appointments - MISSING ENDPOINT
+    // 18. Get Today's Appointments
     @GetMapping("/appointments/today")
     public ResponseEntity<ApiResponse<List<Appointment>>> getTodayAppointments(
             @RequestHeader("X-User-Id") Long userId) {
@@ -164,7 +212,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
-    // 19. Cancel Appointment - MISSING ENDPOINT
+    // 19. Cancel Appointment
     @PostMapping("/appointments/{appointmentId}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancelAppointment(
             @RequestHeader("X-User-Id") Long userId,
@@ -174,7 +222,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment cancelled"));
     }
 
-    // 20. Get Consultation Reports - MISSING ENDPOINT
+    // 20. Get Consultation Reports
     @GetMapping("/consultation-reports")
     public ResponseEntity<ApiResponse<List<ConsultationReport>>> getConsultationReports(
             @RequestHeader("X-User-Id") Long userId) {
@@ -182,7 +230,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(reports));
     }
 
-    // 21. Update Consultation Report - MISSING ENDPOINT
+    // 21. Update Consultation Report
     @PutMapping("/consultation-reports/{reportId}")
     public ResponseEntity<ApiResponse<ConsultationReport>> updateConsultationReport(
             @RequestHeader("X-User-Id") Long userId,
@@ -192,7 +240,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(report, "Report updated"));
     }
 
-    // 22. Close Case - MISSING ENDPOINT
+    // 22. Close Case
     @PostMapping("/cases/{caseId}/close")
     public ResponseEntity<ApiResponse<Void>> closeCase(
             @RequestHeader("X-User-Id") Long userId,
@@ -202,7 +250,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Case closed"));
     }
 
-    // 23. Set Calendar Availability - MISSING ENDPOINT
+    // 23. Set Calendar Availability
     @PostMapping("/calendar/availability")
     public ResponseEntity<ApiResponse<CalendarAvailability>> setCalendarAvailability(
             @RequestHeader("X-User-Id") Long userId,
@@ -212,7 +260,7 @@ public class DoctorController {
                 .body(ApiResponse.success(availability, "Availability set"));
     }
 
-    // 24. Block Time Slot - MISSING ENDPOINT
+    // 24. Block Time Slot
     @PostMapping("/calendar/block")
     public ResponseEntity<ApiResponse<Void>> blockTimeSlot(
             @RequestHeader("X-User-Id") Long userId,
@@ -221,7 +269,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Time slot blocked"));
     }
 
-    // 14. Update Doctor Verification - MISSING ENDPOINT (For admin use via Feign)
+    // 14. Update Doctor Verification (For admin use via Feign)
     @PutMapping("/{doctorId}/verification")
     public ResponseEntity<ApiResponse<Void>> updateDoctorVerification(
             @PathVariable Long doctorId,

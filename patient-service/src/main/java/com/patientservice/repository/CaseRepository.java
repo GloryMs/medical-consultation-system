@@ -8,11 +8,13 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CaseRepository extends JpaRepository<Case, Long> {
     @Query("SELECT C FROM Case C")
     List<Case> findAllCases();
+    Optional<Case> findByIdAndIsDeletedFalse(Long id);
     List<Case> findAllCasesByIsDeletedFalse();
     List<Case> findByPatientId(Long patientId);
     List<Case> findByPatientIdAndIsDeletedFalse(Long patientId);

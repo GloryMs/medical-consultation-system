@@ -1,9 +1,9 @@
 package com.doctorservice.service;
 
-import com.commonlibrary.dto.AppointmentDto;
-import com.commonlibrary.dto.DoctorProfileDto;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.entity.AppointmentStatus;
 import com.commonlibrary.entity.CaseStatus;
+import com.commonlibrary.entity.TimeSlot;
 import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
@@ -21,11 +21,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -72,6 +75,121 @@ public class DoctorService {
         return mapToDto(saved);
     }
 
+    /**
+     * Update Doctor Profile Implementation
+     */
+    @Transactional
+    public DoctorProfileDto updateProfile(Long userId, DoctorProfileDto dto) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        // Update basic information
+        if (dto.getFullName() != null && !dto.getFullName().trim().isEmpty()) {
+            doctor.setFullName(dto.getFullName().trim());
+        }
+
+        if (dto.getLicenseNumber() != null && !dto.getLicenseNumber().trim().isEmpty()) {
+            // Check if license number is unique (excluding current doctor)
+            boolean licenseExists = doctorRepository.existsByLicenseNumber(dto.getLicenseNumber())
+                    && !doctor.getLicenseNumber().equals(dto.getLicenseNumber());
+            if (licenseExists) {
+                throw new BusinessException("License number already exists", HttpStatus.CONFLICT);
+            }
+            doctor.setLicenseNumber(dto.getLicenseNumber().trim());
+        }
+
+        // Update specialization information
+        if (dto.getPrimarySpecializationCode() != null && !dto.getPrimarySpecializationCode().trim().isEmpty()) {
+            doctor.setPrimarySpecialization(dto.getPrimarySpecializationCode().trim());
+        }
+
+        if (dto.getSubSpecializationCodes() != null && !dto.getSubSpecializationCodes().isEmpty()) {
+            doctor.setSubSpecializations(new HashSet<>(dto.getSubSpecializationCodes()));
+        }
+
+        // Update professional information
+        if (dto.getYearsOfExperience() != null && dto.getYearsOfExperience() >= 0) {
+            doctor.setYearsOfExperience(dto.getYearsOfExperience());
+        }
+
+        if (dto.getQualifications() != null && !dto.getQualifications().trim().isEmpty()) {
+            // Parse comma-separated qualifications into Set
+            Set<String> qualificationSet = new HashSet<>();
+            String[] qualificationArray = dto.getQualifications().split(",");
+            for (String qual : qualificationArray) {
+                if (!qual.trim().isEmpty()) {
+                    qualificationSet.add(qual.trim());
+                }
+            }
+            doctor.setQualifications(qualificationSet);
+        }
+
+        if (dto.getLanguages() != null && !dto.getLanguages().trim().isEmpty()) {
+            // Parse comma-separated languages into Set
+            Set<String> languageSet = new HashSet<>();
+            String[] languageArray = dto.getLanguages().split(",");
+            for (String lang : languageArray) {
+                if (!lang.trim().isEmpty()) {
+                    languageSet.add(lang.trim());
+                }
+            }
+            doctor.setLanguages(languageSet);
+        }
+
+        // Update pricing information
+        if (dto.getBaseConsultationFee() != null && dto.getBaseConsultationFee() >= 0) {
+            doctor.setCaseRate(dto.getBaseConsultationFee());
+        }
+
+        if (dto.getHourlyRate() != null && dto.getHourlyRate() >= 0) {
+            doctor.setHourlyRate(dto.getHourlyRate());
+        }
+
+        if (dto.getUrgentCaseFee() != null && dto.getUrgentCaseFee() >= 0) {
+            doctor.setEmergencyRate(dto.getUrgentCaseFee());
+        }
+
+        // Update contact information
+        if (dto.getPhoneNumber() != null && !dto.getPhoneNumber().trim().isEmpty()) {
+            doctor.setPhoneNumber(dto.getPhoneNumber().trim());
+        }
+
+        if (dto.getEmail() != null && !dto.getEmail().trim().isEmpty()) {
+            doctor.setEmail(dto.getEmail().trim());
+        }
+
+        if (dto.getHospitalAffiliation() != null && !dto.getHospitalAffiliation().trim().isEmpty()) {
+            doctor.setHospitalAffiliation(dto.getHospitalAffiliation().trim());
+        }
+
+        // Update capacity settings
+        if (dto.getMaxConcurrentCases() != null && dto.getMaxConcurrentCases() > 0) {
+            doctor.setMaxActiveCases(dto.getMaxConcurrentCases());
+        }
+
+        // Update preferences
+        if (dto.getAcceptsSecondOpinions() != null) {
+            // Note: This field doesn't exist in current Doctor entity, but if added later
+            // doctor.setAcceptsSecondOpinions(dto.getAcceptsSecondOpinions());
+        }
+
+        if (dto.getAcceptsComplexCases() != null) {
+            // Note: This field doesn't exist in current Doctor entity, but if added later
+            // doctor.setAcceptsComplexCases(dto.getAcceptsComplexCases());
+        }
+
+        if (dto.getAcceptsUrgentCases() != null) {
+            // Note: This field doesn't exist in current Doctor entity, but if added later
+            // doctor.setAcceptsUrgentCases(dto.getAcceptsUrgentCases());
+        }
+
+        // Save updated doctor
+        Doctor updatedDoctor = doctorRepository.save(doctor);
+
+        // Return updated profile DTO
+        return mapToDto(updatedDoctor);
+    }
+
     @Transactional
     public void acceptCase(Long userId, Long caseId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
@@ -83,6 +201,72 @@ public class DoctorService {
 
         // Update case status through patient service
         patientServiceClient.updateCaseStatus(caseId, "ACCEPTED", doctor.getId());
+    }
+
+    /**
+     * Set consultation fee for a case
+     * Only allowed when doctor has no hourlyRate or caseRate set in profile
+     */
+    @Transactional
+    public void setCaseFee(Long userId, Long caseId, BigDecimal consultationFee) {
+        // Find doctor
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        // Check if doctor has hourlyRate or caseRate already set
+        if (doctor.getHourlyRate() != null || doctor.getCaseRate() != null) {
+            throw new BusinessException("Cannot set case-specific fee when hourlyRate or caseRate is already set in profile",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        // Verify doctor is assigned to this case
+        try {
+            List<CaseDto> assignedCases = patientServiceClient.getCasesByDoctorId(doctor.getId()).getBody().getData();
+            CaseDto targetCase = assignedCases.stream()
+                    .filter(c -> c.getId().equals(caseId))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException("Case not found or not assigned to doctor", HttpStatus.NOT_FOUND));
+
+            // Check if case is in correct status (ACCEPTED)
+            if (targetCase.getStatus() != CaseStatus.ACCEPTED) {
+                throw new BusinessException("Can only set fee for accepted cases. Current status: " + targetCase.getStatus(),
+                        HttpStatus.BAD_REQUEST);
+            }
+
+            // Check if fee already set
+            if (targetCase.getConsultationFee() != null) {
+                throw new BusinessException("Consultation fee has already been set for this case", HttpStatus.CONFLICT);
+            }
+
+            // Get patient ID from case (you might need to add this to CaseDto)
+            CustomPatientDto patientDto = getCustomPatientInfo(caseId, doctor.getId()); // Helper method
+
+            // Send Kafka event to update case and notify patient
+            doctorEventProducer.sendCaseFeeUpdateEvent(caseId, doctor.getId(), doctor.getUserId(),
+                    patientDto.getId(), patientDto.getUserId(),  consultationFee);
+
+            log.info("Case fee set successfully for case {} by doctor {}. Fee: ${}",
+                    caseId, doctor.getId(), consultationFee);
+
+        } catch (Exception e) {
+            log.error("Error setting case fee for case {}: {}", caseId, e.getMessage());
+            throw new BusinessException("Failed to set consultation fee: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Helper method to get patient ID from case
+     */
+    private CustomPatientDto getCustomPatientInfo(Long caseId, Long doctorId) {
+        try {
+            // Call patient service to get case details
+            CustomPatientDto patientDto = patientServiceClient.getCustomPatientInfo(caseId, doctorId).getBody().getData();
+            return patientDto; // You might need to add this field to CaseDto
+        } catch (Exception e) {
+            log.error("Error getting patient custom info for case {}: {}", caseId, e.getMessage());
+            e.printStackTrace();
+            throw new BusinessException("Could not retrieve case details", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @Transactional
@@ -196,22 +380,53 @@ public class DoctorService {
 
     private DoctorProfileDto mapToDto(Doctor doctor) {
         DoctorProfileDto dto = new DoctorProfileDto();
+
         dto.setId(doctor.getId());
         dto.setUserId(doctor.getUserId());
         dto.setFullName(doctor.getFullName());
         dto.setLicenseNumber(doctor.getLicenseNumber());
-//        dto.setPrimarySpecialization(doctor.getPrimarySpecialization());
-//        dto.setSubSpecialization(doctor.getSubSpecialization());
-//        dto.setHourlyRate(doctor.getHourlyRate());
-//        dto.setCaseRate(doctor.getCaseRate());
+        dto.setPrimarySpecializationCode(doctor.getPrimarySpecialization());
+
+        // Convert sets to comma-separated strings for frontend compatibility
+        if (doctor.getSubSpecializations() != null && !doctor.getSubSpecializations().isEmpty()) {
+            dto.setSubSpecializationCodes(doctor.getSubSpecializations());
+        }
+
+        if (doctor.getQualifications() != null && !doctor.getQualifications().isEmpty()) {
+            dto.setQualifications(String.join(", ", doctor.getQualifications()));
+        }
+
+        if (doctor.getLanguages() != null && !doctor.getLanguages().isEmpty()) {
+            dto.setLanguages(String.join(", ", doctor.getLanguages()));
+        }
+
         dto.setVerificationStatus(doctor.getVerificationStatus());
-        //dto.setProfessionalSummary(doctor.getProfessionalSummary());
         dto.setYearsOfExperience(doctor.getYearsOfExperience());
-        //dto.setPhoneNumber(doctor.getPhoneNumber());
-        //dto.setEmail(doctor.getEmail());
-        //dto.setHospitalAffiliation(doctor.getHospitalAffiliation());
-        //dto.setQualifications(doctor.getQualifications());
-        //dto.setLanguages(doctor.getLanguages());
+        dto.setPhoneNumber(doctor.getPhoneNumber());
+        dto.setEmail(doctor.getEmail());
+        dto.setHospitalAffiliation(doctor.getHospitalAffiliation());
+
+        // Convert pricing fields
+        if (doctor.getCaseRate() != null) {
+            dto.setBaseConsultationFee(doctor.getCaseRate());
+            dto.setCaseRate(doctor.getCaseRate());
+        }
+
+        if (doctor.getHourlyRate() != null) {
+            dto.setHourlyRate(doctor.getHourlyRate());
+        }
+
+        if (doctor.getEmergencyRate() != null) {
+            dto.setUrgentCaseFee(doctor.getEmergencyRate());
+            dto.setEmergencyRate(doctor.getEmergencyRate());
+        }
+
+        // Capacity settings
+        if (doctor.getMaxActiveCases() != null) {
+            dto.setMaxConcurrentCases(doctor.getMaxActiveCases());
+        }
+
+
         return dto;
     }
 
@@ -222,18 +437,93 @@ public class DoctorService {
         return mapToDto(doctor);
     }
 
-    /*TODO
-    *  updateAvailability not works now, must be fixed*/
-
     // 11. Update Availability Implementation
+    /**
+     * Update doctor availability including time slots, emergency mode, and capacity settings
+     * This method handles both simple availability toggle and complex schedule updates
+     */
     @Transactional
     public void updateAvailability(Long userId, AvailabilityDto dto) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        //doctor.setAvailableTimeSlots(dto.getAvailableTimeSlots());
-        doctor.setIsAvailable(dto.getIsAvailable());
-        doctorRepository.save(doctor);
+        log.info("Updating availability for doctor {} (userId: {}). New status: {}",
+                doctor.getId(), userId, dto.getIsAvailable());
+
+        // Store previous state for logging
+        Boolean previousAvailability = doctor.getIsAvailable();
+        Boolean previousEmergencyMode = doctor.getEmergencyMode();
+
+        try {
+            // 1. Update basic availability status
+            doctor.setIsAvailable(dto.getIsAvailable());
+
+            // 2. Handle Emergency Mode
+            updateEmergencyMode(doctor, dto);
+
+            // 3. Update Time Slots (if provided and not a quick toggle)
+            if (!dto.getQuickToggle() && dto.getAvailableTimeSlots() != null) {
+                updateAvailableTimeSlots(doctor, dto.getAvailableTimeSlots());
+            }
+
+            // 4. Update Capacity Settings (if provided)
+            updateCapacitySettings(doctor, dto);
+
+            // 5. Update workload based on new availability
+            updateWorkloadBasedOnAvailability(doctor);
+
+            // 6. Save the updated doctor
+            Doctor savedDoctor = doctorRepository.save(doctor);
+
+            // 7. Log the availability change
+            logAvailabilityChange(savedDoctor, previousAvailability, previousEmergencyMode, dto);
+
+            // 8. Send notifications if significant change
+            handleAvailabilityNotifications(savedDoctor, previousAvailability, dto);
+
+            log.info("Successfully updated availability for doctor {}", doctor.getId());
+
+        } catch (Exception e) {
+            log.error("Error updating availability for doctor {}: {}", doctor.getId(), e.getMessage(), e);
+            throw new BusinessException("Failed to update availability: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Get current availability status with detailed information
+     */
+    public AvailabilityStatusDto getAvailabilityStatus(Long userId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        AvailabilityStatusDto status = new AvailabilityStatusDto();
+        status.setDoctorId(doctor.getId());
+        status.setIsAvailable(doctor.getIsAvailable());
+        status.setEmergencyMode(doctor.getEmergencyMode());
+        status.setEmergencyReason(doctor.getEmergencyModeReason());
+        status.setAvailableTimeSlots(doctor.getAvailableTimeSlots());
+        status.setMaxActiveCases(doctor.getMaxActiveCases());
+        status.setMaxDailyAppointments(doctor.getMaxDailyAppointments());
+        status.setCurrentActiveCases(doctor.getActiveCases());
+        status.setTodayAppointments(doctor.getTodayAppointments());
+        status.setWorkloadPercentage(doctor.getWorkloadPercentage());
+        status.setLastUpdated(doctor.getLastWorkloadUpdate());
+
+        return status;
+    }
+
+    /**
+     * Quick toggle availability (simple on/off without changing time slots)
+     */
+    @Transactional
+    public void toggleAvailability(Long userId, Boolean isAvailable, String reason) {
+        AvailabilityDto dto = new AvailabilityDto();
+        dto.setIsAvailable(isAvailable);
+        dto.setReason(reason);
+        dto.setQuickToggle(true);
+
+        updateAvailability(userId, dto);
     }
 
     // 12. Get Assigned Cases Implementation
@@ -260,26 +550,26 @@ public class DoctorService {
     }
 
     // 15. Reject Case Implementation
-    @Transactional
-    public void rejectCase(Long userId, Long caseId, String reason) {
-        Doctor doctor = doctorRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
-
-        /*TODO
-        *  I think no more need for below - double check*/
-        //patientServiceClient.rejectCase(caseId, doctor.getId(), reason);
-    }
+//    @Transactional
+//    public void rejectCase(Long userId, Long caseId, String reason) {
+//        Doctor doctor = doctorRepository.findByUserId(userId)
+//                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+//
+//        /*TODO
+//        *  I think no more need for below - double check*/
+//        //patientServiceClient.rejectCase(caseId, doctor.getId(), reason);
+//    }
 
     // 16. Set Dynamic Fee Implementation
-    @Transactional
-    public void setDynamicFee(Long userId, Long caseId, SetFeeDto dto) {
-        Doctor doctor = doctorRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
-
-        /*TODO
-         *  I think no more need for below - double check*/
-        //patientServiceClient.setCaseFee(caseId, dto.getConsultationFee(), dto.getReason());
-    }
+//    @Transactional
+//    public void setDynamicFee(Long userId, Long caseId, SetFeeDto dto) {
+//        Doctor doctor = doctorRepository.findByUserId(userId)
+//                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+//
+//        /*TODO
+//         *  I think no more need for below - double check*/
+//        patientServiceClient.setCaseFee(caseId, dto.getConsultationFee(), dto.getReason());
+//    }
 
     // 17. Reschedule Appointment Implementation
     @Transactional
@@ -488,5 +778,192 @@ public class DoctorService {
 
         doctorRepository.save(doctor);
         //log.info("Doctor profile initialized for user: {}", userId);
+    }
+
+    /// // Helpers:
+
+
+    /**
+     * Update emergency mode settings
+     */
+    private void updateEmergencyMode(Doctor doctor, AvailabilityDto dto) {
+        if (dto.getEmergencyMode() != null) {
+            if (dto.getEmergencyMode() && !doctor.getEmergencyMode()) {
+                // Enable emergency mode
+                doctor.enableEmergencyMode(dto.getEmergencyReason() != null ?
+                        dto.getEmergencyReason() : "Emergency mode enabled by doctor");
+                log.info("Emergency mode enabled for doctor {}", doctor.getId());
+
+            } else if (!dto.getEmergencyMode() && doctor.getEmergencyMode()) {
+                // Disable emergency mode
+                doctor.disableEmergencyMode();
+                log.info("Emergency mode disabled for doctor {}", doctor.getId());
+            }
+        }
+    }
+
+    /**
+     * Update available time slots with validation
+     */
+    private void updateAvailableTimeSlots(Doctor doctor, Set<TimeSlot> newTimeSlots) {
+        try {
+            // Validate time slots for overlaps
+            validateTimeSlots(newTimeSlots);
+
+            // Clear existing time slots
+            doctor.getAvailableTimeSlots().clear();
+
+            // Add new time slots
+            if (newTimeSlots != null && !newTimeSlots.isEmpty()) {
+                for (TimeSlot slot : newTimeSlots) {
+                    // Ensure all time slots are marked as available by default
+                    if (slot.getIsAvailable() == null) {
+                        slot.setIsAvailable(true);
+                    }
+                    doctor.getAvailableTimeSlots().add(slot);
+                }
+                log.info("Updated {} time slots for doctor {}", newTimeSlots.size(), doctor.getId());
+            } else {
+                log.info("Cleared all time slots for doctor {} (24/7 availability)", doctor.getId());
+            }
+
+        } catch (Exception e) {
+            log.error("Error updating time slots for doctor {}: {}", doctor.getId(), e.getMessage());
+            throw new BusinessException("Invalid time slot configuration: " + e.getMessage(),
+                    HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /**
+     * Validate time slots for overlaps and logical consistency
+     */
+    private void validateTimeSlots(Set<TimeSlot> timeSlots) {
+        if (timeSlots == null || timeSlots.isEmpty()) {
+            return;
+        }
+
+        for (TimeSlot slot1 : timeSlots) {
+            // Validate individual slot
+            if (slot1.getStartTime() == null || slot1.getEndTime() == null) {
+                throw new IllegalArgumentException("Time slot must have both start and end time");
+            }
+
+            if (slot1.getStartTime().isAfter(slot1.getEndTime()) ||
+                    slot1.getStartTime().equals(slot1.getEndTime())) {
+                throw new IllegalArgumentException("Start time must be before end time");
+            }
+
+            if (slot1.getDayOfWeek() == null) {
+                throw new IllegalArgumentException("Time slot must specify day of week");
+            }
+
+            // Check for overlaps with other slots
+            for (TimeSlot slot2 : timeSlots) {
+                if (slot1 != slot2 && slot1.overlaps(slot2)) {
+                    throw new IllegalArgumentException(
+                            String.format("Time slot overlap detected: %s %s-%s overlaps with %s-%s",
+                                    slot1.getDayOfWeek(),
+                                    slot1.getStartTime(),
+                                    slot1.getEndTime(),
+                                    slot2.getStartTime(),
+                                    slot2.getEndTime()));
+                }
+            }
+        }
+    }
+
+    /**
+     * Update capacity settings
+     */
+    private void updateCapacitySettings(Doctor doctor, AvailabilityDto dto) {
+        if (dto.getMaxActiveCases() != null && dto.getMaxActiveCases() > 0) {
+            doctor.setMaxActiveCases(dto.getMaxActiveCases());
+            log.info("Updated max active cases to {} for doctor {}",
+                    dto.getMaxActiveCases(), doctor.getId());
+        }
+
+        if (dto.getMaxDailyAppointments() != null && dto.getMaxDailyAppointments() > 0) {
+            doctor.setMaxDailyAppointments(dto.getMaxDailyAppointments());
+            log.info("Updated max daily appointments to {} for doctor {}",
+                    dto.getMaxDailyAppointments(), doctor.getId());
+        }
+    }
+
+    /**
+     * Update workload percentage based on availability changes
+     */
+    private void updateWorkloadBasedOnAvailability(Doctor doctor) {
+        if (!doctor.getIsAvailable()) {
+            // If doctor is not available, don't change workload but update timestamp
+            doctor.setLastWorkloadUpdate(LocalDateTime.now());
+        } else {
+            // If doctor becomes available, you might want to trigger workload recalculation
+            // This could be done via the workload service
+            doctor.setLastWorkloadUpdate(LocalDateTime.now());
+
+            // Optionally trigger workload service update (if available)
+            // workloadService.loadDoctorWorkload(doctor.getId());
+        }
+    }
+
+    /**
+     * Log availability changes for audit trail
+     */
+    private void logAvailabilityChange(Doctor doctor, Boolean previousAvailability,
+                                       Boolean previousEmergencyMode, AvailabilityDto dto) {
+        StringBuilder logMessage = new StringBuilder();
+        logMessage.append("Availability change for doctor ").append(doctor.getId()).append(": ");
+
+        if (!previousAvailability.equals(doctor.getIsAvailable())) {
+            logMessage.append("availability ").append(previousAvailability).append(" -> ")
+                    .append(doctor.getIsAvailable()).append("; ");
+        }
+
+        if (!previousEmergencyMode.equals(doctor.getEmergencyMode())) {
+            logMessage.append("emergency mode ").append(previousEmergencyMode).append(" -> ")
+                    .append(doctor.getEmergencyMode()).append("; ");
+        }
+
+        if (dto.getReason() != null) {
+            logMessage.append("reason: ").append(dto.getReason());
+        }
+
+        log.info(logMessage.toString());
+    }
+
+    /**
+     * Handle notifications for significant availability changes
+     */
+    private void handleAvailabilityNotifications(Doctor doctor, Boolean previousAvailability,
+                                                 AvailabilityDto dto) {
+        // Only send notifications for significant changes
+        if (!previousAvailability.equals(doctor.getIsAvailable())) {
+            try {
+                String notificationMessage;
+                String notificationTitle;
+
+                if (doctor.getIsAvailable()) {
+                    notificationTitle = "Doctor Available";
+                    notificationMessage = String.format("Dr. %s is now available for consultations",
+                            doctor.getFullName());
+                } else {
+                    notificationTitle = "Doctor Unavailable";
+                    notificationMessage = String.format("Dr. %s is currently unavailable",
+                            doctor.getFullName());
+                    if (dto.getReason() != null) {
+                        notificationMessage += ". Reason: " + dto.getReason();
+                    }
+                }
+
+                // Send notification via event producer (if available)
+                // doctorEventProducer.sendDoctorAvailabilityUpdate(doctor.getId(),
+                //                                                 doctor.getIsAvailable(),
+                //                                                 notificationMessage);
+
+            } catch (Exception e) {
+                log.warn("Failed to send availability notification for doctor {}: {}",
+                        doctor.getId(), e.getMessage());
+            }
+        }
     }
 }

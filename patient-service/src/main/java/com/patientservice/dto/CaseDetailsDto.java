@@ -21,7 +21,6 @@ public class CaseDetailsDto {
     private CaseStatus status;
     private UrgencyLevel urgencyLevel;
     private Long assignedDoctorId;
-    private BigDecimal consultationFee;
     private PaymentStatus paymentStatus;
     private LocalDateTime createdAt;
     private LocalDateTime acceptedAt;
@@ -37,6 +36,8 @@ public class CaseDetailsDto {
     private Set<String> currentMedicationCodes;
     private String requiredSpecialization;
     private Set<String> secondarySpecializations;
+    private BigDecimal consultationFee;
+    private LocalDateTime feeSetAt;
 
     // Enhanced document information
     private List<Document> documents;

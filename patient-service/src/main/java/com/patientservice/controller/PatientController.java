@@ -15,14 +15,12 @@ import com.patientservice.util.CreateCaseDtoBuilder;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.modelmapper.internal.bytebuddy.implementation.bind.annotation.AllArguments;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -344,6 +342,14 @@ public class PatientController {
             @RequestParam String reason) {
         patientService.claimCase(caseId, doctorId, reason);
         return ResponseEntity.ok(ApiResponse.success(null, "Case claimed"));
+    }
+
+    @GetMapping("/api/patients/{caseId}/custom-info")
+    ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId,
+            @RequestParam Long doctorId){
+        CustomPatientDto patientDto = new CustomPatientDto();
+        patientDto = patientService.getCustomPatientInformation( caseId, doctorId );
+        return ResponseEntity.ok(ApiResponse.success(patientDto));
     }
 
     @GetMapping("/case-assignments")

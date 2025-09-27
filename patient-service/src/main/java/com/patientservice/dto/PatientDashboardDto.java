@@ -3,6 +3,7 @@ package com.patientservice.dto;
 import java.util.List;
 
 import com.commonlibrary.dto.AppointmentDto;
+import com.commonlibrary.dto.CaseDto;
 import com.commonlibrary.dto.NotificationDto;
 import lombok.*;
 

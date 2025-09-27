@@ -1,8 +1,9 @@
 package com.doctorservice.feign;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.CustomPatientDto;
 import com.doctorservice.dto.CaseAssignmentDto;
-import com.doctorservice.dto.CaseDto;
+import com.commonlibrary.dto.CaseDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -81,4 +82,7 @@ public interface PatientServiceClient {
 
     @GetMapping("/cases/doctor/{doctorId}/metrics")
     ResponseEntity<ApiResponse<Object>> getDoctorCaseMetrics(@PathVariable("doctorId") Long doctorId);
+
+    @GetMapping("/api/patients/{caseId}/custom-info")
+    ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId, @RequestParam Long doctorId );
 }
