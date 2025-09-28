@@ -36,6 +36,17 @@ public class DoctorController {
     private final InternalDoctorService internalDoctorService;
     //private final NotEmptyValidatorForCollection notEmptyValidatorForCollection;
 
+    /**
+     * Get Doctor Dashboard Data
+     * Provides comprehensive dashboard data including stats, recent cases, appointments, and notifications
+     */
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<DoctorDashboardDto>> getDoctorDashboard(
+            @RequestHeader("X-User-Id") Long userId) {
+        DoctorDashboardDto dashboardData = doctorService.getDoctorDashboard(userId);
+        return ResponseEntity.ok(ApiResponse.success(dashboardData));
+    }
+
     @PostMapping("/profile")
     public ResponseEntity<ApiResponse<DoctorProfileDto>> createProfile(
             @RequestHeader("X-User-Id") Long userId,

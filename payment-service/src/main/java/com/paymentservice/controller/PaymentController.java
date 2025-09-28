@@ -57,6 +57,13 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.success(history));
     }
 
+    @GetMapping("/doctor/{doctorId}/history")
+    public ResponseEntity<ApiResponse<List<PaymentHistoryDto>>> getDoctorPaymentHistory(
+            @PathVariable Long doctorId) {
+        List<PaymentHistoryDto> history = paymentService.getDoctorPaymentHistory(doctorId);
+        return ResponseEntity.ok(ApiResponse.success(history));
+    }
+
     @GetMapping("/all")
     public ResponseEntity<ApiResponse<List<Payment>>> getAllPayments(
             @RequestParam LocalDate startDate,

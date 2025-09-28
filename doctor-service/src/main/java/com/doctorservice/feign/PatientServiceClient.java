@@ -59,7 +59,7 @@ public interface PatientServiceClient {
                                                                                  @RequestParam String status);
 
 
-    @GetMapping("/cases/doctor/{doctorId}/active")
+    @GetMapping("/api/patients/cases/doctor/{doctorId}/active")
     ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorActiveCases(@PathVariable("doctorId") Long doctorId);
 
 //    @PostMapping("/cases/{caseId}/reject")

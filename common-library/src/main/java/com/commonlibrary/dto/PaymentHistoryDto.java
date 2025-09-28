@@ -1,4 +1,4 @@
-package com.patientservice.dto;
+package com.commonlibrary.dto;
 
 import lombok.Data;
 

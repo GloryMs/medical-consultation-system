@@ -1,13 +1,12 @@
 package com.doctorservice.service;
 
 import com.commonlibrary.dto.*;
-import com.commonlibrary.entity.AppointmentStatus;
-import com.commonlibrary.entity.CaseStatus;
-import com.commonlibrary.entity.TimeSlot;
-import com.commonlibrary.entity.VerificationStatus;
+import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
+import com.doctorservice.feign.NotificationServiceClient;
+import com.doctorservice.feign.PaymentServiceClient;
 import com.doctorservice.kafka.DoctorEventProducer;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.CalendarAvailabilityRepository;
@@ -25,10 +24,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +38,8 @@ public class DoctorService {
     private final ConsultationReportRepository consultationReportRepository;
     private final CalendarAvailabilityRepository calendarAvailabilityRepository;
     private final DoctorEventProducer doctorEventProducer;
+    private final NotificationServiceClient notificationServiceClient;
+    private final PaymentServiceClient paymentServiceClient;
 
     @Transactional
     public DoctorProfileDto createProfile(Long userId, DoctorProfileDto dto) {
@@ -570,6 +569,257 @@ public class DoctorService {
 //         *  I think no more need for below - double check*/
 //        patientServiceClient.setCaseFee(caseId, dto.getConsultationFee(), dto.getReason());
 //    }
+
+    /**
+     * Get comprehensive dashboard data for doctor
+     */
+    public DoctorDashboardDto getDoctorDashboard(Long userId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        // Build dashboard stats
+        DoctorDashboardStatsDto stats = buildDashboardStats(doctor);
+
+        // Get recent active cases (limit 3)
+        List<DashboardCaseDto> recentCases = getRecentActiveCases(doctor.getId());
+
+        // Get upcoming appointments (limit 3)
+        List<DashboardAppointmentDto> upcomingAppointments = getUpcomingAppointments(doctor.getId());
+
+        // Get recent notifications (limit 3)
+        List<NotificationDto> recentNotifications = getMyNotifications(doctor.getId());
+
+        return DoctorDashboardDto.builder()
+                .stats(stats)
+                .recentCases(recentCases)
+                .upcomingAppointments(upcomingAppointments)
+                .recentNotifications(recentNotifications)
+                .build();
+    }
+
+    /**
+     * Build dashboard statistics
+     */
+    private DoctorDashboardStatsDto buildDashboardStats(Doctor doctor) {
+        // Get active cases count from patient service
+        Integer activeCases = 0;
+        try {
+            var response = patientServiceClient.getDoctorActiveCases(doctor.getId()).getBody().getData();
+            if (response != null) {
+                activeCases = response.size();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get active cases count for doctor {}: {}", doctor.getId(), e.getMessage());
+            activeCases = doctor.getActiveCases() != null ? doctor.getActiveCases() : 0;
+        }
+
+//        // Get today's appointments count
+//        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+//        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX);
+//        Integer todayAppointments = appointmentRepository
+//                .findByDoctorIdAndScheduledTimeBetween(doctor.getId(), startOfDay, endOfDay)
+//                .size();
+        Integer todayAppointments = appointmentRepository.findByDoctorId(doctor.getId()).size();
+
+        // Get pending reports count
+        Integer pendingReports = (int) consultationReportRepository
+                .findByDoctorId(doctor.getId())
+                .stream()
+                .filter(report -> report.getCreatedAt().isAfter(LocalDateTime.now().minusDays(7)))
+                .count();
+
+        // Calculate this week's earnings (mock calculation - replace with actual payment service call)
+        Double thisWeekEarnings = calculateTotalEarnings(doctor.getId());
+
+        // Get unread notifications count (mock - replace with actual notification service)
+        Integer unreadNotifications = getMyNotifications(doctor.getUserId()).size();; // This should come from notification service
+
+        return DoctorDashboardStatsDto.builder()
+                .activeCases(activeCases)
+                .todayAppointments(todayAppointments)
+                .totalConsultations(doctor.getConsultationCount())
+                .avgRating(doctor.getRating())
+                .workloadPercentage(doctor.getWorkloadPercentage())
+                .totalEarnings(thisWeekEarnings)
+                .pendingReports(pendingReports)
+                .unreadNotifications(unreadNotifications)
+                .build();
+    }
+
+    public List<NotificationDto> getMyNotifications(Long patientId){
+        List<NotificationDto> dtos = new ArrayList<>();
+        try{
+            dtos = notificationServiceClient.getUserNotifications(patientId).getBody().getData().stream().
+                    limit(3).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+        return dtos;
+    }
+
+    /**
+     * Get recent active cases for dashboard
+     */
+    private List<DashboardCaseDto> getRecentActiveCases(Long doctorId) {
+        try {
+            // Get assigned cases from patient service
+            var response = patientServiceClient.getCasesByDoctorId(doctorId);
+            if (response != null && response.getBody() != null && response.getBody().getData() != null) {
+                return response.getBody().getData().stream()
+                        .filter(caseDto -> Arrays.asList("ASSIGNED", "ACCEPTED", "SCHEDULED", "IN_PROGRESS")
+                                .contains(caseDto.getStatus()))
+                        .sorted((c1, c2) -> c2.getCreatedAt().compareTo(c1.getCreatedAt()))
+                        .limit(3)
+                        .map(this::convertToDashboardCaseDto)
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.error("Failed to get recent cases for doctor {}: {}", doctorId, e.getMessage());
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get upcoming appointments for dashboard
+     */
+    private List<DashboardAppointmentDto> getUpcomingAppointments(Long doctorId) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime endOfWeek = now.plusDays(7);
+
+        return appointmentRepository
+                .findByDoctorIdAndScheduledTimeBetween(doctorId, now, endOfWeek)
+                .stream()
+                .filter(appointment -> Arrays.asList(AppointmentStatus.SCHEDULED,
+                                AppointmentStatus.CONFIRMED, AppointmentStatus.RESCHEDULED)
+                        .contains(appointment.getStatus()))
+                .sorted(Comparator.comparing(Appointment::getScheduledTime))
+                .limit(3)
+                .map(this::convertToDashboardAppointmentDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Convert CaseDto to DashboardCaseDto
+     */
+    private DashboardCaseDto convertToDashboardCaseDto(CaseDto caseDto) {
+        String nextAction = determineNextAction(caseDto.getStatus().name());
+
+        return DashboardCaseDto.builder()
+                .id(caseDto.getId())
+                //.patientName(maskPatientName(caseDto.getPatientName())) // Privacy consideration
+                .caseTitle(caseDto.getCaseTitle())
+                .status(caseDto.getStatus().name())
+                .urgencyLevel(caseDto.getUrgencyLevel().name())
+                .submittedAt(caseDto.getCreatedAt())
+                .requiredSpecialization(caseDto.getRequiredSpecialization())
+                .nextAction(nextAction)
+                .build();
+    }
+
+    /**
+     * Convert Appointment to DashboardAppointmentDto
+     */
+    private DashboardAppointmentDto convertToDashboardAppointmentDto(Appointment appointment) {
+        // Get patient name from case (you might need to implement this)
+        String patientName = getPatientNameForAppointment(appointment);
+
+        return DashboardAppointmentDto.builder()
+                .id(appointment.getId())
+                .patientName(patientName)
+                .scheduledTime(appointment.getScheduledTime())
+                .consultationType(appointment.getConsultationType().toString())
+                .status(appointment.getStatus().toString())
+                .caseId(appointment.getCaseId())
+                .urgencyLevel(getUrgencyLevelForAppointment(appointment.getCaseId()))
+                .duration(appointment.getDuration())
+                .build();
+    }
+
+
+    private Double calculateTotalEarnings(Long doctorId) {
+
+        Double totalEarnings = 0.0;
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        List<PaymentHistoryDto> paymentHistoryDtoList = new ArrayList<>();
+        try{
+            paymentHistoryDtoList = paymentServiceClient.getDoctorPaymentHistory(doctor.getId()).getBody().getData();
+        }catch(Exception e) {
+            paymentHistoryDtoList = null;
+            e.printStackTrace();
+        }
+
+        if( paymentHistoryDtoList != null && !paymentHistoryDtoList.isEmpty() ) {
+            BigDecimal total = new BigDecimal("00.00");;
+            for(PaymentHistoryDto paymentHistoryDto : paymentHistoryDtoList) {
+                if( paymentHistoryDto.getPaymentType().equals(PaymentType.CONSULTATION.name())) {
+                    if( paymentHistoryDto.getAmount() != null )
+                        total = total.add(paymentHistoryDto.getAmount());
+                }
+            }
+            totalEarnings = Double.valueOf( total.toString() );
+        }
+        return totalEarnings;
+    }
+
+    /**
+     * Determine next action based on case status
+     */
+    private String determineNextAction(String status) {
+        switch (status) {
+            case "ASSIGNED":
+                return "Accept or reject case";
+            case "ACCEPTED":
+                return "Schedule appointment";
+            case "SCHEDULED":
+                return "Wait for payment";
+            case "IN_PROGRESS":
+                return "Complete consultation";
+            default:
+                return "Review case";
+        }
+    }
+
+    /**
+     * Mask patient name for privacy
+     */
+    private String maskPatientName(String fullName) {
+        if (fullName == null || fullName.trim().isEmpty()) {
+            return "Anonymous Patient";
+        }
+        String[] parts = fullName.split(" ");
+        if (parts.length >= 2) {
+            return parts[0] + " " + parts[1].charAt(0) + ".";
+        }
+        return parts[0];
+    }
+
+    /**
+     * Get patient name for appointment
+     */
+    private String getPatientNameForAppointment(Appointment appointment) {
+        try {
+            // You might need to call patient service to get patient name
+            // For now, return a placeholder
+            return "Patient #" + appointment.getPatientId();
+        } catch (Exception e) {
+            return "Unknown Patient";
+        }
+    }
+
+    /**
+     * Get urgency level for appointment's case
+     */
+    private String getUrgencyLevelForAppointment(Long caseId) {
+        try {
+            // Call patient service to get case details
+            // For now, return a default value
+            return "ROUTINE";
+        } catch (Exception e) {
+            return "ROUTINE";
+        }
+    }
 
     // 17. Reschedule Appointment Implementation
     @Transactional

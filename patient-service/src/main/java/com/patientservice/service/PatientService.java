@@ -261,8 +261,6 @@ public class PatientService {
         List<Case> tempCases = new ArrayList<>();
         List<CaseAssignment> assignments = new ArrayList<>();
 
-        //Todo : Below condition must be checked again, that not only this assignment status should be checked...
-
         assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.ACCEPTED );
         System.out.println("Getting assignments for doctor: " + doctorId);
         System.out.println("Doctor assignments count: " + assignments.size());

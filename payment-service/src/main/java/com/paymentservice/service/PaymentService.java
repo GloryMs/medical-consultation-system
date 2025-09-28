@@ -126,6 +126,13 @@ public class PaymentService {
                 .collect(Collectors.toList());
     }
 
+    public List<PaymentHistoryDto> getDoctorPaymentHistory(Long doctorId) {
+        List<Payment> payments = paymentRepository.findByDoctorId(doctorId);
+        return payments.stream()
+                .map(this::mapToHistoryDto)
+                .collect(Collectors.toList());
+    }
+
     public List<Payment> getAllPaymentsBetweenDates(LocalDate startDate, LocalDate endDate) {
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end = endDate.atTime(23, 59, 59);
