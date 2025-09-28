@@ -137,6 +137,7 @@ public class SmartCaseAssignmentService {
             }
 
             List<DoctorCapacityDto> eligibleDoctors = new ArrayList<>();
+            List<DoctorCapacityDto> filteredDoctors = new ArrayList<>();
 
             System.out.println( "Calling: findEligibleDoctorsWithWorkload" );
 
@@ -151,13 +152,25 @@ public class SmartCaseAssignmentService {
                 }
             }
 
+            // Find if one of the eligible doctors had rejected the case before to exclude him:
+            List<Long> excludedDoctorIds = new ArrayList<>();
+            medicalCase.getAssignments().stream().filter(c->c.getStatus() == AssignmentStatus.REJECTED).
+                    findFirst().ifPresent(assignment->{excludedDoctorIds.add(assignment.getDoctorId());});
+
+            //Remove excluded doctors who rejected the case before:
+            filteredDoctors = eligibleDoctors.stream()
+                    .filter(doctor -> !excludedDoctorIds.contains(doctor.getDoctorId()))
+                    .toList();
+
+
             // Remove duplicates and filter by workload capacity
             Map<Long, DoctorCapacityDto> uniqueDoctors = new HashMap<>();
-            for (DoctorCapacityDto doctor : eligibleDoctors) {
+            for (DoctorCapacityDto doctor : filteredDoctors) {
                 System.out.println( "Removing  duplicated doctors");
                 if (!uniqueDoctors.containsKey(doctor.getDoctorId())) {
                     uniqueDoctors.put(doctor.getDoctorId(), doctor);
                 }
+
             }
 
             System.out.println( "final count of elegible doctors: " + uniqueDoctors.size());
@@ -710,7 +723,7 @@ public class SmartCaseAssignmentService {
 
             // Update doctor's workload
             try {
-                doctorServiceClient.updateDoctorWorkload(result.getDoctorCapacity().getDoctorId());
+                 patientEventProducer.sendUpdateDoctorWorkLoadTrigger(assignment.getDoctorId());
                 log.info("Triggered workload update for doctor {} after case assignment",
                         result.getDoctorCapacity().getDoctorId());
             } catch (Exception e) {

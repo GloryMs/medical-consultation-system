@@ -288,9 +288,9 @@ public class PatientController {
     }
 
     @GetMapping("/cases/doctor/{doctorId}")
-    public ResponseEntity<ApiResponse<List<CaseDto>>> getCasesForDoctor(
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getAssignedCasesForDoctor(
             @PathVariable("doctorId") Long doctorId) {
-        List<CaseDto> cases = patientService.getCasesforDoctor(doctorId);
+        List<CaseDto> cases = patientService.getAssignedCasesForDoctor(doctorId);
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 

@@ -23,8 +23,8 @@ public class DoctorEventConsumer {
         try {
             Long caseId = Long.valueOf(caseEvent.get("caseId").toString());
             String newStatus = caseEvent.get("newStatus").toString();
-            Long doctorId = caseEvent.get("doctorId") != null ? 
-                Long.valueOf(caseEvent.get("doctorId").toString()) : null;
+            Long doctorId = caseEvent.get("doctorId") != null ?
+                    Long.valueOf(caseEvent.get("doctorId").toString()) : null;
             
             log.info("Case status updated: case={}, status={}, doctor={}", caseId, newStatus, doctorId);
             
@@ -37,6 +37,18 @@ public class DoctorEventConsumer {
             
         } catch (Exception e) {
             log.error("Error processing case status update: {}", e.getMessage(), e);
+        }
+    }
+
+    @KafkaListener(topics = "case-update-doctor-workload-topic", groupId = "doctor-group")
+    public void handleUpdateDoctorWorkLoad(Map<String, Object> doctorEvent) {
+        try {
+            Long doctorId = Long.valueOf(doctorEvent.get("doctorId").toString());
+            log.info("Kafka - Updating workload for doctor {}", doctorId);
+            // Update doctor's workload or case assignments
+            workloadService.loadDoctorWorkload(doctorId);
+        } catch (Exception e) {
+            log.error("Kafka - Error updating workload for doctor: {}", e.getMessage(), e);
         }
     }
 

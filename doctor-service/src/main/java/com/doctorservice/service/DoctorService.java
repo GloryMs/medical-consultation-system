@@ -220,7 +220,7 @@ public class DoctorService {
 
         // Verify doctor is assigned to this case
         try {
-            List<CaseDto> assignedCases = patientServiceClient.getCasesByDoctorId(doctor.getId()).getBody().getData();
+            List<CaseDto> assignedCases = patientServiceClient.getNewAssignedCasesForDoctor(doctor.getId()).getBody().getData();
             CaseDto targetCase = assignedCases.stream()
                     .filter(c -> c.getId().equals(caseId))
                     .findFirst()
@@ -530,7 +530,17 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        return patientServiceClient.getCasesByDoctorId(doctor.getId()).getBody().getData();
+        List<CaseDto> assignedCases = new ArrayList<>();
+        try{
+            assignedCases = patientServiceClient.getNewAssignedCasesForDoctor(doctor.getId()).getBody().getData();
+            System.out.println("Doctor-Service: Assigned cases for doctor: "+
+                    doctor.getId() + " are: "+ assignedCases.size());
+        }catch (Exception e){
+            log.error("Failed to get assgined cases for doctor: " + doctor.getFullName() +
+                    " - Id:" + doctor.getId(), e);
+            e.printStackTrace();
+        }
+        return assignedCases;
     }
 
     public List<CaseDto> browseCasesPool(Long userId, String specialization) {
@@ -661,22 +671,17 @@ public class DoctorService {
      * Get recent active cases for dashboard
      */
     private List<DashboardCaseDto> getRecentActiveCases(Long doctorId) {
+        List<DashboardCaseDto> activeCases = new ArrayList<>();
         try {
-            // Get assigned cases from patient service
-            var response = patientServiceClient.getCasesByDoctorId(doctorId);
-            if (response != null && response.getBody() != null && response.getBody().getData() != null) {
-                return response.getBody().getData().stream()
-                        .filter(caseDto -> Arrays.asList("ASSIGNED", "ACCEPTED", "SCHEDULED", "IN_PROGRESS")
-                                .contains(caseDto.getStatus()))
-                        .sorted((c1, c2) -> c2.getCreatedAt().compareTo(c1.getCreatedAt()))
-                        .limit(3)
-                        .map(this::convertToDashboardCaseDto)
-                        .collect(Collectors.toList());
-            }
+            activeCases = patientServiceClient.getDoctorActiveCases(doctorId).getBody().getData().
+                    stream().limit(3).map(this :: convertToDashboardCaseDto).toList();
+            System.out.println("Doctor-Service: Recent active cases for doctor: "+
+                    doctorId + " are: "+ activeCases.size());
         } catch (Exception e) {
             log.error("Failed to get recent cases for doctor {}: {}", doctorId, e.getMessage());
+            e.printStackTrace();
         }
-        return new ArrayList<>();
+        return activeCases;
     }
 
     /**

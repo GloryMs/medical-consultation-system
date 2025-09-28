@@ -108,16 +108,14 @@ public class PatientService {
         caseRepository.save(saved);
 
         // Trigger smart case assignment asynchronously
-        CompletableFuture.runAsync(() -> {
-            try {
-                // 🔥 NEW: Send Kafka event after saving new case to trigger SmartCaseAssignmentService
-                patientEventProducer.sendStartSmartCaseAssignmentService(saved.getId());
-            } catch (Exception e) {
-                System.out.println("Failed to assign case automatically: " +  saved.getId());
-                System.out.println(e.getMessage());
-                e.printStackTrace();
-            }
-        });
+        try {
+            // 🔥 NEW: Send Kafka event after saving new case to trigger SmartCaseAssignmentService
+            patientEventProducer.sendStartSmartCaseAssignmentService(saved.getId());
+        } catch (Exception e) {
+            System.out.println("Failed to assign case automatically: " +  saved.getId());
+            System.out.println(e.getMessage());
+            e.printStackTrace();
+        }
 
         return saved;
     }
@@ -265,20 +263,19 @@ public class PatientService {
         System.out.println("Getting assignments for doctor: " + doctorId);
         System.out.println("Doctor assignments count: " + assignments.size());
         if( assignments != null && !assignments.isEmpty() ){
-            //Get related cases
-            assignments.stream().filter(a->
-                    a.getCaseEntity().getStatus().equals(ASSIGNED) ||
-                            a.getCaseEntity().getStatus().equals(ACCEPTED) ||
-                            a.getCaseEntity().getStatus().equals(SCHEDULED) ||
-                            a.getCaseEntity().getStatus().equals(PAYMENT_PENDING) ||
-                            a.getCaseEntity().getStatus().equals(IN_PROGRESS)).findFirst().
-                    ifPresent(c->{
-                            tempCases.add(c.getCaseEntity());
-                        }
-                    );
+            //Get related active cases
+            tempCases = new ArrayList<>(assignments.stream().map(CaseAssignment::getCaseEntity).
+                    filter(caseEntity ->
+                            caseEntity.getStatus().equals(ACCEPTED) ||
+                                    caseEntity.getStatus().equals(SCHEDULED) ||
+                                    caseEntity.getStatus().equals(PAYMENT_PENDING) ||
+                                    caseEntity.getStatus().equals(IN_PROGRESS)).
+                    toList());
+            System.out.println("tempCases (active cases) count: " + tempCases.size());
+
             if( tempCases != null && !tempCases.isEmpty() ){
                 cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
-                System.out.println("Doctor active assigned cases count: " + cases.size());
+                System.out.println("Doctor active cases count: " + cases.size());
             }
         }
         return cases;
@@ -291,18 +288,27 @@ public class PatientService {
         return caseRepository.findByPatientIdAndIsDeletedFalse(patient.getId()).stream().map(this::convertToCaseDto).collect(Collectors.toList());
     }
 
-    public List<CaseDto> getCasesforDoctor(Long doctorId) {
-        List<CaseAssignment> caseAssignments =  assignmentRepository.findByDoctorId( doctorId);
-        List<Case> casesForDoctor = new ArrayList<>();
-        List<Case> allCasses = caseRepository.findAllCasesByIsDeletedFalse();
+    public List<CaseDto> getAssignedCasesForDoctor(Long doctorId) {
+        List<CaseDto> cases = new ArrayList<>();
+        List<CaseAssignment> assignments;
 
-        for (CaseAssignment caseAssignment : caseAssignments) {
-            Case newCase = allCasses.stream().
-                    filter(p-> p.getId().equals(caseAssignment.getCaseEntity().getId()) ).toList().get(0);
-            casesForDoctor.add(newCase);
+        assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.PENDING );
+        System.out.println("Getting assignments for doctor: " + doctorId);
+        System.out.println("Doctor assignments count: " + assignments.size());
+        if(!assignments.isEmpty()){
+            //Get related ASSIGNED cases
+            List<Case> tempCases = new ArrayList<>(assignments.stream().map(CaseAssignment::getCaseEntity).
+                    filter(caseEntity ->
+                    caseEntity.getStatus().equals(ASSIGNED)).
+                    toList());
+            System.out.println("tempCases assignments count: " + tempCases.size());
+
+            if(!tempCases.isEmpty()){
+                cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
+                System.out.println("Doctor assigned cases count: " + cases.size());
+            }
         }
-
-        return casesForDoctor.stream().map(this::convertToCaseDto).collect(Collectors.toList());
+        return cases;
     }
 
     public List<CaseDto> getCasesPool(String specialization){
@@ -754,6 +760,7 @@ public class PatientService {
             throw new BusinessException("Assignment cannot be accepted", HttpStatus.BAD_REQUEST);
         }
 
+        String oldStatus = caseAssignment.getCaseEntity().getStatus().toString();
         caseAssignment.setStatus(AssignmentStatus.ACCEPTED);
         caseAssignment.setRespondedAt(LocalDateTime.now());
         caseAssignmentRepository.save(caseAssignment);
@@ -763,6 +770,12 @@ public class PatientService {
             Case medicalCase = caseAssignment.getCaseEntity();
             medicalCase.setStatus(ACCEPTED);
             caseRepository.save(medicalCase);
+            String status = medicalCase.getStatus().toString();
+            //Send Kafka Notification for the patient that his case was assigned and accepted by the doctor
+            patientEventProducer.sendCaseStatusUpdateEvent(
+                    medicalCase.getId(), oldStatus, status,
+                    medicalCase.getPatient().getId(), doctorId
+            );
         }
     }
 
@@ -833,7 +846,7 @@ public class PatientService {
         }
 
         if (assignment.getStatus() != AssignmentStatus.PENDING) {
-            throw new BusinessException("Assignment cannot be accepted", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("Assignment cannot be rejected", HttpStatus.BAD_REQUEST);
         }
 
         assignment.setStatus(AssignmentStatus.REJECTED);
@@ -841,13 +854,9 @@ public class PatientService {
         assignment.setRespondedAt(LocalDateTime.now());
         caseAssignmentRepository.save(assignment);
 
-        // Update doctor's case load
-        /*TODO
-        *  1- Call update doctor work load function in db
-        *  2- Trigger case assignment algorithm*/
-//        doctor.setCurrentCaseLoad(Math.max(0, doctor.getCurrentCaseLoad() - 1));
-//        doctor.setRejectedCases(doctor.getRejectedCases() + 1);
-//        doctorRepository.save(doctor);
+        // 🔥 Send Kafka event after saving new case to trigger SmartCaseAssignmentService
+        patientEventProducer.sendStartSmartCaseAssignmentService(assignment.getCaseEntity().getId());
+
     }
 
     public static CaseAssignmentDto assignmentDtoCovert(CaseAssignment assignment) {
@@ -939,10 +948,12 @@ public class PatientService {
         return dto;
     }
 
-    public List<NotificationDto> getMyNotifications(Long patientId){
+    public List<NotificationDto> getMyNotifications(Long userId){
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
         List<NotificationDto> dtos = new ArrayList<>();
         try{
-            dtos = notificationServiceClient.getUserNotifications(patientId).getBody().getData();
+            dtos = notificationServiceClient.getUserNotifications(patient.getId()).getBody().getData();
         } catch (Exception e) {
             log.error(e.getMessage());
         }

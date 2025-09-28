@@ -8,7 +8,6 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @FeignClient(name = "patient-service")
@@ -20,7 +19,7 @@ public interface PatientServiceClient {
                           @RequestParam Long doctorId);
 
     @GetMapping("/api/patients/cases/doctor/{doctorId}")
-    ResponseEntity<ApiResponse<List<CaseDto>>> getCasesByDoctorId(@PathVariable Long doctorId);
+    ResponseEntity<ApiResponse<List<CaseDto>>> getNewAssignedCasesForDoctor(@PathVariable Long doctorId);
 
     @GetMapping("/api/patients/cases/pool")
     ResponseEntity<ApiResponse<List<CaseDto>>> getCasesPool(@RequestParam String specialization);

@@ -43,7 +43,7 @@ public class PatientEventProducer {
         caseEvent.put("timestamp", System.currentTimeMillis());
 
         kafkaTemplate.send("case-status-updated-topic", caseEvent);
-        log.info("Case status updated event sent for case: {}", caseId);
+        log.info("Kafka - Case status updated event sent for case: {}", caseId);
     }
 
     public void sendSubscriptionCreatedEvent(Long patientId, String planType, Double amount) {
@@ -57,7 +57,7 @@ public class PatientEventProducer {
                 .build();
 
         kafkaTemplate.send("notification-topic", notification);
-        log.info("Subscription notification sent for patient: {}", patientId);
+        log.info("Kafka - Subscription notification sent for patient: {}", patientId);
     }
 
     public void sendStartSmartCaseAssignmentService(Long caseId){
@@ -67,8 +67,16 @@ public class PatientEventProducer {
         caseEvent.put("timestamp", System.currentTimeMillis());
 
         kafkaTemplate.send("case-create-assign-topic", caseEvent);
-        log.info("Trigger SmartCaseAssignmentService for case: {}", caseId);
+        log.info("Kafka - Trigger SmartCaseAssignmentService for case: {}", caseId);
 
+    }
+
+    public void sendUpdateDoctorWorkLoadTrigger(Long doctorId){
+        Map<String, Object> doctorEvent = new HashMap<>();
+        doctorEvent.put("doctorId", doctorId);
+        doctorEvent.put("timestamp", System.currentTimeMillis());
+        kafkaTemplate.send("case-update-doctor-workload-topic", doctorEvent);
+        log.info("Kafka - Trigger update doctor workload for doctor: {}", doctorId);
     }
 
     public void sendRescheduleRequestEvent(Long caseId, Long patientId, Long doctorId, String reason) {
@@ -82,7 +90,7 @@ public class PatientEventProducer {
                 .build();
 
         kafkaTemplate.send("notification-topic", doctorNotification);
-        log.info("Reschedule request notification sent to doctor: {}", doctorId);
+        log.info("Kafka - Reschedule request notification sent to doctor: {}", doctorId);
     }
 
     public void sendAssignmentNotification(Long senderId, Long receiverId,
@@ -97,6 +105,6 @@ public class PatientEventProducer {
                 .build();
 
         kafkaTemplate.send("notification-topic", doctorNotification);
-        log.info("Reschedule request notification sent to doctor: {}", receiverId);
+        log.info("Kafka - Assignment Notification for case {}", caseId);
     }
 }
