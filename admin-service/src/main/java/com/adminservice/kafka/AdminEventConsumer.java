@@ -7,7 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Map;
+
+import static com.adminservice.util.CustomLocalDateTimeParser.parseCustomFormat;
 
 @Component
 @RequiredArgsConstructor
@@ -48,6 +51,28 @@ public class AdminEventConsumer {
             
         } catch (Exception e) {
             log.error("Error processing payment event: {}", e.getMessage(), e);
+        }
+    }
+
+    @KafkaListener(topics = "case-appointment-cancellation-topic", groupId = "admin-group")
+    public void handleCaseCancellation(Map<String, Object> appointmentCancellationEvent) {
+        try {
+            Long appointmentId = Long.valueOf(appointmentCancellationEvent.get("appointmentId").toString());
+            Long caseId = Long.valueOf(appointmentCancellationEvent.get("caseId").toString());
+            Long doctorId = Long.valueOf(appointmentCancellationEvent.get("doctorId").toString());
+            Long patientId = Long.valueOf(appointmentCancellationEvent.get("patientId").toString());
+            LocalDateTime appointmentTime = parseCustomFormat(appointmentCancellationEvent.
+                    get("appointmentTime").toString());
+            //parseCustomFormat
+
+            log.info("Appointment {} that was scheduled on {}, had been cancelled by doctor {},"+
+                            " for case {} and patient {}",
+                    appointmentId, appointmentTime, doctorId, caseId, patientId);
+
+            // Todo you must process refund:
+
+        } catch (Exception e) {
+            log.error("Error processing refund regarding cancelled appointment: {}", e.getMessage(), e);
         }
     }
 }

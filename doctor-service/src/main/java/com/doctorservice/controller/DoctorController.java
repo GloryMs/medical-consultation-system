@@ -120,6 +120,22 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
+    @PutMapping("/appointments/{appointmentId}/complete")
+    public ResponseEntity<ApiResponse<Void>> completeAppointment(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long appointmentId){
+        doctorService.completeAppointment(userId, appointmentId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Appointment completed"));
+    }
+
+    @PutMapping("/appointments/{appointmentId}/cancel")
+    public ResponseEntity<ApiResponse<Void>> cancelAppointment(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long appointmentId){
+        doctorService.cancelAppointment(userId, appointmentId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Appointment completed"));
+    }
+
     @GetMapping("/appointments/{patientId}")
     public ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointments(
             @PathVariable Long patientId) {

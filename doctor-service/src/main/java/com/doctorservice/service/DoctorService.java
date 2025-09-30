@@ -313,6 +313,8 @@ public class DoctorService {
         return saved;
     }
 
+
+
     public List<AppointmentDto> getDoctorAppointments(Long userId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
@@ -877,6 +879,42 @@ public class DoctorService {
         appointment.setStatus(AppointmentStatus.RESCHEDULED);
 
         appointmentRepository.save(appointment);
+    }
+
+    @Transactional
+    public void completeAppointment(Long userId, Long appointmentId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
+
+        if (!appointment.getDoctor().getId().equals(doctor.getId())) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+        appointment.setStatus(AppointmentStatus.COMPLETED);
+
+        appointmentRepository.save(appointment);
+    }
+
+    @Transactional
+    public void cancelAppointment(Long userId, Long appointmentId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
+
+        if (!appointment.getDoctor().getId().equals(doctor.getId())) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+        appointment.setStatus(AppointmentStatus.CANCELLED);
+
+        appointmentRepository.save(appointment);
+
+        //Send Kafka notification for the Patient, and event for the admin:
+        doctorEventProducer.sendAppointmentCancellationEvent( appointmentId, appointment.getCaseId(),
+                appointment.getDoctor().getId(), appointment.getPatientId(), appointment.getScheduledTime());
     }
 
     @Transactional

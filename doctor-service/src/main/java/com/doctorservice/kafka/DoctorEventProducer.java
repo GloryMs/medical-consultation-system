@@ -80,4 +80,43 @@ public class DoctorEventProducer {
             log.error("Error sending case fee update event for case {}: {}", caseId, e.getMessage(), e);
         }
     }
+
+    public void sendAppointmentCancellationEvent (Long appointmentId, Long caseId,
+                                                  Long doctorId, Long patientId, LocalDateTime appointmentTime) {
+        try {
+            // Create case fee update event
+            Map<String, Object> appointmentCancellationEvent = new HashMap<>();
+            appointmentCancellationEvent.put("appointmentId", appointmentId);
+            appointmentCancellationEvent.put("caseId", caseId);
+            appointmentCancellationEvent.put("doctorId", doctorId);
+            appointmentCancellationEvent.put("patientId", patientId);
+            appointmentCancellationEvent.put("appointmentTime", appointmentTime);
+            appointmentCancellationEvent.put("timestamp", System.currentTimeMillis());
+
+            // Send event to admin for refund
+            kafkaTemplate.send("case-appointment-cancellation-topic", appointmentCancellationEvent);
+            log.info("Appointment Cancellation event sent for case: {}, and patient {}",caseId,
+                    patientId);
+
+            // Send notification to patient about appointment cancellation
+            NotificationDto patientNotification = NotificationDto.builder()
+                    .senderId(doctorId)
+                    .receiverId(patientId)
+                    .title("Appointment Cancellation")
+                    .message("Doctor "+ doctorId +" has cancelled the appointment that was scheduled for "+
+                            " your case: "+ caseId +
+                            ", on: " + appointmentTime)
+                    .type(NotificationType.APPOINTMENT)
+                    .sendEmail(true)
+                    .priority(NotificationPriority.CRITICAL)
+                    .build();
+
+            kafkaTemplate.send("notification-topic", patientNotification);
+            log.info("Appointment Cancellation notification sent for case: {}, and patient {}",caseId,
+                    patientId);
+
+        } catch (Exception e) {
+            log.error("Error sending Appointment Cancellation notification for case: {}: {}", caseId, e.getMessage(), e);
+        }
+    }
 }
