@@ -1124,41 +1124,42 @@ public class PatientService {
         log.info("Updating case {} attachments for user {} with {} files", caseId, userId, files.size());
 
         // Validate user access to case and case state
-        documentService.validateCaseFileAccess(caseId, userId);
+        if(documentService.validateCaseFileAccess(caseId, userId)){
+            // Validate patient profile and subscription
+            Patient patient = patientRepository.findByUserId(userId)
+                    .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
-        // Validate patient profile and subscription
-        Patient patient = patientRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+            if (patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+                throw new BusinessException("Active subscription required to upload files", HttpStatus.PAYMENT_REQUIRED);
+            }
 
-        if (patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
-            throw new BusinessException("Active subscription required to upload files", HttpStatus.PAYMENT_REQUIRED);
+            try {
+                // Add files to the case
+                List<Document> newDocuments = documentService.addFilesToCase(files, caseId, userId);
+
+                // Create summary with new files information
+                CaseAttachmentsDto result = documentService.createAttachmentsSummaryWithNewFiles(caseId,
+                        userId, newDocuments);
+
+                // Log the successful operation
+                log.info("Successfully updated case {} with {} new attachments for user {}",
+                        caseId, newDocuments.size(), userId);
+
+                return result;
+
+            } catch (BusinessException e) {
+                log.warn("Business rule violation in case attachment update: {}", e.getMessage());
+                throw e;
+            } catch (Exception e) {
+                log.error("Unexpected error updating case {} attachments for user {}: {}",
+                        caseId, userId, e.getMessage(), e);
+                throw new BusinessException("Unable to update case attachments at this time",
+                        HttpStatus.INTERNAL_SERVER_ERROR);
+            }
         }
-
-        try {
-            // Add files to the case
-            List<Document> newDocuments = documentService.addFilesToCase(files, caseId, userId);
-
-            // Create summary with new files information
-            CaseAttachmentsDto result = documentService.createAttachmentsSummaryWithNewFiles(caseId, userId, newDocuments);
-
-            // Send notification about new files
-            //CompletableFuture.runAsync(() -> sendFileUploadNotification(caseId, userId, newDocuments.size()));
-
-            // Log the successful operation
-            log.info("Successfully updated case {} with {} new attachments for user {}",
-                    caseId, newDocuments.size(), userId);
-
-            return result;
-
-        } catch (BusinessException e) {
-            log.warn("Business rule violation in case attachment update: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Unexpected error updating case {} attachments for user {}: {}",
-                    caseId, userId, e.getMessage(), e);
+        else
             throw new BusinessException("Unable to update case attachments at this time",
                     HttpStatus.INTERNAL_SERVER_ERROR);
-        }
     }
 
     /**
@@ -1168,26 +1169,34 @@ public class PatientService {
         log.info("Retrieving case {} attachments for user {}", caseId, userId);
 
         // Validate user access to case
-        documentService.validateCaseFileAccess(caseId, userId);
+        if(documentService.validateCaseFileAccess(caseId, userId)){
+            System.out.println("Case: " + caseId + " validation for accessing its files done.");
 
-        try {
-            CaseAttachmentsDto attachments = documentService.getCaseAttachmentsSummary(caseId, userId);
+            try {
+                CaseAttachmentsDto attachments = documentService.getCaseAttachmentsSummary(caseId, userId);
 
-            // Set case title from database
-            Case medicalCase = caseRepository.findById(caseId)
-                    .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
-            attachments.setCaseTitle(medicalCase.getCaseTitle());
+                // Set case title from database
+                Case medicalCase = caseRepository.findById(caseId)
+                        .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+                attachments.setCaseTitle(medicalCase.getCaseTitle());
 
-            log.info("Retrieved {} attachments for case {} by user {}",
-                    attachments.getTotalDocuments(), caseId, userId);
+                log.info("Retrieved {} attachments for case {} by user {}",
+                        attachments.getTotalDocuments(), caseId, userId);
 
-            return attachments;
+                return attachments;
 
-        } catch (Exception e) {
-            log.error("Error retrieving case {} attachments for user {}: {}",
-                    caseId, userId, e.getMessage(), e);
+            } catch (Exception e) {
+                log.error("Error retrieving case {} attachments for user {}: {}",
+                        caseId, userId, e.getMessage(), e);
+                throw new BusinessException("Failed to retrieve case attachments", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
+        else{
+            log.error("Access validation for case {} by user {} failed",
+                    caseId, userId);
             throw new BusinessException("Failed to retrieve case attachments", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+
     }
 
 

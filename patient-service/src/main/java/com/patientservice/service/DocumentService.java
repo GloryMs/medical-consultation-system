@@ -1,11 +1,15 @@
 package com.patientservice.service;
 
+import com.commonlibrary.dto.CustomDoctorInfoDto;
+import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.entity.CaseStatus;
 import com.commonlibrary.entity.DocumentType;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.CaseAttachmentsDto;
 import com.patientservice.entity.Case;
+import com.patientservice.entity.CaseAssignment;
 import com.patientservice.entity.Document;
+import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.repository.CaseRepository;
 import com.patientservice.repository.DocumentRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +35,7 @@ public class DocumentService {
     private final FileStorageService fileStorageService;
     private final FileValidationService fileValidationService;
     private final CaseRepository caseRepository;
+    private final DoctorServiceClient doctorServiceClient;
 
     /**
      * Process and save uploaded files for a case
@@ -110,12 +116,12 @@ public class DocumentService {
     /**
      * Retrieve file content for viewing
      */
-    public byte[] getFileContent(Long documentId, Long userId) throws Exception {
+    public byte[] getFileContent(Long caseId, Long documentId, Long userId) throws Exception {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new BusinessException("Document not found", HttpStatus.NOT_FOUND));
 
         // Verify user has access to this document
-        if (!hasAccessToDocument(document, userId)) {
+        if (!hasAccessToDocument(caseId, document, userId)) {
             throw new BusinessException("Unauthorized access to document", HttpStatus.FORBIDDEN);
         }
 
@@ -154,11 +160,11 @@ public class DocumentService {
     /**
      * Delete a document
      */
-    public void deleteDocument(Long documentId, Long userId) {
+    public void deleteDocument(Long caseId, Long documentId, Long userId) {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new BusinessException("Document not found", HttpStatus.NOT_FOUND));
 
-        if (!hasAccessToDocument(document, userId)) {
+        if (!hasAccessToDocument(caseId, document, userId)) {
             throw new BusinessException("Unauthorized access to document", HttpStatus.FORBIDDEN);
         }
 
@@ -202,17 +208,46 @@ public class DocumentService {
     /**
      * Check if user has access to document
      */
-    private boolean hasAccessToDocument(Document document, Long userId) {
+    private boolean hasAccessToDocument(Long caseId, Document document, Long userId) {
+
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+        //Check if document belongs to the same case:
+        if( !document.getMedicalCase().equals(medicalCase) ) {
+            return false;
+        }
+
         // Patient can access their own case documents
-        if (document.getMedicalCase().getPatient().getUserId().equals(userId)) {
+        if(medicalCase.getPatient().getUserId().equals(userId)){
             return true;
         }
 
-        /*TODO */
-        // Doctor can access if assigned to the case
-        // This would require checking case assignments
-        // For now, allow if user uploaded the document
-        return document.getUploadedBy().equals(userId);
+        // Check if Doctor can access cas's documents:
+        // Check if user is the case owner Doctor/Patient
+        Optional<CaseAssignment> assignment = medicalCase.getAssignments().stream().
+                filter(a->a.getStatus().equals(AssignmentStatus.ACCEPTED)).findFirst();
+        Long doctorId = null;
+        if(assignment.isPresent()){
+            doctorId = assignment.get().getDoctorId();
+        }
+        CustomDoctorInfoDto dto = null;
+        if( doctorId != null ){
+            try{
+                dto = doctorServiceClient.getDoctorCustomInfo( doctorId ).getBody().getData();
+            } catch (Exception e) {
+                log.error("Cannot get doctor info for case: " + caseId, e);
+                return false;
+            }
+        }
+        if (doctorId != null && !dto.getUserId().equals(userId))
+        {
+            System.out.println("Unauthorized access to case:" + caseId);
+            return false;
+        }
+        else {
+            return true;
+        }
     }
 
     /**
@@ -359,21 +394,87 @@ public class DocumentService {
     /**
      * Validate user has permission to add files to case
      */
-    public void validateCaseFileAccess(Long caseId, Long userId) {
+    public boolean validateCaseFileAccess(Long caseId, Long userId) {
         Case medicalCase = caseRepository.findById(caseId)
                 .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
 
-        // Check if user is the case owner
-        if (!medicalCase.getPatient().getUserId().equals(userId)) {
-            throw new BusinessException("Unauthorized access to case", HttpStatus.FORBIDDEN);
+        // Patient can access their own case documents
+        if(medicalCase.getPatient().getUserId().equals(userId)){
+            return true;
         }
 
-        // Check if case is in a state that allows file uploads
-        if (medicalCase.getStatus() == CaseStatus.CLOSED ||
-                medicalCase.getStatus() == CaseStatus.REJECTED ||
-                medicalCase.getStatus() == CaseStatus.CONSULTATION_COMPLETE
-        ) {
-            throw new BusinessException("Cannot upload files to closed or cancelled cases", HttpStatus.BAD_REQUEST);
+        // Check if Doctor can access cas's documents:
+        // Check if user is the case owner Doctor/Patient
+        Optional<CaseAssignment> assignment = medicalCase.getAssignments().stream().
+                filter(a->a.getStatus().equals(AssignmentStatus.ACCEPTED)).findFirst();
+        Long doctorId = null;
+        if(assignment.isPresent()){
+            doctorId = assignment.get().getDoctorId();
         }
+        CustomDoctorInfoDto dto = null;
+        if( doctorId != null ){
+            try{
+                dto = doctorServiceClient.getDoctorCustomInfo( doctorId ).getBody().getData();
+            } catch (Exception e) {
+                log.error("Cannot get doctor info for case: " + caseId, e);
+                return false;
+            }
+        }
+
+        System.out.println("Doctor id: "+ dto.getId() + ", doctorUserId: "+
+                dto.getUserId() + ", doctor name: " + dto.getFullName());
+        System.out.println("Patient id: " + medicalCase.getPatient().getUserId());
+        System.out.println("UserId provided by method call: " + userId);
+
+        if (doctorId != null && !dto.getUserId().equals(userId))
+        {
+            System.out.println("Unauthorized access to case:" + caseId);
+            return false;
+        }
+        else {
+            return true;
+        }
+
+
+//        Case medicalCase = caseRepository.findById(caseId)
+//                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+//
+//        // Check if user is the case owner Doctor/Patient
+//        Optional<CaseAssignment> assignment = medicalCase.getAssignments().stream().
+//                filter(a->a.getStatus().equals(AssignmentStatus.ACCEPTED)).findFirst();
+//        Long doctorId = null;
+//        if(assignment.isPresent()){
+//            doctorId = assignment.get().getDoctorId();
+//        }
+//        CustomDoctorInfoDto dto = null;
+//        if( doctorId != null ){
+//            try{
+//                dto = doctorServiceClient.getDoctorCustomInfo( doctorId ).getBody().getData();
+//            } catch (Exception e) {
+//                log.error("Cannot get doctor info for case: " + caseId, e);
+//                throw new RuntimeException(e);
+//            }
+//        }
+//
+//        System.out.println("Doctor id: "+ dto.getId() + ", doctorUserId: "+
+//                dto.getUserId() + ", doctor name: " + dto.getFullName());
+//        System.out.println("Patient id: " + medicalCase.getPatient().getUserId());
+//        System.out.println("UserId provided by method call: " + userId);
+//
+//        if (!medicalCase.getPatient().getUserId().equals(userId) // Patient related to this case
+//                && (doctorId != null && !dto.getUserId().equals(userId)) // Doctor related to this case
+//        )
+//        {
+//            throw new BusinessException("Unauthorized access to case:" + caseId, HttpStatus.FORBIDDEN);
+//        }
+//
+//        // Check if case is in a state that allows file uploads
+//        if (medicalCase.getStatus() == CaseStatus.CLOSED ||
+//                medicalCase.getStatus() == CaseStatus.REJECTED ||
+//                medicalCase.getStatus() == CaseStatus.CONSULTATION_COMPLETE
+//        )
+//        {
+//            throw new BusinessException("Cannot upload files to closed or cancelled cases", HttpStatus.BAD_REQUEST);
+//        }
     }
 }

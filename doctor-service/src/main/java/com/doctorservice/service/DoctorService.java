@@ -189,6 +189,17 @@ public class DoctorService {
         return mapToDto(updatedDoctor);
     }
 
+    public CustomDoctorInfoDto getDoctorCustomInfo(Long doctorId){
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        CustomDoctorInfoDto doctorInfoDto = new CustomDoctorInfoDto();
+        doctorInfoDto.setId(doctor.getId());
+        doctorInfoDto.setUserId(doctor.getUserId());
+        doctorInfoDto.setFullName(doctor.getFullName());
+
+        return doctorInfoDto;
+    }
+
     @Transactional
     public void acceptCase(Long userId, Long caseId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
@@ -220,7 +231,7 @@ public class DoctorService {
 
         // Verify doctor is assigned to this case
         try {
-            List<CaseDto> assignedCases = patientServiceClient.getNewAssignedCasesForDoctor(doctor.getId()).getBody().getData();
+            List<CaseDto> assignedCases = patientServiceClient.getDoctorActiveCases(doctor.getId()).getBody().getData();
             CaseDto targetCase = assignedCases.stream()
                     .filter(c -> c.getId().equals(caseId))
                     .findFirst()
@@ -238,7 +249,7 @@ public class DoctorService {
             }
 
             // Get patient ID from case (you might need to add this to CaseDto)
-            CustomPatientDto patientDto = getCustomPatientInfo(caseId, doctor.getId()); // Helper method
+            CustomPatientDto patientDto = getCustomPatientInfo(caseId, userId); // Helper method
 
             // Send Kafka event to update case and notify patient
             doctorEventProducer.sendCaseFeeUpdateEvent(caseId, doctor.getId(), doctor.getUserId(),
@@ -253,18 +264,21 @@ public class DoctorService {
         }
     }
 
+
     /**
      * Helper method to get patient ID from case
      */
-    private CustomPatientDto getCustomPatientInfo(Long caseId, Long doctorId) {
+    public CustomPatientDto getCustomPatientInfo(Long caseId, Long userId) {
         try {
+            Doctor doctor = doctorRepository.findByUserId(userId)
+                    .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
             // Call patient service to get case details
-            CustomPatientDto patientDto = patientServiceClient.getCustomPatientInfo(caseId, doctorId).getBody().getData();
+            CustomPatientDto patientDto = patientServiceClient.getCustomPatientInfo(caseId, doctor.getId()).getBody().getData();
             return patientDto; // You might need to add this field to CaseDto
         } catch (Exception e) {
             log.error("Error getting patient custom info for case {}: {}", caseId, e.getMessage());
             e.printStackTrace();
-            throw new BusinessException("Could not retrieve case details", HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new BusinessException("Error getting patient custom info", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -541,6 +555,23 @@ public class DoctorService {
             e.printStackTrace();
         }
         return assignedCases;
+    }
+
+    public List<CaseDto> getActiveCases(Long userId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        List<CaseDto> activeCase = new ArrayList<>();
+        try{
+            activeCase = patientServiceClient.getDoctorActiveCases(doctor.getId()).getBody().getData();
+            System.out.println("Doctor-Service: Active cases for doctor: "+
+                    doctor.getId() + " are: "+ activeCase.size());
+        }catch (Exception e){
+            log.error("Failed to get Active cases for doctor: " + doctor.getFullName() +
+                    " - Id:" + doctor.getId(), e);
+            e.printStackTrace();
+        }
+        return activeCase;
     }
 
     public List<CaseDto> browseCasesPool(Long userId, String specialization) {

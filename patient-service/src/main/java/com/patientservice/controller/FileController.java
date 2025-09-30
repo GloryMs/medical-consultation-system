@@ -23,13 +23,14 @@ public class FileController {
     /**
      * Serve file content directly (for viewing in browser)
      */
-    @GetMapping("/{documentId}")
+    @GetMapping("/{caseId}/{documentId}")
     public ResponseEntity<byte[]> serveFile(
+            @PathVariable Long caseId,
             @PathVariable Long documentId,
             @RequestHeader("X-User-Id") Long userId) {
         
         try {
-            byte[] fileContent = documentService.getFileContent(documentId, userId);
+            byte[] fileContent = documentService.getFileContent(caseId, documentId, userId);
 
             Document document = documentService.getDocumentById( documentId );
             if( document == null ) {

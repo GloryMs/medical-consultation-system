@@ -82,6 +82,6 @@ public interface PatientServiceClient {
     @GetMapping("/cases/doctor/{doctorId}/metrics")
     ResponseEntity<ApiResponse<Object>> getDoctorCaseMetrics(@PathVariable("doctorId") Long doctorId);
 
-    @GetMapping("/api/patients/{caseId}/custom-info")
+    @GetMapping("/api/patients/cases/{caseId}/custom-info")
     ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId, @RequestParam Long doctorId );
 }

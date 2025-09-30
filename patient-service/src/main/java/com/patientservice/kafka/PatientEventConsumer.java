@@ -3,12 +3,15 @@ package com.patientservice.kafka;
 import com.commonlibrary.dto.CaseFeeUpdateEvent;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.SmartCaseAssignmentService;
+import com.patientservice.util.CustomLocalDateTimeParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -83,20 +86,41 @@ public class PatientEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "case-fee-update-topic", groupId = "patient-service-group")
-    public void handleCaseFeeUpdate(CaseFeeUpdateEvent event) {
-        try {
-            log.info("Received case fee update event for case: {} with fee: ${}",
-                    event.getCaseId(), event.getConsultationFee());
+    @KafkaListener(topics = "case-fee-update-topic", groupId = "patient-group")
+    public void handleCaseFeeUpdate(Map<String, Object> feeEvent) {
+        try
+        {
 
-            patientService.updateCaseConsultationFee(event.getCaseId(),
-                    event.getConsultationFee(), event.getFeeSetAt());
+            Long caseId = feeEvent.get("caseId") != null ?
+                    Long.valueOf(feeEvent.get("caseId").toString()) : null;
+//            Long doctorId = Long.valueOf(feeEvent.get("doctorId").toString());
+//            Long doctor = Long.valueOf( feeEvent.get("doctorUserId").toString());
+//            Long patientId = Long.valueOf(feeEvent.get("patientId").toString());
+//            Long patientUserId = Long.valueOf(  feeEvent.get("patientUserId").toString());
+            BigDecimal consultationFee = feeEvent.get("consultationFee") != null?
+                    BigDecimal.valueOf(Long.parseLong(feeEvent.get("consultationFee").toString())) : null;
 
-            log.info("Successfully updated consultation fee for case: {}", event.getCaseId());
+            LocalDateTime feeSetAt;
+            String feeSetAtString = feeEvent.get("feeSetAt").toString();
+            try {
+                feeSetAt = CustomLocalDateTimeParser.parseCustomFormat(feeSetAtString);
+                System.out.println("Successfully parsed feeSetAt: " + feeSetAt);
+            } catch (IllegalArgumentException e) {
+                feeSetAt = LocalDateTime.now();
+                System.err.println("Failed to parse feeSetAt: " + e.getMessage());
+                // Handle the error appropriately, e.g., log it, return a default value, etc.
+            }
+            //feeEvent.get("eventType");
+
+
+            log.info("Received case fee update event for case: {} with fee: ${}", caseId, consultationFee);
+
+            patientService.updateCaseConsultationFee(caseId,consultationFee, feeSetAt);
+
+            log.info("Successfully updated consultation fee for case: {}", caseId);
 
         } catch (Exception e) {
-            log.error("Error processing case fee update event for case {}: {}",
-                    event.getCaseId(), e.getMessage(), e);
+            log.error("Error processing case fee update event for case : {}", e.getMessage(), e);
         }
     }
 }

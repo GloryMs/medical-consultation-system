@@ -344,7 +344,7 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(null, "Case claimed"));
     }
 
-    @GetMapping("/api/patients/{caseId}/custom-info")
+    @GetMapping("/cases/{caseId}/custom-info")
     ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId,
             @RequestParam Long doctorId){
         CustomPatientDto patientDto = new CustomPatientDto();

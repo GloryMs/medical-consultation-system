@@ -56,6 +56,12 @@ public class DoctorController {
                 .body(ApiResponse.success(profile, "Profile created successfully"));
     }
 
+    @GetMapping("/doctor/custom-info/{doctorId}")
+    public ResponseEntity<ApiResponse<CustomDoctorInfoDto>> getDoctorCustomInfo(
+            @PathVariable Long doctorId){
+        return ResponseEntity.ok(ApiResponse.success(doctorService.getDoctorCustomInfo(doctorId)));
+    }
+
     /**
      * Update Doctor Profile
      * Updates the doctor's profile information
@@ -80,6 +86,14 @@ public class DoctorController {
 
         doctorService.setCaseFee(userId, caseId, dto.getConsultationFee());
         return ResponseEntity.ok(ApiResponse.success(null, "Consultation fee set successfully"));
+    }
+
+    @GetMapping ("/cases/{caseId}/patient/custom")
+    public ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo(@PathVariable Long caseId,
+                        @RequestHeader("X-User-Id") Long userId){
+        //
+        CustomPatientDto customPatientInfo = doctorService.getCustomPatientInfo(caseId, userId);
+        return ResponseEntity.ok(ApiResponse.success(customPatientInfo));
     }
 
     @PostMapping("/cases/{caseId}/accept")
@@ -166,6 +180,13 @@ public class DoctorController {
     public ResponseEntity<ApiResponse<List<CaseDto>>> getAssignedCases(
             @RequestHeader("X-User-Id") Long userId) {
         List<CaseDto> cases = doctorService.getAssignedCases(userId);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
+    @GetMapping("/cases/active")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getActiveCases(
+            @RequestHeader("X-User-Id") Long userId) {
+        List<CaseDto> cases = doctorService.getActiveCases(userId);
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 

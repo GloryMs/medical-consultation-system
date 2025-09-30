@@ -45,17 +45,16 @@ public class DoctorEventProducer {
                                        Long patientUserId, BigDecimal consultationFee) {
         try {
             // Create case fee update event
-            CaseFeeUpdateEvent feeEvent = CaseFeeUpdateEvent.builder()
-                    .caseId(caseId)
-                    .doctorId(doctorId)
-                    .doctorUserId(doctorUserId)
-                    .patientId(patientId)
-                    .patientUserId(patientUserId)
-                    .consultationFee(consultationFee)
-                    .feeSetAt(LocalDateTime.now())
-                    .eventType("CASE_FEE_SET")
-                    .timestamp(System.currentTimeMillis())
-                    .build();
+            Map<String, Object> feeEvent = new HashMap<>();
+            feeEvent.put("caseId", caseId);
+            feeEvent.put("doctorId", doctorId);
+            feeEvent.put("doctorUserId", doctorUserId);
+            feeEvent.put("patientId", patientId);
+            feeEvent.put("patientUserId", patientUserId);
+            feeEvent.put("consultationFee", consultationFee);
+            feeEvent.put("feeSetAt", LocalDateTime.now());
+            feeEvent.put("eventType", "CASE_FEE_SET");
+            feeEvent.put("timestamp", System.currentTimeMillis());
 
             // Send event to update case in patient service
             kafkaTemplate.send("case-fee-update-topic", feeEvent);
@@ -63,10 +62,12 @@ public class DoctorEventProducer {
 
             // Send notification to patient about fee being set
             NotificationDto patientNotification = NotificationDto.builder()
-                    .senderId(doctorUserId)
-                    .receiverId(patientUserId)
+                    .senderId(doctorId)
+                    .receiverId(patientId)
                     .title("Consultation Fee Set")
-                    .message(String.format("Your doctor has set the consultation fee of $%.2f for your case. You can now proceed to schedule your appointment.", consultationFee))
+                    .message(String.format("Your doctor has set the consultation fee"+
+                            " of $%.2f for your case: "+ caseId +
+                            ". You have to wait for the doctor to schedule your appointment.", consultationFee))
                     .type(NotificationType.CASE)
                     .sendEmail(true)
                     .priority(NotificationPriority.MEDIUM)
