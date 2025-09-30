@@ -383,6 +383,7 @@ public class PatientService {
 
     @Transactional
     public void payConsultationFee(Long userId, ProcessPaymentDto paymentDto ) {
+        //This method will pay teh consultation fees and sedn confirmation for case appointmet to the doctor
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
@@ -407,9 +408,9 @@ public class PatientService {
             medicalCase.setStatus(IN_PROGRESS);
             caseRepository.save(medicalCase);
 
-            //Update Appointment status to be CONFIRMED
-            doctorServiceClient.confirmAppointment(updatedPayment.getCaseId(), updatedPayment.getPatientId(),
-                    updatedPayment.getDoctorId());
+            //Send Kafka Event to confirm case appointment scheduling
+            patientEventProducer.sendScheduleConfirmationEvent( updatedPayment.getCaseId(),
+                    updatedPayment.getPatientId(), updatedPayment.getDoctorId() );
         }
     }
 

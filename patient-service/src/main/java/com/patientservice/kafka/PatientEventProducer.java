@@ -107,4 +107,28 @@ public class PatientEventProducer {
         kafkaTemplate.send("notification-topic", doctorNotification);
         log.info("Kafka - Assignment Notification for case {}", caseId);
     }
+
+    public void sendScheduleConfirmationEvent(Long caseId, Long patientId, Long doctorId) {
+        // Send notification to Doctor
+        NotificationDto patientNotification = NotificationDto.builder()
+                .senderId(patientId != null ? patientId : 0L)
+                .receiverId(doctorId)
+                .title("Case appointment Confirmation")
+                .message("Patient has confirmed the appointment for case #" + caseId )
+                .type(NotificationType.APPOINTMENT)
+                .sendEmail(true)
+                .build();
+
+        kafkaTemplate.send("notification-topic", patientNotification);
+
+        // Send case status event
+        Map<String, Object> appointmentConfirmationEvent = new HashMap<>();
+        appointmentConfirmationEvent.put("caseId", caseId);
+        appointmentConfirmationEvent.put("patientId", patientId);
+        appointmentConfirmationEvent.put("doctorId", doctorId);
+        appointmentConfirmationEvent.put("timestamp", System.currentTimeMillis());
+
+        kafkaTemplate.send("case-appointment-confirmation-topic", appointmentConfirmationEvent);
+        log.info("Kafka - Appointment confirmation for case: {} , by patient {}, and doctor", caseId, patientId);
+    }
 }

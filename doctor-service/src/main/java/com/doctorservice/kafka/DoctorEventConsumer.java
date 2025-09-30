@@ -118,4 +118,21 @@ public class DoctorEventConsumer {
             log.error("Error processing user registration event: {}", e.getMessage(), e);
         }
     }
+
+    @KafkaListener(topics = "case-appointment-confirmation-topic", groupId = "doctor-group")
+    public void handleCaseAppointmentConfirmation(Map<String, Object> appointmentEvent) {
+        try {
+            Long caseId = Long.valueOf(appointmentEvent.get("caseId").toString());
+            Long patientId = Long.valueOf(appointmentEvent.get("patientId").toString());
+            Long doctorId = Long.valueOf(appointmentEvent.get("doctorId").toString());
+
+            log.info("Receiving appointment confirmation for case {}, and doctor{} from patient {}",
+                    caseId, doctorId, patientId);
+
+            doctorService.confirmAppointment(caseId, patientId, doctorId );
+
+        } catch (Exception e) {
+            log.error("Error processing case's appointment confirmation: {}", e.getMessage(), e);
+        }
+    }
 }
