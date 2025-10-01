@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class AppointmentDto{
 
+    private Long id;
     private Long caseId;
     private DoctorDto doctor;
     private Long patientId;

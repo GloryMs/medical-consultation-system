@@ -26,10 +26,11 @@ public class DoctorEventConsumer {
             Long doctorId = caseEvent.get("doctorId") != null ?
                     Long.valueOf(caseEvent.get("doctorId").toString()) : null;
             
-            log.info("Case status updated: case={}, status={}, doctor={}", caseId, newStatus, doctorId);
+            log.info("Kafka Patient Listener: Case status updated: case={}, status={}, doctor={}",
+                    caseId, newStatus, doctorId);
             
             // Update doctor's workload or case assignments
-            if (doctorId != null && "ACCEPTED".equals(newStatus)) {
+            if (doctorId != null && ("ACCEPTED".equals(newStatus) || "CLOSED".equals(newStatus))) {
                 workloadService.loadDoctorWorkload(doctorId);
             } else {
                 log.error("No need for updating doctor's workload");

@@ -322,6 +322,7 @@ public class PatientService {
         CaseDto caseDto = new CaseDto();
         ModelMapper modelMapper=new ModelMapper();
         caseDto = modelMapper.map(newCase, CaseDto.class);
+        caseDto.setPatientId(newCase.getPatient().getId());
         return caseDto;
     }
 
@@ -371,10 +372,12 @@ public class PatientService {
         return appointmentDto;
     }
 
-    public List<AppointmentDto> getPatientAppointments(Long patientId) {
+    public List<AppointmentDto> getPatientAppointments(Long userId) {
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
         List<AppointmentDto> patientAppointments = new ArrayList<>();
         try{
-            patientAppointments = doctorServiceClient.getPatientAppointments(patientId).getBody().getData();
+            patientAppointments = doctorServiceClient.getPatientAppointments(patient.getId()).getBody().getData();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -677,6 +680,13 @@ public class PatientService {
 
         CaseStatus newStatus = CaseStatus.valueOf(status);
         String oldStatus = medicalCase.getStatus().toString();
+
+        //Check if the same status
+        if( newStatus.name().equals(oldStatus) ) {
+            throw new BusinessException("Failed to update case status because old and new case status is: " + status,
+                    HttpStatus.CONFLICT);
+        }
+
         medicalCase.setStatus(newStatus);
 
         CaseAssignment caseAssignment = medicalCase.getAssignments().

@@ -21,4 +21,6 @@ public interface NotificationServiceClient {
 
     @PutMapping("/api/notifications/user/{userId}/read-all")
     ResponseEntity<ApiResponse<Void>> markAllAsRead( @PathVariable Long userId);
+
+
 }

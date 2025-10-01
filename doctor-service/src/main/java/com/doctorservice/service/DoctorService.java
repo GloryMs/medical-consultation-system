@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -264,7 +265,6 @@ public class DoctorService {
         }
     }
 
-
     /**
      * Helper method to get patient ID from case
      */
@@ -287,6 +287,28 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
+        //Validate case fees are set
+        List<CaseDto> cases = patientServiceClient.getDoctorActiveCases(doctor.getId()).getBody().getData();
+        if( cases != null && !cases.isEmpty()) {
+            CaseDto medicalCase = cases.stream().filter(c->c.getId().equals(dto.getCaseId())).findFirst().
+                    orElseThrow(() ->new BusinessException("Case not found for the provided appointment", HttpStatus.NOT_FOUND ));
+            if(medicalCase.getConsultationFee() == null) {
+                throw new BusinessException("Case fees not set yet, you cann't schedule an " +
+                        " appointment for a case unless you set its fee", HttpStatus.CONFLICT);
+            }
+        }
+        else{
+            throw new BusinessException("Case not found for the provided appointment", HttpStatus.NOT_FOUND );
+        }
+
+        // Validate appointment time is in the future
+        if (dto.getScheduledTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("Cannot schedule appointment in the past", HttpStatus.BAD_REQUEST);
+        }
+
+        // Validate appointment conflicts
+        validateAppointmentConflict(doctor.getId(), dto.getScheduledTime(), dto.getDuration(), null);
+
         Appointment appointment = Appointment.builder()
                 .caseId(dto.getCaseId())
                 .doctor(doctor)
@@ -303,8 +325,11 @@ public class DoctorService {
 
         Appointment saved = appointmentRepository.save(appointment);
 
+        //TODO
+        // Here must be changed to Kafka instead of Feign
+
         // Update case status to SCHEDULED
-        patientServiceClient.updateCaseStatus(dto.getCaseId(), "PAYMENT_PENDING", doctor.getId()); // Was SCHEDULED
+        patientServiceClient.updateCaseStatus(dto.getCaseId(), "SCHEDULED", doctor.getId());
 
         //Send notification to Patient:
         doctorEventProducer.SendCaseScheduleUpdate(dto.getPatientId(), dto.getCaseId(),
@@ -312,7 +337,6 @@ public class DoctorService {
 
         return saved;
     }
-
 
 
     public List<AppointmentDto> getDoctorAppointments(Long userId) {
@@ -338,6 +362,8 @@ public class DoctorService {
 
     @Transactional
     public ConsultationReport createConsultationReport(Long userId, ConsultationReportDto dto) {
+
+        //Some Validation:
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
@@ -348,6 +374,8 @@ public class DoctorService {
             throw new BusinessException("Unauthorized access to appointment", HttpStatus.FORBIDDEN);
         }
 
+
+        // Creating Medical Report
         ConsultationReport report = ConsultationReport.builder()
                 .appointment(appointment)
                 .doctor(doctor)
@@ -861,60 +889,88 @@ public class DoctorService {
 
     // 17. Reschedule Appointment Implementation
     @Transactional
-    public void rescheduleAppointment(Long userId, Long appointmentId, RescheduleDto dto) {
+    public Appointment rescheduleAppointment(Long userId, Long appointmentId, RescheduleAppointmentDto dto) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
         Appointment appointment = appointmentRepository.findById(appointmentId)
                 .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
 
+        // Verify the appointment belongs to this doctor
         if (!appointment.getDoctor().getId().equals(doctor.getId())) {
-            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+            throw new BusinessException("Unauthorized to reschedule this appointment", HttpStatus.FORBIDDEN);
         }
 
-        appointment.setRescheduledFrom(appointment.getScheduledTime());
+        // Validate appointment can be rescheduled
+        if (appointment.getStatus() == AppointmentStatus.COMPLETED ||
+                appointment.getStatus() == AppointmentStatus.CANCELLED) {
+            throw new BusinessException("Cannot reschedule a " + appointment.getStatus() + " appointment",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        // Validate new appointment time is in the future
+        if (dto.getScheduledTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("Cannot reschedule appointment to a past time", HttpStatus.BAD_REQUEST);
+        }
+
+        // Validate the new time doesn't conflict with other appointments
+        // Exclude the current appointment from conflict check
+        validateAppointmentConflict(doctor.getId(), dto.getScheduledTime(),
+                appointment.getDuration(), appointmentId);
+
+        // Update appointment
         appointment.setScheduledTime(dto.getScheduledTime());
         appointment.setRescheduleReason(dto.getReason());
         appointment.setRescheduleCount(appointment.getRescheduleCount() + 1);
         appointment.setStatus(AppointmentStatus.RESCHEDULED);
 
-        appointmentRepository.save(appointment);
+        Appointment updated = appointmentRepository.save(appointment);
+
+
+        //Todo fix this
+//        // Send notification to patient
+//        doctorEventProducer.SendAppointmentRescheduleNotification(
+//                appointment.getPatientId(),
+//                appointmentId,
+//                dto.getScheduledTime(),
+//                dto.getReason(),
+//                doctor.getFullName()
+//        );
+
+        return updated;
     }
 
     @Transactional
-    public void completeAppointment(Long userId, Long appointmentId) {
+    public void completeAppointment(Long userId, CompleteAppointmentDto dto) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        Appointment appointment = appointmentRepository.findById(appointmentId)
+        Appointment appointment = appointmentRepository.findById(dto.getAppointmentId())
                 .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
 
         if (!appointment.getDoctor().getId().equals(doctor.getId())) {
             throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
         }
         appointment.setStatus(AppointmentStatus.COMPLETED);
-
         appointmentRepository.save(appointment);
-    }
 
-    @Transactional
-    public void cancelAppointment(Long userId, Long appointmentId) {
-        Doctor doctor = doctorRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        //Update Case:
+        List<CaseDto> cases = patientServiceClient.getDoctorActiveCases(doctor.getId()).getBody().getData();
+        if( cases != null && !cases.isEmpty() ) {
+            CaseDto caseDto = cases.stream().filter(c->c.getId().equals(dto.getCaseId())).findFirst().
+                    orElseThrow(()-> new BusinessException("Failed to update case "+ dto.getCaseId() +
+                            " status to CONSULTATION_COMPLETE ", HttpStatus.NOT_FOUND));
 
-        Appointment appointment = appointmentRepository.findById(appointmentId)
-                .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
+            System.out.println("Send kafka event to update case "+ caseDto.getId() +" status to: CONSULTATION_COMPLETE");
 
-        if (!appointment.getDoctor().getId().equals(doctor.getId())) {
-            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+            //Send update Case Kafka event to update case status to CONSULTATION_COMPLETE
+            doctorEventProducer.sendCaseStatusUpdateEventFromDoctor(caseDto.getId(), CaseStatus.IN_PROGRESS.name(),
+                    CaseStatus.CONSULTATION_COMPLETE.name(), dto.getPatientId(), doctor.getId());
         }
-        appointment.setStatus(AppointmentStatus.CANCELLED);
-
-        appointmentRepository.save(appointment);
-
-        //Send Kafka notification for the Patient, and event for the admin:
-        doctorEventProducer.sendAppointmentCancellationEvent( appointmentId, appointment.getCaseId(),
-                appointment.getDoctor().getId(), appointment.getPatientId(), appointment.getScheduledTime());
+        else{
+           throw new BusinessException("Failed to update case "+ dto.getCaseId() +
+                   " status to CONSULTATION_COMPLETE ", HttpStatus.NOT_FOUND);
+        }
     }
 
     @Transactional
@@ -960,6 +1016,11 @@ public class DoctorService {
         appointment.setStatus(AppointmentStatus.CANCELLED);
         appointment.setRescheduleReason(reason);
         appointmentRepository.save(appointment);
+
+        //Send Kafka notification for the Patient, and event for the admin:
+        doctorEventProducer.sendAppointmentCancellationEvent( appointmentId, appointment.getCaseId(),
+                appointment.getDoctor().getId(), appointment.getPatientId(),
+                appointment.getScheduledTime(), reason);
     }
 
     // 20. Get Consultation Reports Implementation
@@ -1105,6 +1166,19 @@ public class DoctorService {
     }
 
     /// // Helpers:
+
+
+    public List<NotificationDto> getMyNotificationsByUserId(Long userId){
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        List<NotificationDto> dtos = new ArrayList<>();
+        try{
+            dtos = notificationServiceClient.getUserNotifications(doctor.getId()).getBody().getData();
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+        return dtos;
+    }
 
 
     /**
@@ -1290,4 +1364,207 @@ public class DoctorService {
             }
         }
     }
+
+
+    /**
+     * Check if a specific time slot is available for the doctor
+     *
+     * @param doctorId The doctor's ID
+     * @param scheduledTime The proposed appointment time
+     * @param duration The appointment duration
+     * @param excludeAppointmentId Optional appointment ID to exclude (for rescheduling)
+     * @return true if the slot is available, false otherwise
+     */
+    public boolean isTimeSlotAvailable(Long doctorId, LocalDateTime scheduledTime,
+                                       Integer duration, Long excludeAppointmentId) {
+        try {
+            validateAppointmentConflict(doctorId, scheduledTime, duration, excludeAppointmentId);
+            return true;
+        } catch (BusinessException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get detailed availability information including conflicting appointments
+     *
+     * @param doctorId The doctor's ID
+     * @param scheduledTime The proposed appointment time
+     * @param duration The appointment duration
+     * @param excludeAppointmentId Optional appointment ID to exclude
+     * @return Detailed availability information
+     */
+    public SlotAvailabilityDto getSlotAvailabilityDetails(Long doctorId, LocalDateTime scheduledTime,
+                                                          Integer duration, Long excludeAppointmentId) {
+        LocalDateTime appointmentEndTime = scheduledTime.plusMinutes(duration != null ? duration : 30);
+        int bufferMinutes = 15;
+
+        List<Appointment> conflicts = appointmentRepository.findOverlappingAppointments(
+                doctorId,
+                scheduledTime.minusMinutes(bufferMinutes),
+                appointmentEndTime.plusMinutes(bufferMinutes),
+                excludeAppointmentId
+        );
+
+        boolean isAvailable = conflicts.isEmpty();
+        LocalDateTime conflictTime = conflicts.isEmpty() ? null : conflicts.get(0).getScheduledTime();
+
+        return SlotAvailabilityDto.builder()
+                .scheduledTime(scheduledTime)
+                .duration(duration)
+                .available(isAvailable)
+                .message(isAvailable ?
+                        "Time slot is available" :
+                        "Time slot conflicts with existing appointment")
+                .conflictingAppointmentTime(conflictTime)
+                .build();
+    }
+
+    /**
+     * Validates that the new appointment doesn't conflict with existing appointments
+     *
+     * @param doctorId The doctor's ID
+     * @param scheduledTime The proposed appointment time
+     * @param duration The appointment duration in minutes
+     * @param excludeAppointmentId Optional appointment ID to exclude (for rescheduling)
+     * @throws BusinessException if there's a scheduling conflict
+     */
+    private void validateAppointmentConflict(Long doctorId, LocalDateTime scheduledTime,
+                                             Integer duration, Long excludeAppointmentId) {
+        // Calculate end time of the new appointment
+        int appointmentDuration = duration != null ? duration : 30;
+        LocalDateTime appointmentEndTime = scheduledTime.plusMinutes(appointmentDuration);
+
+        // Define buffer time (e.g., 15 minutes between appointments)
+        int bufferMinutes = 15;
+
+        // Expand search range to include buffer time
+        LocalDateTime searchStartTime = scheduledTime.minusMinutes(appointmentDuration + bufferMinutes);
+        LocalDateTime searchEndTime = appointmentEndTime.plusMinutes(appointmentDuration + bufferMinutes);
+
+        // Get all potentially conflicting appointments within the expanded time range
+        List<Appointment> potentialConflicts = appointmentRepository
+                .findByDoctorIdAndScheduledTimeBetweenAndStatusNot(
+                        doctorId,
+                        searchStartTime,
+                        searchEndTime,
+                        AppointmentStatus.CANCELLED
+                );
+
+        // Filter out NO_SHOW appointments and the appointment being rescheduled
+        List<Appointment> existingAppointments = potentialConflicts.stream()
+                .filter(apt -> apt.getStatus() != AppointmentStatus.NO_SHOW)
+                .filter(apt -> excludeAppointmentId == null || !apt.getId().equals(excludeAppointmentId))
+                .collect(Collectors.toList());
+
+        // Check for conflicts with precise overlap detection
+        for (Appointment existing : existingAppointments) {
+            int existingDuration = existing.getDuration() != null ? existing.getDuration() : 30;
+            LocalDateTime existingEndTime = existing.getScheduledTime().plusMinutes(existingDuration);
+
+            // Check if appointments overlap (with buffer)
+            boolean hasConflict = checkTimeOverlap(
+                    scheduledTime.minusMinutes(bufferMinutes),
+                    appointmentEndTime.plusMinutes(bufferMinutes),
+                    existing.getScheduledTime(),
+                    existingEndTime
+            );
+
+            if (hasConflict) {
+                String conflictMessage = String.format(
+                        "Appointment time conflicts with an existing appointment at %s (Duration: %d minutes). " +
+                                "Please choose a different time slot.",
+                        existing.getScheduledTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
+                        existingDuration
+                );
+                throw new BusinessException(conflictMessage, HttpStatus.CONFLICT);
+            }
+        }
+    }
+
+    /**
+     * Checks if two time ranges overlap
+     *
+     * @param start1 Start time of first appointment
+     * @param end1 End time of first appointment
+     * @param start2 Start time of second appointment
+     * @param end2 End time of second appointment
+     * @return true if the time ranges overlap
+     */
+    private boolean checkTimeOverlap(LocalDateTime start1, LocalDateTime end1,
+                                     LocalDateTime start2, LocalDateTime end2) {
+        // Two time ranges overlap if:
+        // start1 < end2 AND start2 < end1
+        return start1.isBefore(end2) && start2.isBefore(end1);
+    }
+
+    /**
+     * Get available time slots for a doctor on a specific date
+     * This method can be used by the frontend to show available slots
+     *
+     * @param doctorId The doctor's ID
+     * @param date The date to check
+     * @param duration The desired appointment duration
+     * @return List of available time slots
+     */
+    public List<LocalDateTime> getAvailableTimeSlots(Long doctorId, LocalDate date, Integer duration) {
+        List<LocalDateTime> availableSlots = new ArrayList<>();
+
+        // Define working hours (e.g., 9 AM to 5 PM)
+        LocalDateTime startTime = date.atTime(9, 0);
+        LocalDateTime endTime = date.atTime(17, 0);
+
+        // Get all appointments for this doctor on this date
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd = date.atTime(23, 59, 59);
+
+        List<Appointment> dayAppointments = appointmentRepository
+                .findByDoctorIdAndScheduledTimeBetweenAndStatusNot(
+                        doctorId,
+                        dayStart,
+                        dayEnd,
+                        AppointmentStatus.CANCELLED
+                );
+
+        // Generate time slots (e.g., every 30 minutes)
+        LocalDateTime currentSlot = startTime;
+        int slotInterval = 30; // minutes
+        int appointmentDuration = duration != null ? duration : 30;
+        int bufferMinutes = 15;
+
+        while (currentSlot.plusMinutes(appointmentDuration).isBefore(endTime)
+                || currentSlot.plusMinutes(appointmentDuration).equals(endTime)) {
+
+            LocalDateTime slotEndTime = currentSlot.plusMinutes(appointmentDuration);
+            boolean isAvailable = true;
+
+            // Check if this slot conflicts with any existing appointment
+            for (Appointment appointment : dayAppointments) {
+                LocalDateTime aptEndTime = appointment.getScheduledTime()
+                        .plusMinutes(appointment.getDuration() != null ? appointment.getDuration() : 30);
+
+                // Check overlap with buffer
+                boolean hasConflict = checkTimeOverlap(
+                        currentSlot.minusMinutes(bufferMinutes),
+                        slotEndTime.plusMinutes(bufferMinutes),
+                        appointment.getScheduledTime(),
+                        aptEndTime
+                );
+
+                if (hasConflict) {
+                    isAvailable = false;
+                    break;
+                }
+            }
+
+            if (isAvailable && currentSlot.isAfter(LocalDateTime.now())) {
+                availableSlots.add(currentSlot);
+            }
+
+            currentSlot = currentSlot.plusMinutes(slotInterval);
+        }
+
+        return availableSlots;
+    }
+
 }

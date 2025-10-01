@@ -61,6 +61,7 @@ public class AdminEventConsumer {
             Long caseId = Long.valueOf(appointmentCancellationEvent.get("caseId").toString());
             Long doctorId = Long.valueOf(appointmentCancellationEvent.get("doctorId").toString());
             Long patientId = Long.valueOf(appointmentCancellationEvent.get("patientId").toString());
+            String reason = appointmentCancellationEvent.get("reason").toString();
             LocalDateTime appointmentTime = parseCustomFormat(appointmentCancellationEvent.
                     get("appointmentTime").toString());
             //parseCustomFormat

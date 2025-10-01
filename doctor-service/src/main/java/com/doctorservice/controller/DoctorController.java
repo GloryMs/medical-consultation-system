@@ -8,6 +8,7 @@ import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
+import com.doctorservice.feign.NotificationServiceClient;
 import com.doctorservice.feign.PatientServiceClient;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.DoctorRepository;
@@ -15,14 +16,19 @@ import com.doctorservice.service.DoctorService;
 import com.doctorservice.service.InternalDoctorService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/doctors")
@@ -34,6 +40,7 @@ public class DoctorController {
     private final PatientServiceClient caseAssignmentRepo;
     private final AppointmentRepository appointmentRepository;
     private final InternalDoctorService internalDoctorService;
+    private final NotificationServiceClient notificationServiceClient;
     //private final NotEmptyValidatorForCollection notEmptyValidatorForCollection;
 
     /**
@@ -115,25 +122,88 @@ public class DoctorController {
 
     @GetMapping("/appointments")
     public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAppointments(
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-User-Id") Long userId){
         List<AppointmentDto> appointments = doctorService.getDoctorAppointments(userId);
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
-    @PutMapping("/appointments/{appointmentId}/complete")
+    @PutMapping("/appointments/complete")
     public ResponseEntity<ApiResponse<Void>> completeAppointment(
             @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long appointmentId){
-        doctorService.completeAppointment(userId, appointmentId);
+            @RequestBody CompleteAppointmentDto dto){
+        doctorService.completeAppointment(userId,  dto);
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment completed"));
     }
 
     @PutMapping("/appointments/{appointmentId}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancelAppointment(
             @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long appointmentId){
-        doctorService.cancelAppointment(userId, appointmentId);
+            @PathVariable Long appointmentId,
+            @RequestParam String reason){
+        doctorService.cancelAppointment(userId, appointmentId, reason);
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment completed"));
+    }
+
+    /**
+     * Get available time slots for scheduling appointments
+     *
+     * @param date The date to check (format: yyyy-MM-dd)
+     * @param duration Optional appointment duration in minutes (default: 30)
+     * @return List of available time slots
+     */
+    @GetMapping("/appointments/available-slots")
+    public ResponseEntity<ApiResponse<List<AvailableSlotDto>>> getAvailableTimeSlots(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false, defaultValue = "30") Integer duration) {
+
+        List<LocalDateTime> availableSlots = doctorService.getAvailableTimeSlots(
+                userId,
+                date,
+                duration
+        );
+
+        // Convert to DTO format
+        List<AvailableSlotDto> slotDtos = availableSlots.stream()
+                .map(slot -> AvailableSlotDto.builder()
+                        .startTime(slot)
+                        .endTime(slot.plusMinutes(duration))
+                        .duration(duration)
+                        .available(true)
+                        .build())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(slotDtos, "Available slots retrieved successfully"));
+    }
+
+    /**
+     * Check if a specific time slot is available
+     *
+     * @param scheduledTime The proposed appointment time
+     * @param duration The appointment duration
+     * @return Whether the slot is available
+     */
+    @GetMapping("/appointments/check-availability")
+    public ResponseEntity<ApiResponse<SlotAvailabilityDto>> checkSlotAvailability(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime scheduledTime,
+            @RequestParam(required = false, defaultValue = "30") Integer duration) {
+
+        boolean isAvailable = doctorService.isTimeSlotAvailable(
+                userId,
+                scheduledTime,
+                duration,
+                null
+        );
+
+        SlotAvailabilityDto response = SlotAvailabilityDto.builder()
+                .scheduledTime(scheduledTime)
+                .duration(duration)
+                .available(isAvailable)
+                .message(isAvailable ? "Time slot is available" : "Time slot conflicts with existing appointment")
+                .build();
+
+        return ResponseEntity.ok(ApiResponse.success(response, "Availability checked"));
     }
 
     @GetMapping("/appointments/{patientId}")
@@ -150,6 +220,23 @@ public class DoctorController {
         ConsultationReport report = doctorService.createConsultationReport(userId, dto);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(report, "Report created successfully"));
+    }
+
+    @GetMapping("/consultation-reports")
+    public ResponseEntity<ApiResponse<List<ConsultationReport>>> getConsultationReports(
+            @RequestHeader("X-User-Id") Long userId) {
+        List<ConsultationReport> reports = doctorService.getConsultationReports(userId);
+        return ResponseEntity.ok(ApiResponse.success(reports));
+    }
+
+    // 21. Update Consultation Report
+    @PutMapping("/consultation-reports/{reportId}")
+    public ResponseEntity<ApiResponse<ConsultationReport>> updateConsultationReport(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long reportId,
+            @Valid @RequestBody UpdateReportDto dto) {
+        ConsultationReport report = doctorService.updateConsultationReport(userId, reportId, dto);
+        return ResponseEntity.ok(ApiResponse.success(report, "Report updated"));
     }
 
     // 10. Get Doctor Profile
@@ -240,7 +327,7 @@ public class DoctorController {
     public ResponseEntity<ApiResponse<Void>> rescheduleAppointment(
             @RequestHeader("X-User-Id") Long userId,
             @PathVariable Long appointmentId,
-            @Valid @RequestBody RescheduleDto dto) {
+            @Valid @RequestBody RescheduleAppointmentDto dto) {
         doctorService.rescheduleAppointment(userId, appointmentId, dto);
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment rescheduled"));
     }
@@ -270,23 +357,7 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment cancelled"));
     }
 
-    // 20. Get Consultation Reports
-    @GetMapping("/consultation-reports")
-    public ResponseEntity<ApiResponse<List<ConsultationReport>>> getConsultationReports(
-            @RequestHeader("X-User-Id") Long userId) {
-        List<ConsultationReport> reports = doctorService.getConsultationReports(userId);
-        return ResponseEntity.ok(ApiResponse.success(reports));
-    }
 
-    // 21. Update Consultation Report
-    @PutMapping("/consultation-reports/{reportId}")
-    public ResponseEntity<ApiResponse<ConsultationReport>> updateConsultationReport(
-            @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long reportId,
-            @Valid @RequestBody UpdateReportDto dto) {
-        ConsultationReport report = doctorService.updateConsultationReport(userId, reportId, dto);
-        return ResponseEntity.ok(ApiResponse.success(report, "Report updated"));
-    }
 
     // 22. Close Case
     @PostMapping("/cases/{caseId}/close")
@@ -423,6 +494,28 @@ public class DoctorController {
         *  update code below to get doctor performance Map*/
         Map<String, Object> doctorPerformance = new HashMap<>();
         return ResponseEntity.ok(ApiResponse.success(doctorPerformance));
+    }
+
+    @GetMapping ("/notifications/{userId}")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long userId){
+        List<NotificationDto> notificationsDto = new ArrayList<>();
+        notificationsDto = doctorService.getMyNotificationsByUserId(userId);
+        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+    }
+
+    @PutMapping("/notifications/{notificationId}/{userId}/read")
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
+            @PathVariable Long notificationId,
+            @PathVariable Long userId){
+        notificationServiceClient.markAsRead(notificationId, userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
+    }
+
+    @PutMapping("/notifications/{userId}/read-all")
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
+            @PathVariable  Long userId) {
+        notificationServiceClient.markAllAsRead(userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
 
 }

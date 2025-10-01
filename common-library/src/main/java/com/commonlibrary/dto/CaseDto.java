@@ -13,6 +13,7 @@ import java.util.Set;
 @Data
 public class CaseDto {
     private Long id;
+    private Long patientId;
     private String caseTitle;
     private String description;
     private CaseStatus status;

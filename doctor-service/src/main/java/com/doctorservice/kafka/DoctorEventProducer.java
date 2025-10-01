@@ -1,6 +1,5 @@
 package com.doctorservice.kafka;
 
-import com.commonlibrary.dto.CaseFeeUpdateEvent;
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
@@ -81,8 +80,8 @@ public class DoctorEventProducer {
         }
     }
 
-    public void sendAppointmentCancellationEvent (Long appointmentId, Long caseId,
-                                                  Long doctorId, Long patientId, LocalDateTime appointmentTime) {
+    public void sendAppointmentCancellationEvent (Long appointmentId, Long caseId,Long doctorId,
+                                                  Long patientId, LocalDateTime appointmentTime, String reason) {
         try {
             // Create case fee update event
             Map<String, Object> appointmentCancellationEvent = new HashMap<>();
@@ -91,6 +90,7 @@ public class DoctorEventProducer {
             appointmentCancellationEvent.put("doctorId", doctorId);
             appointmentCancellationEvent.put("patientId", patientId);
             appointmentCancellationEvent.put("appointmentTime", appointmentTime);
+            appointmentCancellationEvent.put("reason", reason);
             appointmentCancellationEvent.put("timestamp", System.currentTimeMillis());
 
             // Send event to admin for refund
@@ -104,8 +104,8 @@ public class DoctorEventProducer {
                     .receiverId(patientId)
                     .title("Appointment Cancellation")
                     .message("Doctor "+ doctorId +" has cancelled the appointment that was scheduled for "+
-                            " your case: "+ caseId +
-                            ", on: " + appointmentTime)
+                            " your case: "+ caseId +", on: " + appointmentTime +
+                            ". Reason: " + reason)
                     .type(NotificationType.APPOINTMENT)
                     .sendEmail(true)
                     .priority(NotificationPriority.CRITICAL)
@@ -118,5 +118,21 @@ public class DoctorEventProducer {
         } catch (Exception e) {
             log.error("Error sending Appointment Cancellation notification for case: {}: {}", caseId, e.getMessage(), e);
         }
+    }
+
+    public void sendCaseStatusUpdateEventFromDoctor(Long caseId, String oldStatus, String newStatus,
+                                                    Long patientId, Long doctorId) {
+
+        // Send case status update event
+        Map<String, Object> caseEvent = new HashMap<>();
+        caseEvent.put("caseId", caseId);
+        caseEvent.put("oldStatus", oldStatus);
+        caseEvent.put("newStatus", newStatus);
+        caseEvent.put("patientId", patientId);
+        caseEvent.put("doctorId", doctorId);
+        caseEvent.put("timestamp", System.currentTimeMillis());
+
+        kafkaTemplate.send("case-status-doctor-updated-topic", caseEvent);
+        log.info("Kafka - Case status updated event sent for case: {}", caseId);
     }
 }

@@ -123,4 +123,22 @@ public class PatientEventConsumer {
             log.error("Error processing case fee update event for case : {}", e.getMessage(), e);
         }
     }
+
+    @KafkaListener(topics = "case-status-doctor-updated-topic", groupId = "patient-group")
+    public void handleCaseStatusUpdateFromDoctor(Map<String, Object> caseEvent) {
+        try {
+            Long caseId = Long.valueOf(caseEvent.get("caseId").toString());
+            String newStatus = caseEvent.get("newStatus").toString();
+            Long doctorId = caseEvent.get("doctorId") != null ?
+                    Long.valueOf(caseEvent.get("doctorId").toString()) : null;
+
+            log.info("Kafka Patient Listener: Case status updated: case={}, status={}, doctor={}",
+                    caseId, newStatus, doctorId);
+
+            patientService.updateCaseStatus(caseId, newStatus, doctorId);
+
+        } catch (Exception e) {
+            log.error("Error processing case status update: {}", e.getMessage(), e);
+        }
+    }
 }
