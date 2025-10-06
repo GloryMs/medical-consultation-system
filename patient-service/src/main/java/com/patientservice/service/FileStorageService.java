@@ -23,7 +23,7 @@ public class FileStorageService {
     @Value("${app.file.upload.dir:./uploads}")
     private String uploadDir;
 
-    @Value("${app.file.base-url:http://localhost:8082/api/files}")
+    @Value("${app.file.base-url:http://172.16.1.122:8082/api/files}")
     private String baseUrl;
 
     private final FileEncryptionService encryptionService;

@@ -6,6 +6,7 @@ import com.commonlibrary.entity.ConsultationType;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -20,6 +21,7 @@ public class AppointmentDto{
     private Long caseId;
     private DoctorDto doctor;
     private Long patientId;
+    private BigDecimal consultationFee;
     private LocalDateTime scheduledTime;
     private Integer duration;
     private ConsultationType consultationType;

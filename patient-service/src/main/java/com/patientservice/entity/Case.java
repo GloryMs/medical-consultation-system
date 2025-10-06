@@ -109,4 +109,11 @@ public class Case extends BaseEntity {
     private Integer rejectionCount = 0;
     @Column(columnDefinition = "boolean default false")
     private Boolean isDeleted = false;
+
+    //Medical Report
+    @Column(name = "medical_report_file_link")
+    private String medicalReportFileLink;
+
+    @Column(name = "report_generated_at")
+    private LocalDateTime reportGeneratedAt;
 }

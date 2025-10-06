@@ -160,10 +160,14 @@ public class DoctorWorkloadService {
 
         // Calculate appointment metrics
         LocalDateTime todayStart = LocalDateTime.now().toLocalDate().atStartOfDay();
+        //TODO must remove +3 and correct server time
+        todayStart = todayStart.plusHours(3);
         LocalDateTime todayEnd = todayStart.plusDays(1);
         LocalDateTime weekStart = todayStart.minusDays(todayStart.getDayOfWeek().getValue() - 1);
         LocalDateTime weekEnd = weekStart.plusDays(7);
 
+        System.out.print("Finding doctor: " +doctorId +
+                ", appointments between ["+todayStart+"] and [" + todayEnd+"]");
         List<Appointment> todayAppointments = appointmentRepository
                 .findByDoctorIdAndScheduledTimeBetween(doctorId, todayStart, todayEnd);
 

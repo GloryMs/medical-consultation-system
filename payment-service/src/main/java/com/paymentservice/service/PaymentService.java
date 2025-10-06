@@ -39,7 +39,7 @@ public class PaymentService {
                 .caseId(dto.getCaseId())
                 .paymentType(dto.getPaymentType())
                 .amount(dto.getAmount())
-                .paymentMethod(PaymentMethod.valueOf(dto.getPaymentMethod()))
+                .paymentMethod(PaymentMethod.valueOf(dto.getPaymentMethod().toUpperCase()))
                 .status(PaymentStatus.PENDING)
                 .currency("USD")
                 .build();

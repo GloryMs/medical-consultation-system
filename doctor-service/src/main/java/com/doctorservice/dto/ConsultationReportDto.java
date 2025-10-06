@@ -1,5 +1,9 @@
 package com.doctorservice.dto;
 
+import com.doctorservice.entity.Appointment;
+import com.doctorservice.entity.Doctor;
+import com.doctorservice.entity.ReportStatus;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -7,34 +11,22 @@ import java.time.LocalDateTime;
 
 @Data
 public class ConsultationReportDto {
-    //Appointment Info
-    @NotNull(message = "Appointment ID is required")
-    private Long appointmentId;
-    private LocalDateTime appointmentTime;
 
+    private Long id;
+    private Long appointmentId;
+    private Long doctorId;
+    private Long caseId;
+    private Long patientId;
     private String diagnosis;
     private String recommendations;
     private String prescriptions;
     private String followUpInstructions;
-    private Boolean requiresFollowUp;
+    private Boolean requiresFollowUp = false;
     private LocalDateTime nextAppointmentSuggested;
     private String doctorNotes;
-
-    //Case Info:
-    @NotNull(message = "Case ID is required")
-    private Long caseId;
-    private String caseTitle;
-
-    //Doctor Info:
-    private String doctorName;
-    private String doctorEmail;
-    private String doctorPhone;
-    private String doctorSpecialization;
-
-    //Patient Info:
-    private String patientName;
-    private String patientEmail;
-    private String patientPhone;
-
+    private ReportStatus status = ReportStatus.DRAFT;
+    private String pdfFileLink;
+    private LocalDateTime exportedAt;
+    private LocalDateTime finalizedAt;
 
 }

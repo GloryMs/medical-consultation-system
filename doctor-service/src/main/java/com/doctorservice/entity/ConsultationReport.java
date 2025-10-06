@@ -26,6 +26,8 @@ public class ConsultationReport extends BaseEntity {
     @Column(nullable = false)
     private Long caseId;
 
+    private Long patientId;
+
     @Column(columnDefinition = "TEXT")
     private String diagnosis;
 
@@ -44,4 +46,17 @@ public class ConsultationReport extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String doctorNotes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ReportStatus status = ReportStatus.DRAFT;
+
+    @Column(name = "pdf_file_link")
+    private String pdfFileLink;
+
+    @Column(name = "exported_at")
+    private LocalDateTime exportedAt;
+
+    @Column(name = "finalized_at")
+    private LocalDateTime finalizedAt;
 }

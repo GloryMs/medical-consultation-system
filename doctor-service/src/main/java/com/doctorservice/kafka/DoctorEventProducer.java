@@ -135,4 +135,52 @@ public class DoctorEventProducer {
         kafkaTemplate.send("case-status-doctor-updated-topic", caseEvent);
         log.info("Kafka - Case status updated event sent for case: {}", caseId);
     }
+
+    public void sendReportExportedEvent(Long caseId, String pdfUrl,Long doctorId, Long patientId){
+        try {
+            // Create case fee update event
+            Map<String, Object> reportExportedEvent = new HashMap<>();
+            reportExportedEvent.put("caseId", caseId);
+            reportExportedEvent.put("pdfUrl", pdfUrl);
+            reportExportedEvent.put("doctorId", doctorId);
+            reportExportedEvent.put("patientId", patientId);
+            reportExportedEvent.put("timestamp", System.currentTimeMillis());
+
+            // Send event to update case in patient service
+            kafkaTemplate.send("case-report-update-topic", reportExportedEvent);
+            log.info("Case medical report update event sent for case: {} with pdf URL: ${}", caseId, pdfUrl);
+
+            // Send notification to patient about medical report being ready
+            NotificationDto patientNotification = NotificationDto.builder()
+                    .senderId(doctorId)
+                    .receiverId(patientId)
+                    .title("Medical Report is ready")
+                    .message(String.format("Your doctor has finalized the medical report "+
+                            " for your case: "+ caseId +
+                            ", and you can download it using: "+ pdfUrl +" or by browsing your closed cases"))
+                    .type(NotificationType.CONSULTATION)
+                    .sendEmail(true)
+                    .priority(NotificationPriority.MEDIUM)
+                    .build();
+
+            kafkaTemplate.send("notification-topic", patientNotification);
+            log.info("Medical report notification sent to patient: {}", patientId);
+
+        } catch (Exception e) {
+            log.error("Error sending medical report readiness event for case {}: {}", caseId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Send appointment reminder notification
+     */
+    public void sendAppointmentReminder(NotificationDto notification) {
+        try {
+            kafkaTemplate.send("notification-topic", notification);
+            log.info("Appointment reminder sent to user: {}", notification.getReceiverId());
+        } catch (Exception e) {
+            log.error("Error sending appointment reminder: {}", e.getMessage(), e);
+            throw e; // Rethrow to allow retry logic
+        }
+    }
 }

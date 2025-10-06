@@ -281,6 +281,52 @@ public class PatientService {
         return cases;
     }
 
+    public List<CaseDto> getDoctorCompletedCases (Long doctorId ){
+        List<CaseDto> cases = new ArrayList<>();
+        List<Case> tempCases = new ArrayList<>();
+        List<CaseAssignment> assignments = new ArrayList<>();
+
+        assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.ACCEPTED );
+        System.out.println("Getting assignments for doctor: " + doctorId);
+        System.out.println("Doctor assignments count: " + assignments.size());
+        if( assignments != null && !assignments.isEmpty() ){
+            //Get related completed cases
+            tempCases = new ArrayList<>(assignments.stream().map(CaseAssignment::getCaseEntity).
+                    filter(caseEntity ->
+                            caseEntity.getStatus().equals(CONSULTATION_COMPLETE)).toList());
+            System.out.println("tempCases (completed cases) for doctor "+ doctorId +" count: " + tempCases.size());
+
+            if( tempCases != null && !tempCases.isEmpty() ){
+                cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
+                System.out.println("Doctor completed cases count: " + cases.size());
+            }
+        }
+        return cases;
+    }
+
+    public List<CaseDto> getDoctorClosedCases (Long doctorId ){
+        List<CaseDto> cases = new ArrayList<>();
+        List<Case> tempCases = new ArrayList<>();
+        List<CaseAssignment> assignments = new ArrayList<>();
+
+        assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.ACCEPTED );
+        System.out.println("Getting assignments for doctor: " + doctorId);
+        System.out.println("Doctor assignments count: " + assignments.size());
+        if( assignments != null && !assignments.isEmpty() ){
+            //Get related completed cases
+            tempCases = new ArrayList<>(assignments.stream().map(CaseAssignment::getCaseEntity).
+                    filter(caseEntity ->
+                            caseEntity.getStatus().equals(CLOSED)).toList());
+            System.out.println("tempCases (completed cases) for doctor "+ doctorId +" count: " + tempCases.size());
+
+            if( tempCases != null && !tempCases.isEmpty() ){
+                cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
+                System.out.println("Doctor completed cases count: " + cases.size());
+            }
+        }
+        return cases;
+    }
+
     public List<CaseDto> getPatientCases(Long userId) {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
@@ -378,6 +424,12 @@ public class PatientService {
         List<AppointmentDto> patientAppointments = new ArrayList<>();
         try{
             patientAppointments = doctorServiceClient.getPatientAppointments(patient.getId()).getBody().getData();
+            List<Case> cases = caseRepository.findByPatientId(patient.getId());
+
+            patientAppointments.forEach(appointmentDto -> cases.stream()
+                    .filter(caseItem -> caseItem.getId().equals(appointmentDto.getCaseId())).
+                    findFirst()
+                    .ifPresent(caseitem -> appointmentDto.setConsultationFee(caseitem.getConsultationFee())));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -385,8 +437,31 @@ public class PatientService {
     }
 
     @Transactional
+    public void updateCaseForMedicalReport(Long caseId, String pdfUrl, Long patientId){
+        //some validation
+        Case medicalCase = caseRepository.findById(caseId).orElseThrow(() ->
+                new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+        Patient patient = patientRepository.findById(patientId).orElseThrow(() ->
+                new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        if( medicalCase.getPatient().getId().equals(patient.getId()) ){
+            throw new BusinessException("Case didn't belong to provided patient", HttpStatus.UNAUTHORIZED);
+        }
+        if( !medicalCase.getStatus().equals(CONSULTATION_COMPLETE) ){
+            throw new BusinessException("Case status didn't allow closure, can't add medical report", HttpStatus.CONFLICT);
+        }
+
+        //updating the case by closing it and adding the result of consultation:
+        medicalCase.setStatus(CLOSED);
+        medicalCase.setMedicalReportFileLink(pdfUrl);
+        medicalCase.setReportGeneratedAt(LocalDateTime.now());
+
+        caseRepository.save(medicalCase);
+    }
+
+    @Transactional
     public void payConsultationFee(Long userId, ProcessPaymentDto paymentDto ) {
-        //This method will pay teh consultation fees and sedn confirmation for case appointmet to the doctor
+        //Here we will confirm (Accept Appointment) and pay the consultation fees.
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
@@ -396,6 +471,12 @@ public class PatientService {
         if (!medicalCase.getPatient().getId().equals(patient.getId())) {
             throw new BusinessException("Unauthorized access to case", HttpStatus.FORBIDDEN);
         }
+
+        if (medicalCase.getStatus() != CaseStatus.SCHEDULED) {
+            throw new BusinessException("Case is not in scheduled status", HttpStatus.BAD_REQUEST);
+        }
+
+        acceptAppointment(userId, paymentDto.getCaseId());
 
         if (medicalCase.getStatus() != CaseStatus.PAYMENT_PENDING) {
             throw new BusinessException("Payment not required at this stage", HttpStatus.BAD_REQUEST);
@@ -413,7 +494,7 @@ public class PatientService {
 
             //Send Kafka Event to confirm case appointment scheduling
             patientEventProducer.sendScheduleConfirmationEvent( updatedPayment.getCaseId(),
-                    updatedPayment.getPatientId(), updatedPayment.getDoctorId() );
+                    patient.getId(), updatedPayment.getDoctorId() );
         }
     }
 

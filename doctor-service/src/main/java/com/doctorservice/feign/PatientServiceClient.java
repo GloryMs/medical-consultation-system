@@ -61,6 +61,12 @@ public interface PatientServiceClient {
     @GetMapping("/api/patients/cases/doctor/{doctorId}/active")
     ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorActiveCases(@PathVariable("doctorId") Long doctorId);
 
+    @GetMapping("/api/patients/cases/doctor/{doctorId}/completed")
+    ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorCompletedCases(@PathVariable("doctorId") Long doctorId);
+
+    @GetMapping("/api/patients/cases/doctor/{doctorId}/closed")
+    ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorClosedCases(@PathVariable("doctorId") Long doctorId);
+
 //    @PostMapping("/cases/{caseId}/reject")
 //    ResponseEntity<ApiResponse<Void>> rejectCase(
 //            @PathVariable("caseId") Long caseId,

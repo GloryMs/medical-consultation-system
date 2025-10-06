@@ -232,6 +232,10 @@ services:
     depends_on:
       - eureka-server
       - postgres
+    volumes:
+      - /doctors_reports:/pdf-reports:rw
+      - /temp_doctors_reports:/pdf-reports/temp:rw
+      - /etc/localtime:/etc/localtime:ro
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/medical_doctor_db

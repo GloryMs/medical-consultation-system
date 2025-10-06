@@ -41,6 +41,8 @@ public class DoctorService {
     private final DoctorEventProducer doctorEventProducer;
     private final NotificationServiceClient notificationServiceClient;
     private final PaymentServiceClient paymentServiceClient;
+    private final PdfGenerationService pdfGenerationService;
+    private final AppointmentReminderService appointmentReminderService;
 
     @Transactional
     public DoctorProfileDto createProfile(Long userId, DoctorProfileDto dto) {
@@ -361,7 +363,7 @@ public class DoctorService {
     }
 
     @Transactional
-    public ConsultationReport createConsultationReport(Long userId, ConsultationReportDto dto) {
+    public ConsultationReportDto createConsultationReport(Long userId, ConsultationReportDto dto) {
 
         //Some Validation:
         Doctor doctor = doctorRepository.findByUserId(userId)
@@ -373,13 +375,33 @@ public class DoctorService {
         if (!appointment.getDoctor().getId().equals(doctor.getId())) {
             throw new BusinessException("Unauthorized access to appointment", HttpStatus.FORBIDDEN);
         }
+        System.out.println("Creating Medical Report ============> Checking doctor and appointment validation - done");
 
+        List<CaseDto> cases = patientServiceClient.getDoctorCompletedCases(doctor.getId()).getBody().getData();
+        if( cases != null && !cases.isEmpty()) {
+            cases.stream().filter(c->c.getId().equals(dto.getCaseId())).findFirst().orElseThrow(()->
+             new BusinessException("Cannot create report. Case not found",
+                    HttpStatus.NOT_FOUND));
+        }
+        System.out.println("Creating Medical Report ============> Checking case existance - done");
+
+        consultationReportRepository.findByCaseId(dto.getCaseId())
+                .stream()
+                .findFirst()
+                .ifPresent(existing -> {
+                    throw new BusinessException(
+                            "A report already exists for this case. Use update instead.",
+                            HttpStatus.CONFLICT
+                    );
+                });
+        System.out.println("Creating Medical Report ============> Checking report already existed - done");
 
         // Creating Medical Report
         ConsultationReport report = ConsultationReport.builder()
                 .appointment(appointment)
                 .doctor(doctor)
                 .caseId(dto.getCaseId())
+                .patientId(appointment.getPatientId())
                 .diagnosis(dto.getDiagnosis())
                 .recommendations(dto.getRecommendations())
                 .prescriptions(dto.getPrescriptions())
@@ -387,23 +409,29 @@ public class DoctorService {
                 .requiresFollowUp(dto.getRequiresFollowUp())
                 .nextAppointmentSuggested(dto.getNextAppointmentSuggested())
                 .doctorNotes(dto.getDoctorNotes())
+                .status(ReportStatus.DRAFT)
                 .build();
 
         // Update appointment status
         appointment.setStatus(AppointmentStatus.COMPLETED);
         appointmentRepository.save(appointment);
+        System.out.println("Creating Medical Report ============> updating appointment to COMPLETED");
 
-        // Update case status to CONSULTATION_COMPLETE
-        patientServiceClient.updateCaseStatus(dto.getCaseId(), "CONSULTATION_COMPLETE", doctor.getId());
+        // No need to Update case status to closed that the report still in DRAFT state
+//        patientServiceClient.updateCaseStatus(dto.getCaseId(), "CLOSED", doctor.getId());
+//
+//        System.out.println("Creating Medical Report ============> updating case status to CLOSED");
 
         /*TODO
         *  Update doctor's consultation count*/
 
-        // Update doctor's consultation count
-        //doctor.setConsultationCount(doctor.getConsultationCount() + 1);
-        doctorRepository.save(doctor);
 
-        return report;
+        //doctor.setConsultationCount(doctor.getConsultationCount() + 1);
+        consultationReportRepository.save(report);
+        System.out.println("Creating Medical Report ============> saving the medical report as a DRAFT");
+
+        ConsultationReportDto reportDto = convertToReportDto(report);
+        return reportDto;
     }
 
     private void generateMeetingLink(Appointment appointment) {
@@ -926,6 +954,7 @@ public class DoctorService {
 
         Appointment updated = appointmentRepository.save(appointment);
 
+        appointmentReminderService.cancelRemindersForAppointment(appointmentId);
 
         //Todo fix this
 //        // Send notification to patient
@@ -986,6 +1015,10 @@ public class DoctorService {
         }
         appointment.setStatus(AppointmentStatus.CONFIRMED);
         appointmentRepository.save(appointment);
+
+        // CREATE REMINDERS for both doctor and patient
+        appointmentReminderService.createRemindersForAppointment(appointment.getId());
+        log.info("Appointment {} confirmed and reminders created", appointment.getId());
     }
 
     // 18. Get Today's Appointments Implementation
@@ -1017,23 +1050,202 @@ public class DoctorService {
         appointment.setRescheduleReason(reason);
         appointmentRepository.save(appointment);
 
+        appointmentReminderService.cancelRemindersForAppointment(appointmentId);
+
         //Send Kafka notification for the Patient, and event for the admin:
         doctorEventProducer.sendAppointmentCancellationEvent( appointmentId, appointment.getCaseId(),
                 appointment.getDoctor().getId(), appointment.getPatientId(),
                 appointment.getScheduledTime(), reason);
     }
 
-    // 20. Get Consultation Reports Implementation
-    public List<ConsultationReport> getConsultationReports(Long userId) {
+    public List<ConsultationReportDto> getConsultationReports(Long userId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
-        return consultationReportRepository.findByDoctorId(doctor.getId());
+        List<ConsultationReport> reports = consultationReportRepository.findByDoctorId(doctor.getId());
+        List<ConsultationReportDto> reportDtos = reports.stream().map(this::convertToReportDto).toList();
+
+        return reportDtos;
     }
 
-    // 21. Update Consultation Report Implementation
+    public ConsultationReportDto convertToReportDto(ConsultationReport report) {
+        ConsultationReportDto reportDto = new ConsultationReportDto();
+        ModelMapper modelMapper = new ModelMapper();
+        modelMapper.map(report, reportDto);
+        return reportDto;
+    }
+
     @Transactional
-    public ConsultationReport updateConsultationReport(Long userId, Long reportId, UpdateReportDto dto) {
+    public String exportReportToPdf(Long userId, Long reportId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        ConsultationReport report = consultationReportRepository.findById(reportId)
+                .orElseThrow(() -> new BusinessException("Report not found", HttpStatus.NOT_FOUND));
+
+        if (!report.getDoctor().getId().equals(doctor.getId())) {
+            throw new BusinessException("Unauthorized", HttpStatus.FORBIDDEN);
+        }
+
+        // Check if already exported
+        if (report.getStatus() == ReportStatus.FINALIZED && report.getPdfFileLink() != null) {
+            log.warn("Report {} already exported. Returning existing PDF URL", reportId);
+            return report.getPdfFileLink();
+        }
+
+        // Validate required fields before export
+        validateReportForExport(report);
+
+        try{
+            // Generate PDF
+            String pdfUrl = pdfGenerationService.generateReportPdf(report);
+
+            // Update report
+            report.setPdfFileLink(pdfUrl);
+            report.setStatus(ReportStatus.FINALIZED);
+            report.setExportedAt(LocalDateTime.now());
+            report.setFinalizedAt(LocalDateTime.now());
+            consultationReportRepository.save(report);
+
+            // Send Kafka event to patient-service
+            doctorEventProducer.sendReportExportedEvent(report.getCaseId(), pdfUrl,
+                    doctor.getId(), report.getPatientId());
+
+            return pdfUrl;
+
+        } catch (Exception ex) {
+            log.error("Failed to export report {} to PDF", reportId, ex);
+            throw new BusinessException(
+                    "Failed to export report to PDF: " + ex.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    public ConsultationReport getConsultationReportsById(Long userId, Long consultationReportId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        ConsultationReport report = consultationReportRepository.findById(consultationReportId).orElseThrow(() ->
+                new BusinessException("Report not found", HttpStatus.NOT_FOUND));
+
+        if( doctor.getId().equals(report.getDoctor().getId()) )     {
+            throw new BusinessException("Report doesn't belong to the provided doctor", HttpStatus.UNAUTHORIZED);
+        }
+
+        if( !report.getStatus().equals(ReportStatus.FINALIZED) || report.getPdfFileLink()==null ) {
+            throw new BusinessException("Please check eport status or link ", HttpStatus.CONFLICT);
+        }
+
+        return report;
+    }
+
+
+    /**
+     * Update consultation report (only if DRAFT)
+     */
+    @Transactional
+    public ConsultationReportDto updateConsultationReport(Long userId, Long reportId, UpdateReportDto dto) {
+        log.info("Updating consultation report {} for user {}", reportId, userId);
+
+        // Validate doctor
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        // Get report
+        ConsultationReport report = consultationReportRepository.findById(reportId)
+                .orElseThrow(() -> new BusinessException("Report not found", HttpStatus.NOT_FOUND));
+
+        // Check authorization
+        if (!report.getDoctor().getId().equals(doctor.getId())) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+
+        // Check if report is still in DRAFT
+        if (report.getStatus() == ReportStatus.FINALIZED) {
+            throw new BusinessException(
+                    "Cannot update finalized report. Report has been exported to PDF.",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // Update fields
+        if (dto.getDiagnosis() != null) {
+            report.setDiagnosis(dto.getDiagnosis());
+        }
+        if (dto.getRecommendations() != null) {
+            report.setRecommendations(dto.getRecommendations());
+        }
+        if (dto.getPrescriptions() != null) {
+            report.setPrescriptions(dto.getPrescriptions());
+        }
+        if (dto.getFollowUpInstructions() != null) {
+            report.setFollowUpInstructions(dto.getFollowUpInstructions());
+        }
+        if (dto.getDoctorNotes() != null) {
+            // Append to existing notes with timestamp
+            String timestamp = LocalDateTime.now().format(
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String existingNotes = report.getDoctorNotes() != null ? report.getDoctorNotes() : "";
+            report.setDoctorNotes(existingNotes + "\n\n[" + timestamp + "] " + dto.getDoctorNotes());
+        }
+//        if (dto.getRequiresFollowUp() != null) {
+//            report.setRequiresFollowUp(dto.getRequiresFollowUp());
+//        }
+//        if (dto.getNextAppointmentSuggested() != null) {
+//            report.setNextAppointmentSuggested(dto.getNextAppointmentSuggested());
+//        }
+
+        report.setUpdatedAt(LocalDateTime.now());
+        ConsultationReport updatedReport = consultationReportRepository.save(report);
+
+        log.info("Consultation report {} updated successfully", reportId);
+        ConsultationReportDto  reportDto = convertToReportDto(updatedReport);
+        return reportDto;
+    }
+
+    /**
+     * Get all consultation reports for doctor (with optional status filter)
+     */
+    public List<ConsultationReportDto> getConsultationReportsByStatus(Long userId, ReportStatus status) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        List<ConsultationReport> reports = consultationReportRepository.findByDoctorId(doctor.getId());
+        List<ConsultationReportDto> reportDtos = reports.stream().map(this::convertToReportDto).toList();
+
+        if (status == null) {
+            reports = consultationReportRepository.findByDoctorId(doctor.getId());
+            reportDtos = reports.stream().map(this::convertToReportDto).toList();
+        }
+
+        return reportDtos;
+    }
+
+    /**
+     * Get single consultation report by ID
+     */
+    public ConsultationReportDto getConsultationReportById(Long userId, Long reportId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        ConsultationReport report = consultationReportRepository.findById(reportId)
+                .orElseThrow(() -> new BusinessException("Report not found", HttpStatus.NOT_FOUND));
+
+        if (!report.getDoctor().getId().equals(doctor.getId())) {
+            throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
+        }
+        ConsultationReportDto reportDto = convertToReportDto(report);
+        return reportDto;
+    }
+
+    /**
+     * Delete consultation report (only DRAFT reports can be deleted)
+     */
+    @Transactional
+    public void deleteConsultationReport(Long userId, Long reportId) {
+        log.info("Deleting consultation report {} for user {}", reportId, userId);
+
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
@@ -1044,12 +1256,55 @@ public class DoctorService {
             throw new BusinessException("Unauthorized access", HttpStatus.FORBIDDEN);
         }
 
-        if (dto.getDoctorNotes() != null) {
-            report.setDoctorNotes(report.getDoctorNotes() + "\n\nAddendum: " + dto.getDoctorNotes());
+        if (report.getStatus() == ReportStatus.FINALIZED) {
+            throw new BusinessException(
+                    "Cannot delete finalized report. Finalized reports are permanent.",
+                    HttpStatus.BAD_REQUEST
+            );
         }
 
-        return consultationReportRepository.save(report);
+        consultationReportRepository.delete(report);
+        log.info("Consultation report {} deleted successfully", reportId);
     }
+
+    /**
+     * Validate that report has all required fields before export
+     */
+    private void validateReportForExport(ConsultationReport report) {
+        StringBuilder errors = new StringBuilder();
+
+        if (report.getDiagnosis() == null || report.getDiagnosis().trim().isEmpty()) {
+            errors.append("Diagnosis is required. ");
+        }
+        if (report.getRecommendations() == null || report.getRecommendations().trim().isEmpty()) {
+            errors.append("Recommendations are required. ");
+        }
+        if (report.getPrescriptions() == null || report.getPrescriptions().trim().isEmpty()) {
+            errors.append("Prescriptions are required (enter 'None' if not applicable). ");
+        }
+        if (report.getRequiresFollowUp() == null) {
+            errors.append("Follow-up requirement must be specified. ");
+        }
+
+        if (errors.length() > 0) {
+            throw new BusinessException(
+                    "Cannot export incomplete report. Missing: " + errors.toString().trim(),
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+    }
+
+    // DTO for case status validation
+    @lombok.Data
+    private static class CaseStatusResponse {
+        private Long caseId;
+        private CaseStatus status;
+    }
+
+
+
+
+
 
     // 22. Close Case Implementation
     @Transactional

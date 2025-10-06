@@ -280,6 +280,20 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
+    @GetMapping("/cases/doctor/{doctorId}/completed")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorCompletedCases(
+            @PathVariable("doctorId") Long doctorId){
+        List<CaseDto> cases = patientService.getDoctorCompletedCases(doctorId);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
+    @GetMapping("/cases/doctor/{doctorId}/closed")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorClosedCases(
+            @PathVariable("doctorId") Long doctorId){
+        List<CaseDto> cases = patientService.getDoctorClosedCases(doctorId);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
     @GetMapping("/cases/pool")
     public ResponseEntity<ApiResponse<List<CaseDto>>> getCassesPool(
             @RequestParam String specialization ) {
@@ -310,7 +324,7 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
-    @PostMapping("/cases/{caseId}/pay")
+    @PostMapping("/cases/pay")
     public ResponseEntity<ApiResponse<Void>> payConsultationFee(
             @RequestHeader("X-User-Id") Long userId,
             @Valid @RequestBody ProcessPaymentDto dto) {

@@ -38,10 +38,8 @@ public class DoctorController {
     private final DoctorService doctorService;
     private final DoctorRepository doctorRepository;
     private final PatientServiceClient caseAssignmentRepo;
-    private final AppointmentRepository appointmentRepository;
     private final InternalDoctorService internalDoctorService;
     private final NotificationServiceClient notificationServiceClient;
-    //private final NotEmptyValidatorForCollection notEmptyValidatorForCollection;
 
     /**
      * Get Doctor Dashboard Data
@@ -213,31 +211,119 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(appointments));
     }
 
-    @PostMapping("/consultation-reports")
-    public ResponseEntity<ApiResponse<ConsultationReport>> createReport(
-            @RequestHeader("X-User-Id") Long userId,
-            @Valid @RequestBody ConsultationReportDto dto) {
-        ConsultationReport report = doctorService.createConsultationReport(userId, dto);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(report, "Report created successfully"));
-    }
-
     @GetMapping("/consultation-reports")
-    public ResponseEntity<ApiResponse<List<ConsultationReport>>> getConsultationReports(
-            @RequestHeader("X-User-Id") Long userId) {
-        List<ConsultationReport> reports = doctorService.getConsultationReports(userId);
+    public ResponseEntity<ApiResponse<List<ConsultationReportDto>>> getConsultationReports(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam(required = false) ReportStatus status) {
+        List<ConsultationReportDto> reports;
+        if (status == null) {
+            reports = doctorService.getConsultationReports(userId);
+        }else {
+            reports = doctorService.getConsultationReportsByStatus(userId, status);
+        }
         return ResponseEntity.ok(ApiResponse.success(reports));
     }
 
-    // 21. Update Consultation Report
+    /**
+     * Create consultation report (DRAFT status)
+     */
+    @PostMapping("/consultation-reports/create")
+    public ResponseEntity<ApiResponse<ConsultationReportDto>> createReport(
+            @RequestHeader("X-User-Id") Long userId,
+            @Valid @RequestBody ConsultationReportDto dto) {
+
+        ConsultationReportDto report = doctorService.createConsultationReport(userId, dto);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(report, "Report created successfully as DRAFT"));
+    }
+
+    /**
+     * Get single consultation report by ID
+     */
+    @GetMapping("/consultation-reports/{reportId}")
+    public ResponseEntity<ApiResponse<ConsultationReportDto>> getConsultationReport(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long reportId) {
+        ConsultationReportDto report = doctorService.getConsultationReportById(userId, reportId);
+        return ResponseEntity.ok(ApiResponse.success(report));
+    }
+
+    /**
+     * Update consultation report (only DRAFT reports)
+     */
     @PutMapping("/consultation-reports/{reportId}")
-    public ResponseEntity<ApiResponse<ConsultationReport>> updateConsultationReport(
+    public ResponseEntity<ApiResponse<ConsultationReportDto>> updateConsultationReport(
             @RequestHeader("X-User-Id") Long userId,
             @PathVariable Long reportId,
             @Valid @RequestBody UpdateReportDto dto) {
-        ConsultationReport report = doctorService.updateConsultationReport(userId, reportId, dto);
-        return ResponseEntity.ok(ApiResponse.success(report, "Report updated"));
+
+        ConsultationReportDto report = doctorService.updateConsultationReport(userId, reportId, dto);
+        return ResponseEntity.ok(ApiResponse.success(report, "Report updated successfully"));
     }
+
+    /**
+     * Export report to PDF (finalizes the report)
+     */
+    @PostMapping("/consultation-reports/{reportId}/export")
+    public ResponseEntity<ApiResponse<ExportResponse>> exportReportToPdf(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long reportId) {
+
+        String pdfUrl = doctorService.exportReportToPdf(userId, reportId);
+
+        ExportResponse response = new ExportResponse();
+        response.setReportId(reportId);
+        response.setPdfUrl(pdfUrl);
+        response.setMessage("Report exported successfully and finalized");
+
+        return ResponseEntity.ok(ApiResponse.success(response,
+                "Report exported to PDF successfully. Report is now finalized and cannot be edited."));
+    }
+
+    /**
+     * Delete consultation report (only DRAFT reports)
+     */
+    @DeleteMapping("/consultation-reports/{reportId}")
+    public ResponseEntity<ApiResponse<Void>> deleteConsultationReport(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long reportId) {
+        doctorService.deleteConsultationReport(userId, reportId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Report deleted successfully"));
+    }
+
+    // Response DTO for export endpoint
+    @lombok.Data
+    public static class ExportResponse {
+        private Long reportId;
+        private String pdfUrl;
+        private String message;
+    }
+
+//    /**
+//     * Get reminders for an appointment (for testing/admin purposes)
+//     */
+//    @GetMapping("/appointments/{appointmentId}/reminders")
+//    public ResponseEntity<List<AppointmentReminderDto>> getAppointmentReminders(
+//            @PathVariable Long appointmentId) {
+//
+//        List<AppointmentReminderDto> reminders =
+//                appointmentReminderService.getRemindersForAppointment(appointmentId);
+//
+//        return ResponseEntity.ok(reminders);
+//    }
+//
+//    /**
+//     * Manually trigger reminder send (for testing)
+//     */
+//    @PostMapping("/reminders/{reminderId}/send")
+//    public ResponseEntity<Void> sendReminderManually(
+//            @PathVariable Long reminderId) {
+//
+//        appointmentReminderService.sendReminderManually(reminderId);
+//
+//        return ResponseEntity.ok().build();
+//    }
+
 
     // 10. Get Doctor Profile
     @GetMapping("/profile/{doctorId}")

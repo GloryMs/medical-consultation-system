@@ -141,4 +141,24 @@ public class PatientEventConsumer {
             log.error("Error processing case status update: {}", e.getMessage(), e);
         }
     }
+
+    @KafkaListener(topics = "case-report-update-topic", groupId = "patient-group")
+    public void handleMedicalReportReadiness(Map<String, Object> caseEvent) {
+        try {
+            Long caseId = Long.valueOf(caseEvent.get("caseId").toString());
+            String pdfUrl = caseEvent.get("pdfUrl").toString();
+            Long doctorId = caseEvent.get("doctorId") != null ?
+                    Long.valueOf(caseEvent.get("doctorId").toString()) : null;
+            Long patientId = caseEvent.get("patientId") != null ?
+                    Long.valueOf(caseEvent.get("patientId").toString()) : null;
+
+            log.info("Kafka Patient Listener: Case medical report readiness: case={}, PDF URL={}, doctor={}, patient={}",
+                    caseId, pdfUrl, doctorId, patientId);
+
+            patientService.updateCaseForMedicalReport(caseId, pdfUrl, patientId);
+
+        } catch (Exception e) {
+            log.error("Error processing medical report update: {}", e.getMessage(), e);
+        }
+    }
 }
