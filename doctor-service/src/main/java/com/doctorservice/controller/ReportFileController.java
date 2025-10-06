@@ -30,7 +30,6 @@ public class ReportFileController {
     /**
      * Serve/view PDF report file (inline - opens in browser)
      * File is automatically decrypted and decompressed
-     *
      * Example: GET /api/files/reports/2024/10/02/medical_report_case50_report1_20241002_143000_abc123.pdf
      */
     @GetMapping("/")
@@ -82,10 +81,9 @@ public class ReportFileController {
     /**
      * Download PDF report file (forces download instead of inline view)
      * File is automatically decrypted and decompressed
-     *
      * Example: GET /api/files/reports/download/2024/10/02/medical_report_case50_report1_20241002_143000_abc123.pdf
      */
-    @GetMapping("/download/**")
+    @GetMapping("/download/")
     public ResponseEntity<Resource> downloadFile(
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             HttpServletRequest request) {
