@@ -28,5 +28,7 @@ public class ConsultationReportDto {
     private String pdfFileLink;
     private LocalDateTime exportedAt;
     private LocalDateTime finalizedAt;
+    private String doctorName;
+    private String patientName;
 
 }

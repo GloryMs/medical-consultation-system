@@ -59,4 +59,11 @@ public class ConsultationReport extends BaseEntity {
 
     @Column(name = "finalized_at")
     private LocalDateTime finalizedAt;
+
+    @Column(name = "doctor_name")
+    private String doctorName;
+
+    @Column(name = "patient_name")
+    private String patientName;
+
 }

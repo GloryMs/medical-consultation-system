@@ -237,6 +237,13 @@ public class DoctorController {
                 .body(ApiResponse.success(report, "Report created successfully as DRAFT"));
     }
 
+    @GetMapping("/consultation-reports/{caseId}/custom-case")
+    public ResponseEntity<ApiResponse<CaseDataForMedicalReportDto>> getCaseDetailsForMedicalReport(
+            @RequestHeader("X-User-Id") Long userId, @PathVariable Long caseId){
+        CaseDataForMedicalReportDto caseData = doctorService.getCaseDetailsForMedicalReport(userId, caseId);
+        return ResponseEntity.ok(ApiResponse.success(caseData));
+    }
+
     /**
      * Get single consultation report by ID
      */
@@ -376,6 +383,13 @@ public class DoctorController {
     public ResponseEntity<ApiResponse<List<CaseDto>>> getActiveCases(
             @RequestHeader("X-User-Id") Long userId) {
         List<CaseDto> cases = doctorService.getActiveCases(userId);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
+    @GetMapping("/cases/all")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getAllCases(
+            @RequestHeader("X-User-Id") Long userId) {
+        List<CaseDto> cases = doctorService.getAllCases(userId);
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 

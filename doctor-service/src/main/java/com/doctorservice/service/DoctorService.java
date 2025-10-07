@@ -340,7 +340,6 @@ public class DoctorService {
         return saved;
     }
 
-
     public List<AppointmentDto> getDoctorAppointments(Long userId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
@@ -410,6 +409,8 @@ public class DoctorService {
                 .nextAppointmentSuggested(dto.getNextAppointmentSuggested())
                 .doctorNotes(dto.getDoctorNotes())
                 .status(ReportStatus.DRAFT)
+                .doctorName(dto.getDoctorName())
+                .patientName(dto.getPatientName())
                 .build();
 
         // Update appointment status
@@ -506,6 +507,57 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
         return mapToDto(doctor);
+    }
+
+    public CaseDataForMedicalReportDto getCaseDetailsForMedicalReport(Long userId, Long caseId) {
+        CaseDataForMedicalReportDto customCaseData = new CaseDataForMedicalReportDto();
+
+        //Get Doctor:
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("getCaseDetailsForMedicalReport ===> Doctor not found",
+                        HttpStatus.NOT_FOUND));
+
+        //Get appointment info:
+        Appointment appointment = appointmentRepository.findByCaseIdAndDoctorIdAndStatus(caseId, doctor.getId(),
+                AppointmentStatus.COMPLETED).
+                orElseThrow(() -> new BusinessException("getCaseDetailsForMedicalReport ===> Appointment not found",
+                        HttpStatus.NOT_FOUND));
+
+        //Get Case Details:
+        List<CaseDto> cases = patientServiceClient.getAllDoctorCases(doctor.getId()).getBody().getData();
+        if( cases == null || cases.isEmpty() )
+            throw new BusinessException("getCaseDetailsForMedicalReport ===> No Cases found",
+                    HttpStatus.NOT_FOUND);
+
+        CaseDto medicalCase = cases.stream().filter(c -> c.getId().equals(caseId)).
+                findFirst().get();
+        if( medicalCase == null )
+            throw new BusinessException("getCaseDetailsForMedicalReport ===> Case " + caseId +  " not found",
+                    HttpStatus.NOT_FOUND);
+        //Get Patient info:
+        CustomPatientDto patientDto = patientServiceClient.getCustomPatientInfo(caseId, doctor.getId()).
+                getBody().getData();
+
+        //Some validation
+        if(!Objects.equals(appointment.getDoctor().getId(), doctor.getId()) ||
+                ( patientDto !=null && !Objects.equals(appointment.getPatientId(), patientDto.getId())  )){
+            throw new BusinessException("getCaseDetailsForMedicalReport ===> Doctor, Patient and Appointment conflict - No matching",
+                    HttpStatus.UNAUTHORIZED);
+        }
+
+        customCaseData.setCaseId(caseId);
+        customCaseData.setDoctorId(doctor.getId());
+        customCaseData.setAppointmentId(appointment.getId());
+        customCaseData.setPatientId(patientDto.getId());
+        customCaseData.setDoctorName(doctor.getFullName());
+        customCaseData.setPatientName(patientDto.getFullName());
+        customCaseData.setCaseTitle(medicalCase.getCaseTitle());
+        customCaseData.setCaseSubmittedAt(medicalCase.getSubmittedAt());
+        customCaseData.setCaseRequiredSpecialization(medicalCase.getRequiredSpecialization());
+        customCaseData.setCaseDescription(medicalCase.getDescription());
+
+
+        return customCaseData;
     }
 
     // 11. Update Availability Implementation
@@ -630,6 +682,23 @@ public class DoctorService {
             e.printStackTrace();
         }
         return activeCase;
+    }
+
+    public List<CaseDto> getAllCases(Long userId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        List<CaseDto> allDoctorCases = new ArrayList<>();
+        try{
+            allDoctorCases = patientServiceClient.getAllDoctorCases(doctor.getId()).getBody().getData();
+            System.out.println("Doctor-Service: All Doctor cases, for doctor: "+
+                    doctor.getId() + " are: "+ allDoctorCases.size());
+        }catch (Exception e){
+            log.error("Failed to get Active cases for doctor: " + doctor.getFullName() +
+                    " - Id:" + doctor.getId(), e);
+            e.printStackTrace();
+        }
+        return allDoctorCases;
     }
 
     public List<CaseDto> browseCasesPool(Long userId, String specialization) {
@@ -1109,7 +1178,7 @@ public class DoctorService {
 
             // Send Kafka event to patient-service
             doctorEventProducer.sendReportExportedEvent(report.getCaseId(), pdfUrl,
-                    doctor.getId(), report.getPatientId());
+                    doctor.getId(), report.getPatientId(), report.getId());
 
             return pdfUrl;
 

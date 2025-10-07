@@ -136,7 +136,7 @@ public class DoctorEventProducer {
         log.info("Kafka - Case status updated event sent for case: {}", caseId);
     }
 
-    public void sendReportExportedEvent(Long caseId, String pdfUrl,Long doctorId, Long patientId){
+    public void sendReportExportedEvent(Long caseId, String pdfUrl,Long doctorId, Long patientId, Long reportId){
         try {
             // Create case fee update event
             Map<String, Object> reportExportedEvent = new HashMap<>();
@@ -144,6 +144,7 @@ public class DoctorEventProducer {
             reportExportedEvent.put("pdfUrl", pdfUrl);
             reportExportedEvent.put("doctorId", doctorId);
             reportExportedEvent.put("patientId", patientId);
+            reportExportedEvent.put("reportId", reportId);
             reportExportedEvent.put("timestamp", System.currentTimeMillis());
 
             // Send event to update case in patient service

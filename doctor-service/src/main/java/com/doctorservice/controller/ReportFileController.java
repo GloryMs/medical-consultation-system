@@ -32,7 +32,7 @@ public class ReportFileController {
      * File is automatically decrypted and decompressed
      * Example: GET /api/files/reports/2024/10/02/medical_report_case50_report1_20241002_143000_abc123.pdf
      */
-    @GetMapping("/")
+    @GetMapping("/serve/**")
     public ResponseEntity<Resource> serveFile(
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             HttpServletRequest request) {
@@ -83,7 +83,7 @@ public class ReportFileController {
      * File is automatically decrypted and decompressed
      * Example: GET /api/files/reports/download/2024/10/02/medical_report_case50_report1_20241002_143000_abc123.pdf
      */
-    @GetMapping("/download/")
+    @GetMapping("/download/**")
     public ResponseEntity<Resource> downloadFile(
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             HttpServletRequest request) {

@@ -151,11 +151,13 @@ public class PatientEventConsumer {
                     Long.valueOf(caseEvent.get("doctorId").toString()) : null;
             Long patientId = caseEvent.get("patientId") != null ?
                     Long.valueOf(caseEvent.get("patientId").toString()) : null;
+            Long reportId = caseEvent.get("reportId") != null ?
+                    Long.valueOf(caseEvent.get("reportId").toString()) : null;
 
             log.info("Kafka Patient Listener: Case medical report readiness: case={}, PDF URL={}, doctor={}, patient={}",
                     caseId, pdfUrl, doctorId, patientId);
 
-            patientService.updateCaseForMedicalReport(caseId, pdfUrl, patientId);
+            patientService.updateCaseForMedicalReport(caseId, pdfUrl, patientId, reportId);
 
         } catch (Exception e) {
             log.error("Error processing medical report update: {}", e.getMessage(), e);

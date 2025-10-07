@@ -44,6 +44,10 @@ public class CaseDetailsDto {
     private Integer documentCount;
     private Long totalDocumentSize; // Total size of all documents
 
+    //Medical report:
+    private String medicalReportFileLink;
+    private Long reportId;
+
     // File access information
     private List<DocumentAccessDto> documentAccess;
 

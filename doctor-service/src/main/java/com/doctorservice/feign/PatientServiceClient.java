@@ -61,6 +61,10 @@ public interface PatientServiceClient {
     @GetMapping("/api/patients/cases/doctor/{doctorId}/active")
     ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorActiveCases(@PathVariable("doctorId") Long doctorId);
 
+
+    @GetMapping("/api/patients/cases/doctor/{doctorId}/all")
+    ResponseEntity<ApiResponse<List<CaseDto>>> getAllDoctorCases(@PathVariable("doctorId") Long doctorId);
+
     @GetMapping("/api/patients/cases/doctor/{doctorId}/completed")
     ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorCompletedCases(@PathVariable("doctorId") Long doctorId);
 

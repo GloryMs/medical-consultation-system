@@ -116,4 +116,7 @@ public class Case extends BaseEntity {
 
     @Column(name = "report_generated_at")
     private LocalDateTime reportGeneratedAt;
+
+    @Column(name = "report_id")
+    private Long reportId;
 }

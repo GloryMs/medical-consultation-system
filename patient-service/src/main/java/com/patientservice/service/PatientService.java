@@ -12,6 +12,7 @@ import com.patientservice.kafka.PatientEventProducer;
 import com.patientservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.sql.ast.tree.update.Assignment;
 import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -256,8 +257,8 @@ public class PatientService {
 
     public List<CaseDto> getDoctorActiveCases (Long doctorId ){
         List<CaseDto> cases = new ArrayList<>();
-        List<Case> tempCases = new ArrayList<>();
-        List<CaseAssignment> assignments = new ArrayList<>();
+        List<Case> tempCases;
+        List<CaseAssignment> assignments;
 
         assignments = caseAssignmentRepository.findByDoctorIdAndStatus( doctorId, AssignmentStatus.ACCEPTED );
         System.out.println("Getting assignments for doctor: " + doctorId);
@@ -269,13 +270,38 @@ public class PatientService {
                             caseEntity.getStatus().equals(ACCEPTED) ||
                                     caseEntity.getStatus().equals(SCHEDULED) ||
                                     caseEntity.getStatus().equals(PAYMENT_PENDING) ||
-                                    caseEntity.getStatus().equals(IN_PROGRESS)).
+                                    caseEntity.getStatus().equals(IN_PROGRESS) ||
+                                    caseEntity.getStatus().equals(CONSULTATION_COMPLETE)
+                            ).
                     toList());
             System.out.println("tempCases (active cases) count: " + tempCases.size());
 
             if( tempCases != null && !tempCases.isEmpty() ){
                 cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
                 System.out.println("Doctor active cases count: " + cases.size());
+            }
+        }
+        return cases;
+    }
+
+    public List<CaseDto> getAllDoctorCases (Long doctorId ){
+        List<CaseDto> cases = new ArrayList<>();
+        List<Case> tempCases = new ArrayList<>();
+        List<CaseAssignment> assignments = new ArrayList<>();
+
+        assignments = caseAssignmentRepository.findByDoctorId( doctorId );
+        System.out.println("Getting assignments for doctor: " + doctorId);
+        System.out.println("Doctor assignments count: " + assignments.size());
+        if( assignments != null && !assignments.isEmpty() ){
+            //Get related cases
+            tempCases = assignments.stream()
+                    .map(CaseAssignment::getCaseEntity)
+                    .distinct()
+                    .toList();
+
+            if( tempCases != null && !tempCases.isEmpty() ){
+                cases = tempCases.stream().map(this ::convertToCaseDto ).collect(Collectors.toList());
+                System.out.println("Doctor all related cases count: " + cases.size());
             }
         }
         return cases;
@@ -437,14 +463,17 @@ public class PatientService {
     }
 
     @Transactional
-    public void updateCaseForMedicalReport(Long caseId, String pdfUrl, Long patientId){
+    public void updateCaseForMedicalReport(Long caseId, String pdfUrl, Long patientId, Long reportId){
         //some validation
         Case medicalCase = caseRepository.findById(caseId).orElseThrow(() ->
                 new BusinessException("Case not found", HttpStatus.NOT_FOUND));
         Patient patient = patientRepository.findById(patientId).orElseThrow(() ->
                 new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
-        if( medicalCase.getPatient().getId().equals(patient.getId()) ){
+        System.out.println("updateCaseForMedicalReport ===> Patient: " + patient.getId() +
+                ", Case.getPatient().getId(): " + medicalCase.getPatient().getId());
+
+        if( !medicalCase.getPatient().getId().equals(patient.getId()) ){
             throw new BusinessException("Case didn't belong to provided patient", HttpStatus.UNAUTHORIZED);
         }
         if( !medicalCase.getStatus().equals(CONSULTATION_COMPLETE) ){
@@ -455,6 +484,7 @@ public class PatientService {
         medicalCase.setStatus(CLOSED);
         medicalCase.setMedicalReportFileLink(pdfUrl);
         medicalCase.setReportGeneratedAt(LocalDateTime.now());
+        medicalCase.setReportId(reportId);
 
         caseRepository.save(medicalCase);
     }
@@ -692,6 +722,9 @@ public class PatientService {
         // Add documents if any
         List<Document> documents = documentRepository.findByCaseId(caseId);
         details.setDocuments(documents);
+
+        details.setMedicalReportFileLink(medicalCase.getMedicalReportFileLink());
+        details.setReportId(medicalCase.getReportId());
 
         return details;
     }

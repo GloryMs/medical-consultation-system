@@ -21,6 +21,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     List<Appointment> findByCaseId(Long caseId);
     List<Appointment> findByPatientId(Long patientId);
     Optional<Appointment> findByCaseIdAndPatientIdAndDoctorId(Long caseId, Long patientId, Long doctorId);
+    Optional<Appointment> findByCaseIdAndDoctorIdAndStatus(Long caseId, Long doctorId, AppointmentStatus status);
 
     Long countByDoctorIdAndScheduledTimeBetween(Long doctorId, LocalDateTime start, LocalDateTime end);
 
@@ -183,4 +184,5 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("searchEnd") LocalDateTime searchEnd,
             @Param("excludeId") Long excludeId
     );
+
 }

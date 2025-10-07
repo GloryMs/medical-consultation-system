@@ -39,4 +39,6 @@ public class CaseDto {
     private Boolean isDeleted = false;
     private BigDecimal consultationFee;
     private LocalDateTime feeSetAt;
+    private String medicalReportFileLink;
+    private Long reportId;
 }

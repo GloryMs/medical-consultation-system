@@ -287,6 +287,14 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(cases));
     }
 
+    //getAllDoctorCases
+    @GetMapping("/cases/doctor/{doctorId}/all")
+    public ResponseEntity<ApiResponse<List<CaseDto>>> getAllDoctorCases(
+            @PathVariable("doctorId") Long doctorId){
+        List<CaseDto> cases = patientService.getAllDoctorCases(doctorId);
+        return ResponseEntity.ok(ApiResponse.success(cases));
+    }
+
     @GetMapping("/cases/doctor/{doctorId}/closed")
     public ResponseEntity<ApiResponse<List<CaseDto>>> getDoctorClosedCases(
             @PathVariable("doctorId") Long doctorId){
