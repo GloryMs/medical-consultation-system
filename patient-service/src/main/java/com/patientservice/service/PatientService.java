@@ -514,6 +514,7 @@ public class PatientService {
 
         // Simulate payment processing first:
 
+        paymentDto.setPatientId(patient.getId());
          PaymentDto updatedPayment =  paymentServiceClient.processPayment(paymentDto).getBody().getData();
 
         //update case status:

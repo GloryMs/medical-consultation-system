@@ -21,5 +21,5 @@ public interface PaymentServiceClient {
     ResponseEntity<ApiResponse<List<PaymentHistoryDto>>> getPatientPaymentHistory(@PathVariable Long patientId);
 
     @PostMapping("/api/payments/process")
-    public ResponseEntity<ApiResponse<PaymentDto>> processPayment(@Valid @RequestBody ProcessPaymentDto dto);
+    ResponseEntity<ApiResponse<PaymentDto>> processPayment(@Valid @RequestBody ProcessPaymentDto dto);
 }

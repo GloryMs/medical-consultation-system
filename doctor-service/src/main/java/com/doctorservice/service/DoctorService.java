@@ -1052,21 +1052,29 @@ public class DoctorService {
         appointment.setStatus(AppointmentStatus.COMPLETED);
         appointmentRepository.save(appointment);
 
+        System.out.println("completeAppointment ====>  Doctor:Id: " + doctor.getId() +
+                ", Appointment Id: "+ appointment.getId() +
+                ", Patient Id: " + appointment.getPatientId() +
+                ", Case Id: " + dto.getCaseId());
+
         //Update Case:
         List<CaseDto> cases = patientServiceClient.getDoctorActiveCases(doctor.getId()).getBody().getData();
         if( cases != null && !cases.isEmpty() ) {
+            System.out.println("completeAppointment ====>  cases for doctor: " +cases.size());
             CaseDto caseDto = cases.stream().filter(c->c.getId().equals(dto.getCaseId())).findFirst().
-                    orElseThrow(()-> new BusinessException("Failed to update case "+ dto.getCaseId() +
+                    orElseThrow(()-> new BusinessException("completeAppointment ====>  Failed to update case "+
+                            dto.getCaseId() +
                             " status to CONSULTATION_COMPLETE ", HttpStatus.NOT_FOUND));
 
-            System.out.println("Send kafka event to update case "+ caseDto.getId() +" status to: CONSULTATION_COMPLETE");
+            System.out.println("Send kafka event to update case "+ caseDto.getId() +
+                    " status to: CONSULTATION_COMPLETE");
 
             //Send update Case Kafka event to update case status to CONSULTATION_COMPLETE
             doctorEventProducer.sendCaseStatusUpdateEventFromDoctor(caseDto.getId(), CaseStatus.IN_PROGRESS.name(),
                     CaseStatus.CONSULTATION_COMPLETE.name(), dto.getPatientId(), doctor.getId());
         }
         else{
-           throw new BusinessException("Failed to update case "+ dto.getCaseId() +
+           throw new BusinessException("completeAppointment ====> Failed to update case "+ dto.getCaseId() +
                    " status to CONSULTATION_COMPLETE ", HttpStatus.NOT_FOUND);
         }
     }
@@ -1208,7 +1216,6 @@ public class DoctorService {
 
         return report;
     }
-
 
     /**
      * Update consultation report (only if DRAFT)
@@ -1369,11 +1376,6 @@ public class DoctorService {
         private Long caseId;
         private CaseStatus status;
     }
-
-
-
-
-
 
     // 22. Close Case Implementation
     @Transactional
@@ -1889,6 +1891,80 @@ public class DoctorService {
         }
 
         return availableSlots;
+    }
+
+    /**
+     * Get doctor payment history
+     */
+    public List<PaymentHistoryDto> getPaymentHistory(Long doctorId, Map<String, String> filters) {
+        // If period filter is specified, use period-based query
+        if (filters.containsKey("period")) {
+            String period = filters.get("period");
+            return getPaymentHistoryByPeriod(doctorId, period);
+        }
+
+        // If status filter is specified
+        if (filters.containsKey("status")) {
+            String status = filters.get("status");
+            return paymentServiceClient.getDoctorPaymentHistoryByStatus(doctorId, status)
+                    .getBody()
+                    .getData();
+        }
+
+        // Default: get all payment history
+        return paymentServiceClient.getDoctorPaymentHistory(doctorId)
+                .getBody()
+                .getData();
+    }
+
+    /**
+     * Get payment history filtered by period
+     */
+    private List<PaymentHistoryDto> getPaymentHistoryByPeriod(Long doctorId, String period) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startDate;
+
+        switch (period.toLowerCase()) {
+            case "week":
+                startDate = now.minusWeeks(1);
+                break;
+            case "month":
+                startDate = now.minusMonths(1);
+                break;
+            case "year":
+                startDate = now.minusYears(1);
+                break;
+            case "all":
+            default:
+                // For "all", just get all history
+                return paymentServiceClient.getDoctorPaymentHistory(doctorId)
+                        .getBody()
+                        .getData();
+        }
+
+        return paymentServiceClient.getDoctorPaymentHistoryByPeriod(
+                doctorId,
+                startDate.toString(),
+                now.toString()
+        ).getBody().getData();
+    }
+
+    /**
+     * Get doctor earnings summary
+     */
+    public DoctorEarningsSummaryDto getEarningsSummary(Long doctorId, String period) {
+        return paymentServiceClient.getDoctorEarningsSummary(doctorId, period)
+                .getBody()
+                .getData();
+    }
+
+    /**
+     * Get doctor earnings statistics
+     */
+    public Map<String, Object> getEarningsStats(Long doctorId) {
+        return paymentServiceClient.getDoctorEarningsStats(doctorId)
+                .getBody()
+                .getData();
     }
 
 }

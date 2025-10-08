@@ -10,6 +10,7 @@ import com.doctorservice.dto.*;
 import com.doctorservice.entity.*;
 import com.doctorservice.feign.NotificationServiceClient;
 import com.doctorservice.feign.PatientServiceClient;
+import com.doctorservice.feign.PaymentServiceClient;
 import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.service.DoctorService;
@@ -40,6 +41,7 @@ public class DoctorController {
     private final PatientServiceClient caseAssignmentRepo;
     private final InternalDoctorService internalDoctorService;
     private final NotificationServiceClient notificationServiceClient;
+    private final PaymentServiceClient paymentServiceClient;
 
     /**
      * Get Doctor Dashboard Data
@@ -616,6 +618,104 @@ public class DoctorController {
             @PathVariable  Long userId) {
         notificationServiceClient.markAllAsRead(userId);
         return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
+    }
+
+    /**
+     * Get doctor payment history with optional filters
+     */
+    @GetMapping("/payments")
+    public ResponseEntity<ApiResponse<List<PaymentHistoryDto>>> getPaymentHistory(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam(required = false) Map<String, String> filters) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        List<PaymentHistoryDto> history = doctorService.getPaymentHistory(doctor.getId(), filters);
+
+        return ResponseEntity.ok(ApiResponse.success(history));
+    }
+
+    /**
+     * Get doctor earnings summary
+     */
+    @GetMapping("/earnings/summary")
+    public ResponseEntity<ApiResponse<DoctorEarningsSummaryDto>> getEarningsSummary(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam(defaultValue = "month") String period) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND)
+        );
+        DoctorEarningsSummaryDto summary = doctorService.getEarningsSummary(doctor.getId(), period);
+
+        return ResponseEntity.ok(ApiResponse.success(summary));
+    }
+
+    /**
+     * Get doctor earnings statistics
+     */
+    @GetMapping("/earnings/stats")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getEarningsStats(
+            @RequestHeader("X-User-Id") Long userId) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        Map<String, Object> stats = doctorService.getEarningsStats(doctor.getId());
+
+        return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
+    @GetMapping("/earnings/export/pdf")
+    public ResponseEntity<byte[]> exportEarningsPdf(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        return paymentServiceClient.exportEarningsReportPdf(
+                doctor.getId(), period, startDate, endDate
+        );
+    }
+
+    @GetMapping("/earnings/export/csv")
+    public ResponseEntity<String> exportEarningsCsv(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        return paymentServiceClient.exportEarningsReportCsv(
+                doctor.getId(), period, startDate, endDate
+        );
+    }
+
+    @GetMapping("/earnings/chart-data")
+    public ResponseEntity<ApiResponse<List<ChartDataPointDto>>> getEarningsChartData(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam String period,
+            @RequestParam(defaultValue = "daily") String groupBy) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        return paymentServiceClient.getEarningsChartData(
+                doctor.getId(), period, groupBy
+        );
+    }
+
+    @GetMapping("/earnings/payment-methods")
+    public ResponseEntity<ApiResponse<List<ChartDataPointDto>>> getPaymentMethodDistribution(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam String period) {
+
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(
+                () -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        return paymentServiceClient.getPaymentMethodDistribution(
+                doctor.getId(), period
+        );
     }
 
 }

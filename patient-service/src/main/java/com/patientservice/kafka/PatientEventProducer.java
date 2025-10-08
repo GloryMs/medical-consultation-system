@@ -109,7 +109,7 @@ public class PatientEventProducer {
     }
 
     public void sendScheduleConfirmationEvent(Long caseId, Long patientId, Long doctorId) {
-        // Send notification to Doctor
+        // Send notification to Doctor about appointment confirmation
         NotificationDto patientNotification = NotificationDto.builder()
                 .senderId(patientId != null ? patientId : 0L)
                 .receiverId(doctorId)
