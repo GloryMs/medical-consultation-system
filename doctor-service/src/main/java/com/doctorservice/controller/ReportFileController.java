@@ -36,14 +36,15 @@ public class ReportFileController {
     public ResponseEntity<Resource> serveFile(
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             HttpServletRequest request) {
-
         try {
             // Get the full request URL
             String requestUrl = request.getRequestURL().toString();
 
             log.info("Serving PDF file request: {}", requestUrl);
-
+            //http://172.16.1.122:8081/api/files/reports/serve/2025/doctor_4/patient_17/case_43/medical_report_case43_report6_20251007_105454_20251007_110140_0a955355.pdf
+            //http://172.16.1.122:8081/api/files/reports
             // Get file content (will be automatically decrypted and decompressed)
+            requestUrl=requestUrl.replace("server/","");
             byte[] fileContent = fileStorageService.getFile(requestUrl);
 
             // Create resource
@@ -69,10 +70,12 @@ public class ReportFileController {
                     .body(resource);
 
         } catch (SecurityException ex) {
+            ex.printStackTrace();
             log.error("Security violation while serving file: {}", ex.getMessage());
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
 
         } catch (Exception ex) {
+            ex.printStackTrace();
             log.error("Error serving PDF file: {}", ex.getMessage(), ex);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }

@@ -6,6 +6,8 @@
       <list>
         <option value="$PROJECT_DIR$/pom.xml" />
         <option value="$PROJECT_DIR$/config-service/pom.xml" />
+        <option value="$PROJECT_DIR$/messagin-service/pom.xml" />
+        <option value="$PROJECT_DIR$/messaging-service/pom.xml" />
       </list>
     </option>
   </component>

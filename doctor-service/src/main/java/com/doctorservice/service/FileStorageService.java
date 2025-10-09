@@ -130,6 +130,7 @@ public class FileStorageService {
             return decryptedData;
 
         } catch (Exception ex) {
+            ex.printStackTrace();
             log.error("Failed to read file: {}", fileUrl, ex);
             throw new RuntimeException("Failed to read file", ex);
         }

@@ -9,6 +9,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="integration-service" />
         <module name="auth-service" />
+        <module name="messaging-service" />
         <module name="payment-service" />
         <module name="config-service" />
         <module name="doctor-service" />
@@ -39,6 +40,7 @@
       <module name="doctor-service" options="-parameters" />
       <module name="eureka-server" options="-parameters" />
       <module name="integration-service" options="-parameters" />
+      <module name="messaging-service" options="-parameters" />
       <module name="notification-service" options="-parameters" />
       <module name="patient-service" options="-parameters" />
       <module name="payment-service" options="-parameters" />
