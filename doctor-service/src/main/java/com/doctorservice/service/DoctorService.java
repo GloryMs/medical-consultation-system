@@ -8,10 +8,7 @@ import com.doctorservice.entity.*;
 import com.doctorservice.feign.NotificationServiceClient;
 import com.doctorservice.feign.PaymentServiceClient;
 import com.doctorservice.kafka.DoctorEventProducer;
-import com.doctorservice.repository.AppointmentRepository;
-import com.doctorservice.repository.CalendarAvailabilityRepository;
-import com.doctorservice.repository.ConsultationReportRepository;
-import com.doctorservice.repository.DoctorRepository;
+import com.doctorservice.repository.*;
 import com.doctorservice.feign.PatientServiceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +40,7 @@ public class DoctorService {
     private final PaymentServiceClient paymentServiceClient;
     private final PdfGenerationService pdfGenerationService;
     private final AppointmentReminderService appointmentReminderService;
+    private final DoctorSettingsRepository doctorSettingsRepository;
 
     @Transactional
     public DoctorProfileDto createProfile(Long userId, DoctorProfileDto dto) {
@@ -58,13 +56,13 @@ public class DoctorService {
                 .userId(userId)
                 .fullName(dto.getFullName())
                 .licenseNumber(dto.getLicenseNumber())
-                .primarySpecialization(dto.getPrimarySpecializationCode())
-                .subSpecializations(dto.getSubSpecializationCodes())
+                .primarySpecialization(dto.getPrimarySpecialization())
+                .subSpecializations(dto.getSubSpecializations())
                 .caseRate(dto.getCaseRate())
                 .emergencyRate(dto.getEmergencyRate())
                 .hourlyRate(dto.getHourlyRate())
                 .verificationStatus(VerificationStatus.PENDING)
-                .emergencyRate(dto.getComplexCaseFee())
+                .emergencyRate(dto.getEmergencyRate())
                 .yearsOfExperience(dto.getYearsOfExperience())
                 .rating(0.0)
                 .yearsOfExperience(dto.getYearsOfExperience())
@@ -101,12 +99,12 @@ public class DoctorService {
         }
 
         // Update specialization information
-        if (dto.getPrimarySpecializationCode() != null && !dto.getPrimarySpecializationCode().trim().isEmpty()) {
-            doctor.setPrimarySpecialization(dto.getPrimarySpecializationCode().trim());
+        if (dto.getPrimarySpecialization() != null && !dto.getPrimarySpecialization().trim().isEmpty()) {
+            doctor.setPrimarySpecialization(dto.getPrimarySpecialization().trim());
         }
 
-        if (dto.getSubSpecializationCodes() != null && !dto.getSubSpecializationCodes().isEmpty()) {
-            doctor.setSubSpecializations(new HashSet<>(dto.getSubSpecializationCodes()));
+        if (dto.getSubSpecializations() != null && !dto.getSubSpecializations().isEmpty()) {
+            doctor.setSubSpecializations(new HashSet<>(dto.getSubSpecializations()));
         }
 
         // Update professional information
@@ -139,16 +137,16 @@ public class DoctorService {
         }
 
         // Update pricing information
-        if (dto.getBaseConsultationFee() != null && dto.getBaseConsultationFee() >= 0) {
-            doctor.setCaseRate(dto.getBaseConsultationFee());
+        if (dto.getCaseRate() != null && dto.getCaseRate() >= 0) {
+            doctor.setCaseRate(dto.getCaseRate());
         }
 
         if (dto.getHourlyRate() != null && dto.getHourlyRate() >= 0) {
             doctor.setHourlyRate(dto.getHourlyRate());
         }
 
-        if (dto.getUrgentCaseFee() != null && dto.getUrgentCaseFee() >= 0) {
-            doctor.setEmergencyRate(dto.getUrgentCaseFee());
+        if (dto.getEmergencyRate() != null && dto.getEmergencyRate() >= 0) {
+            doctor.setEmergencyRate(dto.getEmergencyRate());
         }
 
         // Update contact information
@@ -452,51 +450,54 @@ public class DoctorService {
 
     private DoctorProfileDto mapToDto(Doctor doctor) {
         DoctorProfileDto dto = new DoctorProfileDto();
+        ModelMapper modelMapper = new ModelMapper();
 
-        dto.setId(doctor.getId());
-        dto.setUserId(doctor.getUserId());
-        dto.setFullName(doctor.getFullName());
-        dto.setLicenseNumber(doctor.getLicenseNumber());
-        dto.setPrimarySpecializationCode(doctor.getPrimarySpecialization());
+        dto = modelMapper.map(doctor, DoctorProfileDto.class);
 
-        // Convert sets to comma-separated strings for frontend compatibility
-        if (doctor.getSubSpecializations() != null && !doctor.getSubSpecializations().isEmpty()) {
-            dto.setSubSpecializationCodes(doctor.getSubSpecializations());
-        }
-
-        if (doctor.getQualifications() != null && !doctor.getQualifications().isEmpty()) {
-            dto.setQualifications(String.join(", ", doctor.getQualifications()));
-        }
-
-        if (doctor.getLanguages() != null && !doctor.getLanguages().isEmpty()) {
-            dto.setLanguages(String.join(", ", doctor.getLanguages()));
-        }
-
-        dto.setVerificationStatus(doctor.getVerificationStatus());
-        dto.setYearsOfExperience(doctor.getYearsOfExperience());
-        dto.setPhoneNumber(doctor.getPhoneNumber());
-        dto.setEmail(doctor.getEmail());
-        dto.setHospitalAffiliation(doctor.getHospitalAffiliation());
-
-        // Convert pricing fields
-        if (doctor.getCaseRate() != null) {
-            dto.setBaseConsultationFee(doctor.getCaseRate());
-            dto.setCaseRate(doctor.getCaseRate());
-        }
-
-        if (doctor.getHourlyRate() != null) {
-            dto.setHourlyRate(doctor.getHourlyRate());
-        }
-
-        if (doctor.getEmergencyRate() != null) {
-            dto.setUrgentCaseFee(doctor.getEmergencyRate());
-            dto.setEmergencyRate(doctor.getEmergencyRate());
-        }
-
-        // Capacity settings
-        if (doctor.getMaxActiveCases() != null) {
-            dto.setMaxConcurrentCases(doctor.getMaxActiveCases());
-        }
+//        dto.setId(doctor.getId());
+//        dto.setUserId(doctor.getUserId());
+//        dto.setFullName(doctor.getFullName());
+//        dto.setLicenseNumber(doctor.getLicenseNumber());
+//        dto.setPrimarySpecializationCode(doctor.getPrimarySpecialization());
+//
+//        // Convert sets to comma-separated strings for frontend compatibility
+//        if (doctor.getSubSpecializations() != null && !doctor.getSubSpecializations().isEmpty()) {
+//            dto.setSubSpecializationCodes(doctor.getSubSpecializations());
+//        }
+//
+//        if (doctor.getQualifications() != null && !doctor.getQualifications().isEmpty()) {
+//            dto.setQualifications(String.join(", ", doctor.getQualifications()));
+//        }
+//
+//        if (doctor.getLanguages() != null && !doctor.getLanguages().isEmpty()) {
+//            dto.setLanguages(String.join(", ", doctor.getLanguages()));
+//        }
+//
+//        dto.setVerificationStatus(doctor.getVerificationStatus());
+//        dto.setYearsOfExperience(doctor.getYearsOfExperience());
+//        dto.setPhoneNumber(doctor.getPhoneNumber());
+//        dto.setEmail(doctor.getEmail());
+//        dto.setHospitalAffiliation(doctor.getHospitalAffiliation());
+//
+//        // Convert pricing fields
+//        if (doctor.getCaseRate() != null) {
+//            dto.setBaseConsultationFee(doctor.getCaseRate());
+//            dto.setCaseRate(doctor.getCaseRate());
+//        }
+//
+//        if (doctor.getHourlyRate() != null) {
+//            dto.setHourlyRate(doctor.getHourlyRate());
+//        }
+//
+//        if (doctor.getEmergencyRate() != null) {
+//            dto.setUrgentCaseFee(doctor.getEmergencyRate());
+//            dto.setEmergencyRate(doctor.getEmergencyRate());
+//        }
+//
+//        // Capacity settings
+//        if (doctor.getMaxActiveCases() != null) {
+//            dto.setMaxConcurrentCases(doctor.getMaxActiveCases());
+//        }
 
 
         return dto;
@@ -1965,6 +1966,149 @@ public class DoctorService {
         return paymentServiceClient.getDoctorEarningsStats(doctorId)
                 .getBody()
                 .getData();
+    }
+
+    /**
+     * Get doctor settings
+     */
+    public DoctorSettingsDto getSettings(Long userId) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        DoctorSettings settings = doctorSettingsRepository.findByDoctorId(doctor.getId())
+                .orElseGet(() -> createDefaultSettings(doctor.getId()));
+
+        return mapSettingsToDto(settings);
+    }
+
+    /**
+     * Update doctor settings
+     */
+    @Transactional
+    public DoctorSettingsDto updateSettings(Long userId, DoctorSettingsDto dto) {
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        DoctorSettings settings = doctorSettingsRepository.findByDoctorId(doctor.getId())
+                .orElseGet(() -> createDefaultSettings(doctor.getId()));
+
+        // Update notification preferences
+        if (dto.getNotifications() != null) {
+            DoctorSettingsDto.NotificationPreferences notif = dto.getNotifications();
+            if (notif.getEmail() != null) settings.setEmailNotifications(notif.getEmail());
+            if (notif.getSms() != null) settings.setSmsNotifications(notif.getSms());
+            if (notif.getPush() != null) settings.setPushNotifications(notif.getPush());
+            if (notif.getNewCaseAssignment() != null)
+                settings.setNewCaseAssignmentNotification(notif.getNewCaseAssignment());
+            if (notif.getAppointmentReminders() != null)
+                settings.setAppointmentRemindersNotification(notif.getAppointmentReminders());
+            if (notif.getPatientMessages() != null)
+                settings.setPatientMessagesNotification(notif.getPatientMessages());
+            if (notif.getSystemUpdates() != null)
+                settings.setSystemUpdatesNotification(notif.getSystemUpdates());
+            if (notif.getPromotions() != null)
+                settings.setPromotionsNotification(notif.getPromotions());
+        }
+
+        // Update availability preferences
+        if (dto.getAvailability() != null) {
+            DoctorSettingsDto.AvailabilityPreferences avail = dto.getAvailability();
+            if (avail.getAutoAcceptCases() != null) settings.setAutoAcceptCases(avail.getAutoAcceptCases());
+            if (avail.getMaxDailyCases() != null) settings.setMaxDailyCases(avail.getMaxDailyCases());
+            if (avail.getAllowEmergencyCases() != null)
+                settings.setAllowEmergencyCases(avail.getAllowEmergencyCases());
+            if (avail.getRequiresConsultationFee() != null)
+                settings.setRequiresConsultationFee(avail.getRequiresConsultationFee());
+        }
+
+        // Update privacy preferences
+        if (dto.getPrivacy() != null) {
+            DoctorSettingsDto.PrivacyPreferences privacy = dto.getPrivacy();
+            if (privacy.getProfileVisibility() != null)
+                settings.setProfileVisibility(privacy.getProfileVisibility());
+            if (privacy.getShowRating() != null) settings.setShowRating(privacy.getShowRating());
+            if (privacy.getShowExperience() != null) settings.setShowExperience(privacy.getShowExperience());
+            if (privacy.getAllowReviews() != null) settings.setAllowReviews(privacy.getAllowReviews());
+        }
+
+        // Update accessibility preferences
+        if (dto.getAccessibility() != null) {
+            DoctorSettingsDto.AccessibilityPreferences access = dto.getAccessibility();
+            if (access.getTheme() != null) settings.setTheme(access.getTheme());
+            if (access.getFontSize() != null) settings.setFontSize(access.getFontSize());
+            if (access.getLanguage() != null) settings.setLanguage(access.getLanguage());
+            if (access.getTimezone() != null) settings.setTimezone(access.getTimezone());
+        }
+
+        DoctorSettings savedSettings = doctorSettingsRepository.save(settings);
+        return mapSettingsToDto(savedSettings);
+    }
+
+    /**
+     * Create default settings for a doctor
+     */
+    private DoctorSettings createDefaultSettings(Long doctorId) {
+        DoctorSettings settings = DoctorSettings.builder()
+                .doctorId(doctorId)
+                .emailNotifications(true)
+                .smsNotifications(true)
+                .pushNotifications(true)
+                .newCaseAssignmentNotification(true)
+                .appointmentRemindersNotification(true)
+                .patientMessagesNotification(true)
+                .systemUpdatesNotification(true)
+                .promotionsNotification(false)
+                .autoAcceptCases(false)
+                .maxDailyCases(10)
+                .allowEmergencyCases(true)
+                .requiresConsultationFee(true)
+                .profileVisibility("verified_patients")
+                .showRating(true)
+                .showExperience(true)
+                .allowReviews(true)
+                .theme("light")
+                .fontSize("medium")
+                .language("en")
+                .timezone("UTC")
+                .build();
+
+        return doctorSettingsRepository.save(settings);
+    }
+
+    /**
+     * Map DoctorSettings entity to DTO
+     */
+    private DoctorSettingsDto mapSettingsToDto(DoctorSettings settings) {
+        return DoctorSettingsDto.builder()
+                .notifications(DoctorSettingsDto.NotificationPreferences.builder()
+                        .email(settings.getEmailNotifications())
+                        .sms(settings.getSmsNotifications())
+                        .push(settings.getPushNotifications())
+                        .newCaseAssignment(settings.getNewCaseAssignmentNotification())
+                        .appointmentReminders(settings.getAppointmentRemindersNotification())
+                        .patientMessages(settings.getPatientMessagesNotification())
+                        .systemUpdates(settings.getSystemUpdatesNotification())
+                        .promotions(settings.getPromotionsNotification())
+                        .build())
+                .availability(DoctorSettingsDto.AvailabilityPreferences.builder()
+                        .autoAcceptCases(settings.getAutoAcceptCases())
+                        .maxDailyCases(settings.getMaxDailyCases())
+                        .allowEmergencyCases(settings.getAllowEmergencyCases())
+                        .requiresConsultationFee(settings.getRequiresConsultationFee())
+                        .build())
+                .privacy(DoctorSettingsDto.PrivacyPreferences.builder()
+                        .profileVisibility(settings.getProfileVisibility())
+                        .showRating(settings.getShowRating())
+                        .showExperience(settings.getShowExperience())
+                        .allowReviews(settings.getAllowReviews())
+                        .build())
+                .accessibility(DoctorSettingsDto.AccessibilityPreferences.builder()
+                        .theme(settings.getTheme())
+                        .fontSize(settings.getFontSize())
+                        .language(settings.getLanguage())
+                        .timezone(settings.getTimezone())
+                        .build())
+                .build();
     }
 
 }

@@ -64,7 +64,7 @@ public class FileStorageService {
 
             // Generate accessible URL
             String relativeUrl = getRelativePathFromBase(targetLocation);
-            return pdfConfig.getBaseUrl() + "/" + relativeUrl;
+            return pdfConfig.getBaseUrl() + "/download/" + relativeUrl;
 
         } catch (Exception ex) {
             log.error("Failed to save file: {}", filename, ex);

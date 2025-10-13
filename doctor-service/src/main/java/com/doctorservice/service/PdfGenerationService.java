@@ -165,6 +165,7 @@ public class PdfGenerationService {
         table.setWidths(new float[]{1, 2});
 
         addLabelValueRow(table, "Patient ID:", "Patient #" + report.getAppointment().getPatientId());
+        addLabelValueRow(table, "Patient Name:", report.getPatientName());
 
         document.add(table);
     }

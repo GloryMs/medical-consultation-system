@@ -63,6 +63,14 @@ public class DoctorController {
                 .body(ApiResponse.success(profile, "Profile created successfully"));
     }
 
+    // 10. Get Doctor Profile
+    @GetMapping("/profile")
+    public ResponseEntity<ApiResponse<DoctorProfileDto>> getProfile(
+            @RequestHeader("X-User-Id") Long userId) {
+        DoctorProfileDto profile = doctorService.getProfile(userId);
+        return ResponseEntity.ok(ApiResponse.success(profile));
+    }
+
     @GetMapping("/doctor/custom-info/{doctorId}")
     public ResponseEntity<ApiResponse<CustomDoctorInfoDto>> getDoctorCustomInfo(
             @PathVariable Long doctorId){
@@ -332,15 +340,6 @@ public class DoctorController {
 //
 //        return ResponseEntity.ok().build();
 //    }
-
-
-    // 10. Get Doctor Profile
-    @GetMapping("/profile/{doctorId}")
-    public ResponseEntity<ApiResponse<DoctorProfileDto>> getProfile(
-            @PathVariable Long doctorId) {
-        DoctorProfileDto profile = doctorService.getProfile(doctorId);
-        return ResponseEntity.ok(ApiResponse.success(profile));
-    }
 
     // 11. Update Availability
     @PutMapping("/availability")
@@ -716,6 +715,27 @@ public class DoctorController {
         return paymentServiceClient.getPaymentMethodDistribution(
                 doctor.getId(), period
         );
+    }
+
+    /**
+     * Get doctor settings/preferences
+     */
+    @GetMapping("/settings")
+    public ResponseEntity<ApiResponse<DoctorSettingsDto>> getSettings(
+            @RequestHeader("X-User-Id") Long userId) {
+        DoctorSettingsDto settings = doctorService.getSettings(userId);
+        return ResponseEntity.ok(ApiResponse.success(settings));
+    }
+
+    /**
+     * Update doctor settings/preferences
+     */
+    @PutMapping("/settings")
+    public ResponseEntity<ApiResponse<DoctorSettingsDto>> updateSettings(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestBody DoctorSettingsDto dto) {
+        DoctorSettingsDto updatedSettings = doctorService.updateSettings(userId, dto);
+        return ResponseEntity.ok(ApiResponse.success(updatedSettings, "Settings updated successfully"));
     }
 
 }

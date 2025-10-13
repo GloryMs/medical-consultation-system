@@ -24,13 +24,10 @@ public class DoctorProfileDto {
     private String licenseNumber;
 
     @NotBlank(message = "Primary specialization is required")
-    private String primarySpecializationCode;
+    private String primarySpecialization;
 
     @Size(max = 5, message = "Maximum 5 specializations allowed")
-    private Set<String> specializationCodes = new HashSet<>();
-
-    @Size(max = 10, message = "Maximum 10 subspecializations allowed")
-    private Set<String> subSpecializationCodes = new HashSet<>();
+    private Set<String> subSpecializations = new HashSet<>();
 
     @Size(max = 50, message = "Maximum 50 disease expertise areas allowed")
     private Set<String> diseaseExpertiseCodes = new HashSet<>();
@@ -58,17 +55,10 @@ public class DoctorProfileDto {
     private CaseComplexity maxComplexityLevel = CaseComplexity.HIGHLY_COMPLEX;
     private Boolean acceptsUrgentCases = true;
 
-    @DecimalMin(value = "0.0", message = "Fee cannot be negative")
-    @DecimalMax(value = "10000.0", message = "Fee cannot exceed $10,000")
-    private Double baseConsultationFee;
+    private Integer consultationCount = 0;
 
-    @DecimalMin(value = "0.0", message = "Fee cannot be negative")
-    @DecimalMax(value = "15000.0", message = "Fee cannot exceed $15,000")
-    private Double urgentCaseFee;
-
-    @DecimalMin(value = "0.0", message = "Fee cannot be negative")
-    @DecimalMax(value = "20000.0", message = "Fee cannot exceed $20,000")
-    private Double complexCaseFee;
+    private Double rating = 0.0;
+    private String professionalSummary;
 
     private VerificationStatus verificationStatus;
     private String phoneNumber;
@@ -80,4 +70,8 @@ public class DoctorProfileDto {
     private Double caseRate;
     private Double hourlyRate;
     private Double emergencyRate;
+
+    private String address;
+    private String city;
+    private String country;
 }

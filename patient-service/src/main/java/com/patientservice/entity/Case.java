@@ -107,7 +107,9 @@ public class Case extends BaseEntity {
     private LocalDateTime closedAt;
     private Integer assignmentAttempts = 0;
     private Integer rejectionCount = 0;
-    @Column(columnDefinition = "boolean default false")
+
+    @Column(nullable = false)
+    @Builder.Default
     private Boolean isDeleted = false;
 
     //Medical Report

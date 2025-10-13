@@ -150,38 +150,6 @@ public class PatientService {
         }
     }
 
-
-    @Transactional
-    public PatientProfileDto createProfile(Long userId, PatientProfileDto dto) {
-        if (patientRepository.existsByUserId(userId)) {
-            throw new BusinessException("Patient profile already exists", HttpStatus.CONFLICT);
-        }
-
-        Patient patient = Patient.builder()
-                .userId(userId)
-                .fullName(dto.getFullName())
-                .dateOfBirth(dto.getDateOfBirth())
-                .gender(dto.getGender())
-                .medicalHistory(dto.getMedicalHistory())
-                .subscriptionStatus(SubscriptionStatus.PENDING)
-                .accountLocked(true) // Locked until subscription payment
-                .phoneNumber(dto.getPhoneNumber())
-                .address(dto.getAddress())
-                .city(dto.getCity())
-                .country(dto.getCountry())
-                .postalCode(dto.getPostalCode())
-                .emergencyContactName(dto.getEmergencyContactName())
-                .emergencyContactPhone(dto.getEmergencyContactPhone())
-                .bloodGroup(dto.getBloodGroup())
-                .allergies(dto.getAllergies())
-                .chronicConditions(dto.getChronicConditions())
-                .casesSubmitted(0)
-                .build();
-
-        Patient saved = patientRepository.save(patient);
-        return mapToDto(saved);
-    }
-
     @Transactional
     public SubscriptionDto createSubscription(Long userId, SubscriptionDto dto) {
         Patient patient = patientRepository.findByUserId(userId)
@@ -405,6 +373,169 @@ public class PatientService {
         return mapToDto(patient);
     }
 
+    /**
+     * Update Patient Profile
+     * Updates patient profile with support for partial updates
+     * Handles Personal Info, Medical History, and Emergency Contacts
+     */
+    @Transactional
+    public PatientProfileDto updateProfile(Long userId, PatientProfileDto dto) {
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        // Update Personal Information
+        if (dto.getFullName() != null && !dto.getFullName().trim().isEmpty()) {
+            patient.setFullName(dto.getFullName().trim());
+        }
+
+        if (dto.getDateOfBirth() != null) {
+            patient.setDateOfBirth(dto.getDateOfBirth());
+        }
+
+        if (dto.getGender() != null) {
+            patient.setGender(dto.getGender());
+        }
+
+        if (dto.getPhoneNumber() != null && !dto.getPhoneNumber().trim().isEmpty()) {
+            patient.setPhoneNumber(dto.getPhoneNumber().trim());
+        }
+
+        if (dto.getEmail() != null && !dto.getEmail().trim().isEmpty()) {
+            patient.setEmail(dto.getEmail().trim());
+        }
+
+        // Update Address Information
+        if (dto.getAddress() != null) {
+            patient.setAddress(dto.getAddress().trim().isEmpty() ? null : dto.getAddress().trim());
+        }
+
+        if (dto.getCity() != null) {
+            patient.setCity(dto.getCity().trim().isEmpty() ? null : dto.getCity().trim());
+        }
+
+        if (dto.getCountry() != null) {
+            patient.setCountry(dto.getCountry().trim().isEmpty() ? null : dto.getCountry().trim());
+        }
+
+        if (dto.getPostalCode() != null) {
+            patient.setPostalCode(dto.getPostalCode().trim().isEmpty() ? null : dto.getPostalCode().trim());
+        }
+
+        // Update Medical History
+        if (dto.getBloodGroup() != null) {
+            patient.setBloodGroup(dto.getBloodGroup().trim().isEmpty() ? null : dto.getBloodGroup().trim());
+        }
+
+        if (dto.getAllergies() != null) {
+            patient.setAllergies(dto.getAllergies().trim().isEmpty() ? null : dto.getAllergies().trim());
+        }
+
+        if (dto.getChronicConditions() != null) {
+            patient.setChronicConditions(dto.getChronicConditions().trim().isEmpty() ? null : dto.getChronicConditions().trim());
+        }
+
+        if (dto.getMedicalHistory() != null) {
+            patient.setMedicalHistory(dto.getMedicalHistory().trim().isEmpty() ? null : dto.getMedicalHistory().trim());
+        }
+
+        // Update Emergency Contacts
+        if (dto.getEmergencyContactName() != null) {
+            patient.setEmergencyContactName(dto.getEmergencyContactName().trim().isEmpty() ? null : dto.getEmergencyContactName().trim());
+        }
+
+        if (dto.getEmergencyContactPhone() != null) {
+            patient.setEmergencyContactPhone(dto.getEmergencyContactPhone().trim().isEmpty() ? null : dto.getEmergencyContactPhone().trim());
+        }
+
+        // Save and return updated profile
+        Patient updated = patientRepository.save(patient);
+
+        log.info("Patient profile updated successfully for userId: {}", userId);
+
+        return mapToDto(updated);
+    }
+
+    /**
+     * Map Patient Entity to PatientProfileDto
+     * Converts the Patient entity to a DTO for API responses
+     */
+    private PatientProfileDto mapToDto(Patient patient) {
+        PatientProfileDto dto = new PatientProfileDto();
+
+        // Basic Information
+        dto.setId(patient.getId());
+        dto.setUserId(patient.getUserId());
+        dto.setFullName(patient.getFullName());
+        dto.setDateOfBirth(patient.getDateOfBirth());
+        dto.setGender(patient.getGender());
+
+        // Contact Information
+        dto.setPhoneNumber(patient.getPhoneNumber());
+        dto.setEmail(patient.getEmail());
+
+        // Address Information
+        dto.setAddress(patient.getAddress());
+        dto.setCity(patient.getCity());
+        dto.setCountry(patient.getCountry());
+        dto.setPostalCode(patient.getPostalCode());
+
+        // Medical Information
+        dto.setBloodGroup(patient.getBloodGroup());
+        dto.setAllergies(patient.getAllergies());
+        dto.setChronicConditions(patient.getChronicConditions());
+        dto.setMedicalHistory(patient.getMedicalHistory());
+
+        // Emergency Contact Information
+        dto.setEmergencyContactName(patient.getEmergencyContactName());
+        dto.setEmergencyContactPhone(patient.getEmergencyContactPhone());
+
+        // Subscription Status
+        dto.setSubscriptionStatus(patient.getSubscriptionStatus());
+
+        return dto;
+    }
+
+    /**
+     * Create Patient Profile
+     * Creates a new patient profile with all provided information
+     */
+    @Transactional
+    public PatientProfileDto createProfile(Long userId, PatientProfileDto dto) {
+        // Check if profile already exists
+        if (patientRepository.existsByUserId(userId)) {
+            throw new BusinessException("Patient profile already exists", HttpStatus.CONFLICT);
+        }
+
+        // Build and save new patient
+        Patient patient = Patient.builder()
+                .userId(userId)
+                .fullName(dto.getFullName())
+                .dateOfBirth(dto.getDateOfBirth())
+                .gender(dto.getGender())
+                .phoneNumber(dto.getPhoneNumber())
+                .email(dto.getEmail())
+                .address(dto.getAddress())
+                .city(dto.getCity())
+                .country(dto.getCountry())
+                .postalCode(dto.getPostalCode())
+                .bloodGroup(dto.getBloodGroup())
+                .allergies(dto.getAllergies())
+                .chronicConditions(dto.getChronicConditions())
+                .medicalHistory(dto.getMedicalHistory())
+                .emergencyContactName(dto.getEmergencyContactName())
+                .emergencyContactPhone(dto.getEmergencyContactPhone())
+                .subscriptionStatus(SubscriptionStatus.PENDING)
+                .accountLocked(true) // Locked until subscription payment
+                .casesSubmitted(0)
+                .build();
+
+        Patient saved = patientRepository.save(patient);
+
+        log.info("Patient profile created successfully for userId: {}", userId);
+
+        return mapToDto(saved);
+    }
+
     @Transactional
     public void acceptAppointment(Long userId, Long caseId) {
         Patient patient = patientRepository.findByUserId(userId)
@@ -559,28 +690,6 @@ public class PatientService {
         };
     }
 
-    private PatientProfileDto mapToDto(Patient patient) {
-        PatientProfileDto dto = new PatientProfileDto();
-        dto.setId(patient.getId());
-        dto.setUserId(patient.getUserId());
-        dto.setFullName(patient.getFullName());
-        dto.setDateOfBirth(patient.getDateOfBirth());
-        dto.setGender(patient.getGender());
-        dto.setMedicalHistory(patient.getMedicalHistory());
-        dto.setSubscriptionStatus(patient.getSubscriptionStatus());
-        dto.setEmergencyContactName(patient.getEmergencyContactName());
-        dto.setEmergencyContactPhone(patient.getEmergencyContactPhone());
-        dto.setBloodGroup(patient.getBloodGroup());
-        dto.setAllergies(patient.getAllergies());
-        dto.setChronicConditions(patient.getChronicConditions());
-        dto.setPhoneNumber(patient.getPhoneNumber());
-        dto.setAddress(patient.getAddress());
-        dto.setCity(patient.getCity());
-        dto.setCountry(patient.getCountry());
-        dto.setPostalCode(patient.getPostalCode());
-        return dto;
-    }
-
     public CustomPatientDto getCustomPatientInformation( Long caseId, Long doctorId ){
         CustomPatientDto customPatientDto = new CustomPatientDto();
         //Check if the Case Existed:
@@ -634,26 +743,6 @@ public class PatientService {
     }
 
     // 1. Update Profile Implementation
-    @Transactional
-    public PatientProfileDto updateProfile(Long userId, PatientProfileDto dto) {
-        Patient patient = patientRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
-
-        // Update only provided fields
-        if (dto.getPhoneNumber() != null) patient.setPhoneNumber(dto.getPhoneNumber());
-        if (dto.getAddress() != null) patient.setAddress(dto.getAddress());
-        if (dto.getCity() != null) patient.setCity(dto.getCity());
-        if (dto.getCountry() != null) patient.setCountry(dto.getCountry());
-        if (dto.getPostalCode() != null) patient.setPostalCode(dto.getPostalCode());
-        if (dto.getEmergencyContactName() != null) patient.setEmergencyContactName(dto.getEmergencyContactName());
-        if (dto.getEmergencyContactPhone() != null) patient.setEmergencyContactPhone(dto.getEmergencyContactPhone());
-        if (dto.getAllergies() != null) patient.setAllergies(dto.getAllergies());
-        if (dto.getChronicConditions() != null) patient.setChronicConditions(dto.getChronicConditions());
-        if (dto.getMedicalHistory() != null) patient.setMedicalHistory(dto.getMedicalHistory());
-
-        Patient updated = patientRepository.save(patient);
-        return mapToDto(updated);
-    }
 
     // 2. Get Subscription Status Implementation
     public SubscriptionStatusDto getSubscriptionStatus(Long userId) {
