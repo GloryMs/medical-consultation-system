@@ -57,4 +57,18 @@ public class AuthController {
         UserStasDto userStasDto = authService.getUsersStats();
         return ResponseEntity.ok(ApiResponse.success(userStasDto, "User stats successful"));
     }
+
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<ApiResponse<String>> requestPasswordReset(
+            @Valid @RequestBody PasswordResetRequest request) {
+        String message = authService.requestPasswordReset(request);
+        return ResponseEntity.ok(ApiResponse.success(message, "Verification code sent"));
+    }
+
+    @PostMapping("/password-reset/verify")
+    public ResponseEntity<ApiResponse<String>> verifyAndResetPassword(
+            @Valid @RequestBody VerifyResetCodeRequest request) {
+        String message = authService.verifyCodeAndResetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(message, "Password reset successful"));
+    }
 }

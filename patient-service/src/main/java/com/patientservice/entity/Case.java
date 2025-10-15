@@ -26,6 +26,12 @@ public class Case extends BaseEntity {
     @JsonBackReference
     private Patient patient;
 
+    // NEW: Link to dependent (nullable - if null, case is for the patient themselves)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dependent_id", nullable = true)
+    @JsonBackReference
+    private Dependent dependent;
+
     @OneToMany(mappedBy = "medicalCase", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @JsonManagedReference
     private List<Document> documents;
@@ -121,4 +127,18 @@ public class Case extends BaseEntity {
 
     @Column(name = "report_id")
     private Long reportId;
+
+    /**
+     * Helper method to get the name of the person this case is for
+     */
+    public String getCaseOwnerName() {
+        return dependent != null ? dependent.getFullName() : patient.getFullName();
+    }
+
+    /**
+     * Helper method to check if case is for a dependent
+     */
+    public boolean isForDependent() {
+        return dependent != null;
+    }
 }

@@ -106,13 +106,14 @@ public class DoctorEventConsumer {
         try {
             Long userId = Long.valueOf(registrationEvent.get("userId").toString());
             String email = registrationEvent.get("email").toString();
+            String phoneNumber = registrationEvent.get("phoneNumber").toString();
             String role = registrationEvent.get("role").toString();
             
-            log.info("User registration event received: {}, role: {}", email, role);
+            log.info("User registration event received: {}, phoneNumber{}, role: {}", email,phoneNumber, role);
             
             // Only handle doctor registrations
             if ("DOCTOR".equals(role)) {
-                doctorService.initializeDoctorProfile(userId, email);
+                doctorService.initializeDoctorProfile(userId, email, phoneNumber);
             }
             
         } catch (Exception e) {

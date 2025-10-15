@@ -41,15 +41,14 @@ public class PatientService {
     private final NotificationServiceClient notificationServiceClient;
     private final CaseAssignmentRepository caseAssignmentRepository;
     private final MedicalConfigurationService configService;
-    private final SmartCaseAssignmentService assignmentService;
-    private final CaseAssignmentRepository assignmentRepository;
     private final DoctorServiceClient doctorServiceClient;
     private final PatientEventProducer patientEventProducer;
     private final DocumentService documentService;
+    private final DependentRepository dependentRepository;
 
     //@Override
     @Transactional
-    public Case createCase(Long userId, CreateCaseDto dto) {
+    public Case OldcreateCase(Long userId, CreateCaseDto dto) {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
@@ -87,6 +86,9 @@ public class PatientService {
 
         Case saved = caseRepository.save(medicalCase);
 
+        patient.setCasesSubmitted(patient.getCasesSubmitted() + 1);
+        patientRepository.save(patient);
+
         // Process and save uploaded files
         if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
             try {
@@ -117,6 +119,100 @@ public class PatientService {
             System.out.println(e.getMessage());
             e.printStackTrace();
         }
+
+        return saved;
+    }
+
+    @Transactional
+    public Case createCase(Long userId, CreateCaseDto dto) {
+        log.info("Creating case for user: {}", userId);
+        // Get patient
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        // Check subscription status
+        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+            throw new BusinessException("Active subscription required to submit cases", HttpStatus.FORBIDDEN);
+        }
+
+        // NEW: Handle dependent if provided
+        Dependent dependent = null;
+        if (dto.getDependentId() != null) {
+            dependent = dependentRepository.findByIdAndPatientIdAndIsDeletedFalse(
+                    dto.getDependentId(),
+                    patient.getId()
+            ).orElseThrow(() -> new BusinessException("Dependent not found", HttpStatus.NOT_FOUND));
+
+            log.info("Case being created for dependent: {} ({})", dependent.getFullName(), dependent.getRelationship());
+        } else {
+            log.info("Case being created for patient themselves");
+        }
+
+        // Create case
+        Case medicalCase = Case.builder()
+                .patient(patient)
+                .dependent(dependent) // NEW: Link to dependent (can be null)
+                .caseTitle(dto.getCaseTitle())
+                .description(dto.getDescription())
+                .primaryDiseaseCode(dto.getPrimaryDiseaseCode())
+                .secondaryDiseaseCodes(dto.getSecondaryDiseaseCodes())
+                .symptomCodes(dto.getSymptomCodes())
+                .currentMedicationCodes(dto.getCurrentMedicationCodes())
+                .requiredSpecialization(dto.getRequiredSpecialization())
+                .secondarySpecializations(dto.getSecondarySpecializations())
+                .urgencyLevel(dto.getUrgencyLevel())
+                .complexity(dto.getComplexity())
+                .requiresSecondOpinion(dto.getRequiresSecondOpinion())
+                .minDoctorsRequired(dto.getMinDoctorsRequired())
+                .maxDoctorsAllowed(dto.getMaxDoctorsAllowed())
+                .status(CaseStatus.SUBMITTED)
+                .paymentStatus(PaymentStatus.PENDING)
+                .submittedAt(LocalDateTime.now())
+                .assignmentAttempts(0)
+                .rejectionCount(0)
+                .isDeleted(false)
+                .build();
+
+        Case saved = caseRepository.save(medicalCase);
+
+        // Update patient's case count
+        patient.setCasesSubmitted(patient.getCasesSubmitted() + 1);
+        patientRepository.save(patient);
+
+        // Process and save uploaded files
+        if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
+            try {
+                List<Document> documents = documentService.processAndSaveFiles(
+                        dto.getFiles(), medicalCase, userId);
+
+                log.info("Successfully processed {} files for case {}",
+                        documents.size(), medicalCase.getId());
+            } catch (Exception e) {
+                log.error("Error processing files for case {}: {}", medicalCase.getId(), e.getMessage(), e);
+                // Delete the case if file processing fails
+                caseRepository.delete(medicalCase);
+                throw new BusinessException("Failed to process uploaded files: " + e.getMessage(),
+                        HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
+
+        // Update case status to PENDING and trigger smart assignment
+        saved.setStatus(CaseStatus.PENDING);
+        caseRepository.save(saved);
+
+        String caseOwnerName = saved.getCaseOwnerName();
+
+        // Trigger smart case assignment asynchronously
+        try {
+            // 🔥 NEW: Send Kafka event after saving new case to trigger SmartCaseAssignmentService
+            patientEventProducer.sendStartSmartCaseAssignmentService(saved.getId());
+        } catch (Exception e) {
+            System.out.println("Failed to assign case automatically: " +  saved.getId());
+            System.out.println(e.getMessage());
+            e.printStackTrace();
+        }
+
+        log.info("Case created successfully: {} for {}", medicalCase.getId(), caseOwnerName);
 
         return saved;
     }
@@ -1235,7 +1331,7 @@ public class PatientService {
     }
 
     @Transactional
-    public void initializePatientProfile(Long userId, String email, String fullName) {
+    public void initializePatientProfile(Long userId, String email, String fullName, String phoneNumber) {
         // Check if patient profile already exists
         if (patientRepository.findByUserId(userId).isPresent()) {
             log.info("Patient profile already exists for user: {}", userId);
@@ -1247,6 +1343,7 @@ public class PatientService {
         Patient patient = Patient.builder()
                 .userId(userId)
                 .email(email)
+                .phoneNumber(phoneNumber)
                 .fullName(fullName)
                 .subscriptionStatus(SubscriptionStatus.PENDING)
                 .accountLocked(true)

@@ -9,6 +9,7 @@ import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -27,6 +28,11 @@ public class Patient extends BaseEntity {
     private String fullName;
 
     private LocalDate dateOfBirth;
+
+    // NEW: List of dependents (family members)
+    @OneToMany(mappedBy = "patient", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private List<Dependent> dependents = new ArrayList<>();
 
     @OneToMany(mappedBy = "patient", fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonManagedReference

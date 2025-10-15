@@ -17,7 +17,7 @@ public class AuthEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void sendUserRegistrationEvent(Long userId, String email, String role, String fullName) {
+    public void sendUserRegistrationEvent(Long userId, String email, String phoneNumber, String role, String fullName) {
         try{
             // Send welcome notification
             NotificationDto welcomeNotification = NotificationDto.builder()
@@ -37,6 +37,7 @@ public class AuthEventProducer {
             Map<String, Object> registrationEvent = new HashMap<>();
             registrationEvent.put("userId", userId);
             registrationEvent.put("email", email);
+            registrationEvent.put("phoneNumber", phoneNumber);
             registrationEvent.put("role", role);
             registrationEvent.put("fullName", fullName);
             registrationEvent.put("timestamp", System.currentTimeMillis());

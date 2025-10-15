@@ -1469,7 +1469,7 @@ public class DoctorService {
 //    }
 
     @Transactional
-    public void initializeDoctorProfile(Long userId, String email) {
+    public void initializeDoctorProfile(Long userId, String email, String phoneNumber) {
         // Check if doctor profile already exists
         if (doctorRepository.findByUserId(userId).isPresent()) {
             log.info("Doctor profile already exists for user: {}", userId);
@@ -1480,6 +1480,7 @@ public class DoctorService {
         Doctor doctor = Doctor.builder()
                 .userId(userId)
                 .email(email)
+                .phoneNumber(phoneNumber)
                 .verificationStatus(VerificationStatus.PENDING)
                 .isAvailable(false)
                 .consultationCount(0)

@@ -2,6 +2,8 @@ package com.patientservice.repository;
 
 import com.commonlibrary.entity.CaseStatus;
 import com.patientservice.entity.Case;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,5 +38,35 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
     List<Case> findLastSubmittedCases(@Param("patientId") Long patientId, @Param("limit") int limit);
 //    List<Case> findTopByOrderBySubmittedAtDesc(int limit);
 
-    //findByAssignedDoctorId
+    // NEW: Dependent-related methods
+
+    /**
+     * Count cases for a specific dependent
+     */
+    Long countByDependentId(Long dependentId);
+
+    /**
+     * Count active cases for a dependent (excluding closed cases)
+     */
+    @Query("SELECT COUNT(c) FROM Case c WHERE c.dependent.id = :dependentId AND c.status NOT IN :excludedStatuses")
+    Long countByDependentIdAndStatusNotIn(@Param("dependentId") Long dependentId,
+                                          @Param("excludedStatuses") List<CaseStatus> excludedStatuses);
+
+    /**
+     * Find all cases for a dependent
+     */
+    Page<Case> findByDependentId(Long dependentId, Pageable pageable);
+
+    /**
+     * Find cases by patient (including their own and their dependents' cases)
+     */
+    @Query("SELECT c FROM Case c WHERE c.patient.id = :patientId ORDER BY c.createdAt DESC")
+    Page<Case> findAllCasesByPatient(@Param("patientId") Long patientId, Pageable pageable);
+
+    /**
+     * Find case by ID and ensure it belongs to the patient (either directly or via dependent)
+     */
+    @Query("SELECT c FROM Case c WHERE c.id = :caseId AND c.patient.id = :patientId")
+    Optional<Case> findByIdAndPatientIdIncludingDependents(@Param("caseId") Long caseId,
+                                                           @Param("patientId") Long patientId);
 }
