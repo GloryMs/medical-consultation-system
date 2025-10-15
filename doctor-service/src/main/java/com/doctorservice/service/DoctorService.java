@@ -254,7 +254,7 @@ public class DoctorService {
 
             // Send Kafka event to update case and notify patient
             doctorEventProducer.sendCaseFeeUpdateEvent(caseId, doctor.getId(), doctor.getUserId(),
-                    patientDto.getId(), patientDto.getUserId(),  consultationFee);
+                    patientDto.getPatientId(), patientDto.getUserId(),  consultationFee);
 
             log.info("Case fee set successfully for case {} by doctor {}. Fee: ${}",
                     caseId, doctor.getId(), consultationFee);
@@ -541,7 +541,7 @@ public class DoctorService {
 
         //Some validation
         if(!Objects.equals(appointment.getDoctor().getId(), doctor.getId()) ||
-                ( patientDto !=null && !Objects.equals(appointment.getPatientId(), patientDto.getId())  )){
+                ( patientDto !=null && !Objects.equals(appointment.getPatientId(), patientDto.getPatientId())  )){
             throw new BusinessException("getCaseDetailsForMedicalReport ===> Doctor, Patient and Appointment conflict - No matching",
                     HttpStatus.UNAUTHORIZED);
         }
@@ -549,7 +549,7 @@ public class DoctorService {
         customCaseData.setCaseId(caseId);
         customCaseData.setDoctorId(doctor.getId());
         customCaseData.setAppointmentId(appointment.getId());
-        customCaseData.setPatientId(patientDto.getId());
+        customCaseData.setPatientId(patientDto.getPatientId());
         customCaseData.setDoctorName(doctor.getFullName());
         customCaseData.setPatientName(patientDto.getFullName());
         customCaseData.setCaseTitle(medicalCase.getCaseTitle());

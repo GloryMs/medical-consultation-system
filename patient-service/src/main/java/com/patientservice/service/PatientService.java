@@ -786,7 +786,7 @@ public class PatientService {
         };
     }
 
-    public CustomPatientDto getCustomPatientInformation( Long caseId, Long doctorId ){
+    public CustomPatientDto Old_getCustomPatientInformation( Long caseId, Long doctorId ){
         CustomPatientDto customPatientDto = new CustomPatientDto();
         //Check if the Case Existed:
         Case medicalCase = caseRepository.findByIdAndIsDeletedFalse(caseId)
@@ -805,6 +805,120 @@ public class PatientService {
             customPatientDto = modelMapper.map(patient, CustomPatientDto.class);
         }
         return customPatientDto;
+    }
+
+    public CustomPatientDto getCustomPatientInformation(Long caseId, Long doctorId) {
+        CustomPatientDto customPatientDto = new CustomPatientDto();
+
+        // Check if the Case exists
+        Case medicalCase = caseRepository.findByIdAndIsDeletedFalse(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+        // Check case assignment - verify case belongs to the provided doctorId
+        CaseAssignment assignment = caseAssignmentRepository.findByCaseEntityAndDoctorId(medicalCase, doctorId)
+                .orElse(null);
+
+        if (assignment == null) {
+            throw new BusinessException("No match between Doctor and Provided Case", HttpStatus.NOT_FOUND);
+        }
+
+        // Get the account owner (patient who submitted the case)
+        Patient accountOwner = patientRepository.findById(medicalCase.getPatient().getId())
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        // Check if case is for a dependent
+        if (medicalCase.getDependent() != null) {
+            // CASE IS FOR DEPENDENT - Show dependent's info as patient
+            Dependent dependent = medicalCase.getDependent();
+
+            customPatientDto.setPatientId(dependent.getId()); // Use dependent ID
+            customPatientDto.setUserId(accountOwner.getUserId());
+            customPatientDto.setFullName(dependent.getFullName());
+            customPatientDto.setDateOfBirth(dependent.getDateOfBirth());
+            customPatientDto.setGender(dependent.getGender());
+            customPatientDto.setMedicalHistory(dependent.getMedicalHistory());
+            customPatientDto.setBloodGroup(dependent.getBloodGroup());
+            customPatientDto.setAllergies(dependent.getAllergies());
+            customPatientDto.setChronicConditions(dependent.getChronicConditions());
+            customPatientDto.setPhoneNumber(dependent.getPhoneNumber()); // Dependent's phone if available
+
+            // Address info from account owner (as dependent usually shares address)
+            customPatientDto.setAddress(accountOwner.getAddress());
+            customPatientDto.setCity(accountOwner.getCity());
+            customPatientDto.setCountry(accountOwner.getCountry());
+            customPatientDto.setPostalCode(accountOwner.getPostalCode());
+
+            // Email from account owner (dependents don't have their own email)
+            customPatientDto.setEmail(accountOwner.getEmail());
+            customPatientDto.setSubscriptionStatus(accountOwner.getSubscriptionStatus());
+
+            // NEW: Emergency contact is the account owner
+            customPatientDto.setEmergencyContactName(accountOwner.getFullName());
+            customPatientDto.setEmergencyContactPhone(accountOwner.getPhoneNumber());
+            customPatientDto.setEmergencyContactEmail(accountOwner.getEmail());
+            customPatientDto.setEmergencyContactRelationship(
+                    getInverseRelationship(dependent.getRelationship())
+            );
+
+            // NEW: Mark as dependent case
+            customPatientDto.setIsForDependent(true);
+            customPatientDto.setDependentRelationship(dependent.getRelationship());
+
+        } else {
+            // CASE IS FOR PATIENT THEMSELVES - Show patient's info
+            customPatientDto.setPatientId(accountOwner.getId());
+            customPatientDto.setUserId(accountOwner.getUserId());
+            customPatientDto.setFullName(accountOwner.getFullName());
+            customPatientDto.setDateOfBirth(accountOwner.getDateOfBirth());
+            customPatientDto.setGender(accountOwner.getGender());
+            customPatientDto.setMedicalHistory(accountOwner.getMedicalHistory());
+            customPatientDto.setSubscriptionStatus(accountOwner.getSubscriptionStatus());
+            customPatientDto.setBloodGroup(accountOwner.getBloodGroup());
+            customPatientDto.setAllergies(accountOwner.getAllergies());
+            customPatientDto.setChronicConditions(accountOwner.getChronicConditions());
+            customPatientDto.setPhoneNumber(accountOwner.getPhoneNumber());
+            customPatientDto.setEmail(accountOwner.getEmail());
+            customPatientDto.setAddress(accountOwner.getAddress());
+            customPatientDto.setCity(accountOwner.getCity());
+            customPatientDto.setCountry(accountOwner.getCountry());
+            customPatientDto.setPostalCode(accountOwner.getPostalCode());
+
+            // Emergency contact from patient's own emergency contact
+            customPatientDto.setEmergencyContactName(accountOwner.getEmergencyContactName());
+            customPatientDto.setEmergencyContactPhone(accountOwner.getEmergencyContactPhone());
+            customPatientDto.setEmergencyContactEmail(null); // Not stored for regular emergency contacts
+            customPatientDto.setEmergencyContactRelationship("Emergency Contact");
+
+            // NEW: Mark as NOT a dependent case
+            customPatientDto.setIsForDependent(false);
+            customPatientDto.setDependentRelationship(null);
+        }
+
+        return customPatientDto;
+    }
+
+    /**
+     * Helper method to get inverse relationship
+     * If dependent is "SON", account owner is "FATHER" or "MOTHER"
+     */
+    private String getInverseRelationship(String relationship) {
+        switch (relationship.toUpperCase()) {
+            case "SON":
+            case "DAUGHTER":
+                return "PARENT";
+            case "WIFE":
+                return "HUSBAND";
+            case "HUSBAND":
+                return "WIFE";
+            case "MOTHER":
+                return "CHILD";
+            case "FATHER":
+                return "CHILD";
+            case "OTHER":
+                return "FAMILY MEMBER";
+            default:
+                return "GUARDIAN";
+        }
     }
 
     /**
