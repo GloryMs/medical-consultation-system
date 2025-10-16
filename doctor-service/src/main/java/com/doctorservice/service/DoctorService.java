@@ -82,110 +82,134 @@ public class DoctorService {
     public DoctorProfileDto updateProfile(Long userId, DoctorProfileDto dto) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+        Doctor updatedDoctor;
+        log.warn("Trying to update doctor's profile {}:", dto.toString());
 
-        // Update basic information
-        if (dto.getFullName() != null && !dto.getFullName().trim().isEmpty()) {
-            doctor.setFullName(dto.getFullName().trim());
-        }
-
-        if (dto.getLicenseNumber() != null && !dto.getLicenseNumber().trim().isEmpty()) {
-            // Check if license number is unique (excluding current doctor)
-            boolean licenseExists = doctorRepository.existsByLicenseNumber(dto.getLicenseNumber())
-                    && !doctor.getLicenseNumber().equals(dto.getLicenseNumber());
-            if (licenseExists) {
-                throw new BusinessException("License number already exists", HttpStatus.CONFLICT);
+        try{
+            log.debug("Trying to update doctor's profile {}:", dto.toString());
+            // Update basic information
+            if (dto.getFullName() != null && !dto.getFullName().trim().isEmpty()) {
+                doctor.setFullName(dto.getFullName().trim());
             }
-            doctor.setLicenseNumber(dto.getLicenseNumber().trim());
-        }
 
-        // Update specialization information
-        if (dto.getPrimarySpecialization() != null && !dto.getPrimarySpecialization().trim().isEmpty()) {
-            doctor.setPrimarySpecialization(dto.getPrimarySpecialization().trim());
-        }
-
-        if (dto.getSubSpecializations() != null && !dto.getSubSpecializations().isEmpty()) {
-            doctor.setSubSpecializations(new HashSet<>(dto.getSubSpecializations()));
-        }
-
-        // Update professional information
-        if (dto.getYearsOfExperience() != null && dto.getYearsOfExperience() >= 0) {
-            doctor.setYearsOfExperience(dto.getYearsOfExperience());
-        }
-
-        if (dto.getQualifications() != null && !dto.getQualifications().trim().isEmpty()) {
-            // Parse comma-separated qualifications into Set
-            Set<String> qualificationSet = new HashSet<>();
-            String[] qualificationArray = dto.getQualifications().split(",");
-            for (String qual : qualificationArray) {
-                if (!qual.trim().isEmpty()) {
-                    qualificationSet.add(qual.trim());
+            if (dto.getLicenseNumber() != null && !dto.getLicenseNumber().trim().isEmpty()) {
+                // Check if license number is unique (excluding current doctor)
+                boolean licenseExists = doctorRepository.existsByLicenseNumber(dto.getLicenseNumber())
+                        && !doctor.getLicenseNumber().equals(dto.getLicenseNumber());
+                if (licenseExists) {
+                    throw new BusinessException("License number already exists", HttpStatus.CONFLICT);
                 }
+                doctor.setLicenseNumber(dto.getLicenseNumber().trim());
             }
-            doctor.setQualifications(qualificationSet);
-        }
 
-        if (dto.getLanguages() != null && !dto.getLanguages().trim().isEmpty()) {
-            // Parse comma-separated languages into Set
-            Set<String> languageSet = new HashSet<>();
-            String[] languageArray = dto.getLanguages().split(",");
-            for (String lang : languageArray) {
-                if (!lang.trim().isEmpty()) {
-                    languageSet.add(lang.trim());
+            // Update specialization information
+            if (dto.getPrimarySpecialization() != null && !dto.getPrimarySpecialization().trim().isEmpty()) {
+                doctor.setPrimarySpecialization(dto.getPrimarySpecialization().trim());
+            }
+
+            if (dto.getSubSpecializations() != null && !dto.getSubSpecializations().isEmpty()) {
+                doctor.setSubSpecializations(new HashSet<>(dto.getSubSpecializations()));
+            }
+
+            // Update professional information
+            if (dto.getYearsOfExperience() != null && dto.getYearsOfExperience() >= 0) {
+                doctor.setYearsOfExperience(dto.getYearsOfExperience());
+            }
+
+            if (dto.getQualifications() != null && !dto.getQualifications().trim().isEmpty()) {
+                // Parse comma-separated qualifications into Set
+                Set<String> qualificationSet = new HashSet<>();
+                String[] qualificationArray = dto.getQualifications().split(",");
+                for (String qual : qualificationArray) {
+                    if (!qual.trim().isEmpty()) {
+                        qualificationSet.add(qual.trim());
+                    }
                 }
+                doctor.setQualifications(qualificationSet);
             }
-            doctor.setLanguages(languageSet);
+
+            if (dto.getLanguages() != null && !dto.getLanguages().trim().isEmpty()) {
+                // Parse comma-separated languages into Set
+                Set<String> languageSet = new HashSet<>();
+                String[] languageArray = dto.getLanguages().split(",");
+                for (String lang : languageArray) {
+                    if (!lang.trim().isEmpty()) {
+                        languageSet.add(lang.trim());
+                    }
+                }
+                doctor.setLanguages(languageSet);
+            }
+
+            // Update pricing information
+            if (dto.getCaseRate() != null && dto.getCaseRate() >= 0) {
+                doctor.setCaseRate(dto.getCaseRate());
+            }
+
+            if (dto.getHourlyRate() != null && dto.getHourlyRate() >= 0) {
+                doctor.setHourlyRate(dto.getHourlyRate());
+            }
+
+            if (dto.getEmergencyRate() != null && dto.getEmergencyRate() >= 0) {
+                doctor.setEmergencyRate(dto.getEmergencyRate());
+            }
+
+            // Update contact information
+            if (dto.getPhoneNumber() != null && !dto.getPhoneNumber().trim().isEmpty()) {
+                doctor.setPhoneNumber(dto.getPhoneNumber().trim());
+            }
+
+            if (dto.getEmail() != null && !dto.getEmail().trim().isEmpty()) {
+                doctor.setEmail(dto.getEmail().trim());
+            }
+
+            if (dto.getAddress() != null && !dto.getAddress().trim().isEmpty()) {
+                doctor.setAddress(dto.getAddress());
+            }
+
+            if (dto.getCity() != null && !dto.getCity().trim().isEmpty()) {
+                doctor.setCity(dto.getCity());
+            }
+
+            if (dto.getCountry() != null && !dto.getCountry().trim().isEmpty()) {
+                doctor.setCountry(dto.getCountry());
+            }
+
+            if (dto.getHospitalAffiliation() != null && !dto.getHospitalAffiliation().trim().isEmpty()) {
+                doctor.setHospitalAffiliation(dto.getHospitalAffiliation().trim());
+            }
+
+            // Update capacity settings
+            if (dto.getMaxConcurrentCases() != null && dto.getMaxConcurrentCases() > 0) {
+                doctor.setMaxActiveCases(dto.getMaxConcurrentCases());
+            }
+
+            // Update preferences
+            if (dto.getAcceptsSecondOpinions() != null) {
+                // Note: This field doesn't exist in current Doctor entity, but if added later
+                // doctor.setAcceptsSecondOpinions(dto.getAcceptsSecondOpinions());
+            }
+
+            if (doctor.getLanguages() != null && !doctor.getLanguages().isEmpty()) {
+                dto.setLanguages(String.join(", ", doctor.getLanguages()));
+            }
+
+            if (dto.getAcceptsComplexCases() != null) {
+                // Note: This field doesn't exist in current Doctor entity, but if added later
+                // doctor.setAcceptsComplexCases(dto.getAcceptsComplexCases());
+            }
+
+            if (dto.getAcceptsUrgentCases() != null) {
+                // Note: This field doesn't exist in current Doctor entity, but if added later
+                // doctor.setAcceptsUrgentCases(dto.getAcceptsUrgentCases());
+            }
+
+            // Save updated doctor
+            updatedDoctor = doctorRepository.save(doctor);
+        }catch(Exception ex){
+            log.error("Failed to update doctor's profile", ex);
+            ex.printStackTrace();
+            throw new BusinessException("Failed to update doctor's profile", HttpStatus.INTERNAL_SERVER_ERROR);
         }
-
-        // Update pricing information
-        if (dto.getCaseRate() != null && dto.getCaseRate() >= 0) {
-            doctor.setCaseRate(dto.getCaseRate());
-        }
-
-        if (dto.getHourlyRate() != null && dto.getHourlyRate() >= 0) {
-            doctor.setHourlyRate(dto.getHourlyRate());
-        }
-
-        if (dto.getEmergencyRate() != null && dto.getEmergencyRate() >= 0) {
-            doctor.setEmergencyRate(dto.getEmergencyRate());
-        }
-
-        // Update contact information
-        if (dto.getPhoneNumber() != null && !dto.getPhoneNumber().trim().isEmpty()) {
-            doctor.setPhoneNumber(dto.getPhoneNumber().trim());
-        }
-
-        if (dto.getEmail() != null && !dto.getEmail().trim().isEmpty()) {
-            doctor.setEmail(dto.getEmail().trim());
-        }
-
-        if (dto.getHospitalAffiliation() != null && !dto.getHospitalAffiliation().trim().isEmpty()) {
-            doctor.setHospitalAffiliation(dto.getHospitalAffiliation().trim());
-        }
-
-        // Update capacity settings
-        if (dto.getMaxConcurrentCases() != null && dto.getMaxConcurrentCases() > 0) {
-            doctor.setMaxActiveCases(dto.getMaxConcurrentCases());
-        }
-
-        // Update preferences
-        if (dto.getAcceptsSecondOpinions() != null) {
-            // Note: This field doesn't exist in current Doctor entity, but if added later
-            // doctor.setAcceptsSecondOpinions(dto.getAcceptsSecondOpinions());
-        }
-
-        if (dto.getAcceptsComplexCases() != null) {
-            // Note: This field doesn't exist in current Doctor entity, but if added later
-            // doctor.setAcceptsComplexCases(dto.getAcceptsComplexCases());
-        }
-
-        if (dto.getAcceptsUrgentCases() != null) {
-            // Note: This field doesn't exist in current Doctor entity, but if added later
-            // doctor.setAcceptsUrgentCases(dto.getAcceptsUrgentCases());
-        }
-
-        // Save updated doctor
-        Doctor updatedDoctor = doctorRepository.save(doctor);
-
         // Return updated profile DTO
         return mapToDto(updatedDoctor);
     }

@@ -406,7 +406,8 @@ public class DocumentService {
         // Check if Doctor can access cas's documents:
         // Check if user is the case owner Doctor/Patient
         Optional<CaseAssignment> assignment = medicalCase.getAssignments().stream().
-                filter(a->a.getStatus().equals(AssignmentStatus.ACCEPTED)).findFirst();
+                filter(a->a.getStatus().equals(AssignmentStatus.ACCEPTED) ||
+                        a.getStatus().equals(AssignmentStatus.PENDING) ).findFirst();
         Long doctorId = null;
         if(assignment.isPresent()){
             doctorId = assignment.get().getDoctorId();

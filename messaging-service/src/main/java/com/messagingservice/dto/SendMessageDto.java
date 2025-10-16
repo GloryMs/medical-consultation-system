@@ -21,6 +21,10 @@ public class SendMessageDto {
     
     @NotBlank(message = "Message content is required")
     private String content;
+
+    private String patientName;
+
+    private String doctorName;
     
     private MessageType messageType = MessageType.TEXT;
     

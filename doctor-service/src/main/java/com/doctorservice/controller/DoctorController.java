@@ -84,7 +84,7 @@ public class DoctorController {
     @PutMapping("/profile")
     public ResponseEntity<ApiResponse<DoctorProfileDto>> updateProfile(
             @RequestHeader("X-User-Id") Long userId,
-            @Valid @RequestBody DoctorProfileDto dto) {
+            @RequestBody DoctorProfileDto dto) {
         DoctorProfileDto updatedProfile = doctorService.updateProfile(userId, dto);
         return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
     }

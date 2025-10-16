@@ -38,7 +38,9 @@ public class MessageService {
                 dto.getCaseId(),
                 senderId,
                 dto.getReceiverId(),
-                senderRole
+                senderRole,
+                dto.getPatientName(),
+                dto.getDoctorName()
         );
 
         UserRole receiverRole = senderRole == UserRole.PATIENT ? UserRole.DOCTOR : UserRole.PATIENT;
@@ -198,7 +200,8 @@ public class MessageService {
      * Get existing conversation or create new one
      * This is the key method that fixes the issue
      */
-    private Conversation getOrCreateConversation(Long caseId, Long senderId, Long receiverId, UserRole senderRole) {
+    private Conversation getOrCreateConversation(Long caseId, Long senderId, Long receiverId,
+                                                 UserRole senderRole, String patientName, String doctorName) {
         // Try to find existing conversation
         return conversationRepository.findByCaseIdAndIsDeletedFalse(caseId)
                 .orElseGet(() -> {
@@ -215,8 +218,8 @@ public class MessageService {
                             .doctorId(doctorId)
                             .title("Case #" + caseId + " Discussion")
                             .status(ConversationStatus.ACTIVE)
-                            .patientName("Patient") // TODO: Fetch from patient service
-                            .doctorName("Doctor")   // TODO: Fetch from doctor service
+                            .patientName(patientName)
+                            .doctorName(doctorName)
                             .totalMessagesCount(0)
                             .unreadCountPatient(0)
                             .unreadCountDoctor(0)

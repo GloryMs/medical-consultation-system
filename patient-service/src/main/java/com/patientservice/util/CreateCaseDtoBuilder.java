@@ -32,7 +32,8 @@ public class CreateCaseDtoBuilder {
             String complexity, 
             Boolean requiresSecondOpinion,
             Integer minDoctorsRequired, 
-            Integer maxDoctorsAllowed, 
+            Integer maxDoctorsAllowed,
+            Long dependentId,
             List<MultipartFile> files) {
         
         CreateCaseDto dto = new CreateCaseDto();
@@ -63,6 +64,8 @@ public class CreateCaseDtoBuilder {
         dto.setRequiresSecondOpinion(requiresSecondOpinion != null ? requiresSecondOpinion : false);
         dto.setMinDoctorsRequired(minDoctorsRequired != null ? minDoctorsRequired : 1);
         dto.setMaxDoctorsAllowed(maxDoctorsAllowed != null ? maxDoctorsAllowed : 2);
+
+        dto.setDependentId(dependentId);
         
         // Files
         dto.setFiles(files != null ? files : List.of());

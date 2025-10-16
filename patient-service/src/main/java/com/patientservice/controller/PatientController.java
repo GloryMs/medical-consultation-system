@@ -185,6 +185,7 @@ public class PatientController {
             @RequestParam(value = "requiresSecondOpinion", required = false) Boolean requiresSecondOpinion,
             @RequestParam(value = "minDoctorsRequired", required = false) Integer minDoctorsRequired,
             @RequestParam(value = "maxDoctorsAllowed", required = false) Integer maxDoctorsAllowed,
+            @RequestParam(value = "dependentId", required = false) Long dependentId,
             @RequestParam(value = "files", required = false) List<MultipartFile> files) {
 
         try {
@@ -193,7 +194,7 @@ public class PatientController {
                     caseTitle, description, primaryDiseaseCode, secondaryDiseaseCodes,
                     symptomCodes, currentMedicationCodes, requiredSpecialization,
                     secondarySpecializations, urgencyLevel, complexity,
-                    requiresSecondOpinion, minDoctorsRequired, maxDoctorsAllowed, files
+                    requiresSecondOpinion, minDoctorsRequired, maxDoctorsAllowed, dependentId, files
             );
 
             Case medicalCase = patientService.createCase(userId, dto);

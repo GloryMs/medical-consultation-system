@@ -4,6 +4,7 @@ import com.commonlibrary.entity.CaseComplexity;
 import com.commonlibrary.entity.VerificationStatus;
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.validation.annotation.Validated;
 
 import java.math.BigDecimal;
@@ -12,6 +13,7 @@ import java.util.Set;
 
 @Data
 @Validated
+@ToString
 public class DoctorProfileDto {
 
     private Long id;

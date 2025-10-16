@@ -831,7 +831,7 @@ public class PatientService {
             // CASE IS FOR DEPENDENT - Show dependent's info as patient
             Dependent dependent = medicalCase.getDependent();
 
-            customPatientDto.setPatientId(dependent.getId()); // Use dependent ID
+            customPatientDto.setPatientId(accountOwner.getId()); // Use Patient ID not Dependant ID.
             customPatientDto.setUserId(accountOwner.getUserId());
             customPatientDto.setFullName(dependent.getFullName());
             customPatientDto.setDateOfBirth(dependent.getDateOfBirth());
