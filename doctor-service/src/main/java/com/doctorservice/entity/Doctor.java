@@ -40,6 +40,19 @@ public class Doctor extends BaseEntity {
     @Column(name = "specialization")
     private Set<String> subSpecializations = new HashSet<>();
 
+    // ===== EXPERTISE FIELDS =====
+    @ElementCollection
+    @CollectionTable(name = "doctor_disease_expertise",
+            joinColumns = @JoinColumn(name = "doctor_id"))
+    @Column(name = "disease_code")
+    private Set<String> diseaseExpertiseCodes = new HashSet<>();
+
+    @ElementCollection
+    @CollectionTable(name = "doctor_symptom_expertise",
+            joinColumns = @JoinColumn(name = "doctor_id"))
+    @Column(name = "symptom_code")
+    private Set<String> symptomExpertiseCodes = new HashSet<>();
+
     // ===== PRICING FIELDS =====
 
     private Double hourlyRate;

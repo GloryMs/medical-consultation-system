@@ -142,7 +142,7 @@ public class SmartCaseAssignmentService {
             System.out.println( "Calling: findEligibleDoctorsWithWorkload" );
 
             for (String specialization : requiredSpecializations) {
-                System.out.println( "Trying to fitch eligibleDoctors with  specialization" + specialization);
+                System.out.println( "Trying to fitch eligible Doctors with  specialization" + specialization);
                 var response = doctorServiceClient.getAvailableDoctorsBySpecializationWithCapacity(
                         specialization, medicalCase.getMaxDoctorsAllowed() * 2
                 );
@@ -326,7 +326,7 @@ public class SmartCaseAssignmentService {
                     return 85.0; // Strong disease expertise match
                 }
 
-                // Check if doctor's subspecializations match disease requirements
+                // Check if doctor's sub-specializations match disease requirements
                 if (doctor.getSubSpecializations() != null && diseaseSpecializations != null) {
                     boolean hasSubSpecMatch = doctor.getSubSpecializations().stream()
                             .anyMatch(diseaseSpecializations::contains);
@@ -639,6 +639,12 @@ public class SmartCaseAssignmentService {
         int maxDoctors = medicalCase.getMaxDoctorsAllowed();
         int minDoctors = medicalCase.getMinDoctorsRequired();
 
+        /*TODO
+        *  I've changed the max and min to /0/ to make sure the assignment will be for only
+        * one doctor (the primary one), maybe later can re-activate Secondary and Consultant*/
+
+        maxDoctors = 0;
+        minDoctors = 0;
         for (int i = 1; i < sortedResults.size() && selectedDoctors.size() < maxDoctors; i++) {
             DoctorMatchingResultDto candidate = sortedResults.get(i);
 

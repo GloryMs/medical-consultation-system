@@ -58,6 +58,8 @@ public class DoctorService {
                 .licenseNumber(dto.getLicenseNumber())
                 .primarySpecialization(dto.getPrimarySpecialization())
                 .subSpecializations(dto.getSubSpecializations())
+                .symptomExpertiseCodes(dto.getSymptomExpertiseCodes())
+                .diseaseExpertiseCodes(dto.getDiseaseExpertiseCodes())
                 .caseRate(dto.getCaseRate())
                 .emergencyRate(dto.getEmergencyRate())
                 .hourlyRate(dto.getHourlyRate())
@@ -109,6 +111,14 @@ public class DoctorService {
 
             if (dto.getSubSpecializations() != null && !dto.getSubSpecializations().isEmpty()) {
                 doctor.setSubSpecializations(new HashSet<>(dto.getSubSpecializations()));
+            }
+
+            if (dto.getDiseaseExpertiseCodes() != null && !dto.getDiseaseExpertiseCodes().isEmpty()) {
+                doctor.setDiseaseExpertiseCodes(new HashSet<>(dto.getDiseaseExpertiseCodes()));
+            }
+
+            if (dto.getSymptomExpertiseCodes() != null && !dto.getSymptomExpertiseCodes().isEmpty()) {
+                doctor.setSymptomExpertiseCodes(new HashSet<>(dto.getSymptomExpertiseCodes()));
             }
 
             // Update professional information
