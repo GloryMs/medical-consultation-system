@@ -71,6 +71,16 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
+    @PostMapping("/{doctorId}/rate")
+    public ResponseEntity<ApiResponse<Double>> rateDoctor(
+            @RequestHeader("X-User-Id") Long patientId,
+            @PathVariable Long doctorId,
+            @Valid @RequestBody SubmitRatingDto ratingDto) {
+
+        Double newAverageRating = doctorService.rateDoctor(patientId, doctorId, ratingDto);
+        return ResponseEntity.ok(ApiResponse.success(newAverageRating, "Doctor rated successfully"));
+    }
+
     @GetMapping("/doctor/custom-info/{doctorId}")
     public ResponseEntity<ApiResponse<CustomDoctorInfoDto>> getDoctorCustomInfo(
             @PathVariable Long doctorId){

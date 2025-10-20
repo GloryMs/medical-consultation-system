@@ -175,7 +175,8 @@ public class AuthService {
     @Transactional
     public AuthResponse googleLogin(GoogleLoginRequest request) {
         try {
-            log.info("Processing Google login request");
+            log.info("googleLogin: Processing Google login request");
+            log.info("googleLogin   ===> IdToken: {}", request.getIdToken());
 
             // Verify the Google ID token
             GoogleIdToken.Payload payload = googleTokenVerifier.verifyToken(request.getIdToken());
@@ -272,12 +273,15 @@ public class AuthService {
 
         } catch (GeneralSecurityException e) {
             log.error("Invalid Google ID token", e);
+            e.printStackTrace();
             throw new BusinessException("Invalid Google ID token", HttpStatus.UNAUTHORIZED);
         } catch (IOException e) {
             log.error("Error verifying Google ID token", e);
+            e.printStackTrace();
             throw new BusinessException("Error verifying Google credentials", HttpStatus.INTERNAL_SERVER_ERROR);
         } catch (Exception e) {
             log.error("Unexpected error during Google login", e);
+            e.printStackTrace();
             throw new BusinessException("Google login failed", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

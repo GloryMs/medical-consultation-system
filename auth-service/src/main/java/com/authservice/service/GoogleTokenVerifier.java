@@ -43,7 +43,8 @@ public class GoogleTokenVerifier {
             throws GeneralSecurityException, IOException {
         
         log.info("Verifying Google ID token");
-        
+
+        //private final GoogleIdTokenVerifier verifier;
         GoogleIdToken idToken = verifier.verify(idTokenString);
         
         if (idToken != null) {

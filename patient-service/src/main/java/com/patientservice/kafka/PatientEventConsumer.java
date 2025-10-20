@@ -69,7 +69,9 @@ public class PatientEventConsumer {
         try {
             Long userId = Long.valueOf(registrationEvent.get("userId").toString());
             String email = registrationEvent.get("email").toString();
-            String phoneNumber = registrationEvent.get("phoneNumber").toString();
+            //String phoneNumber = registrationEvent.get("phoneNumber").toString();
+            String phoneNumber = registrationEvent.get("phoneNumber") != null ?
+                    registrationEvent.get("phoneNumber").toString() : null;
             String role = registrationEvent.get("role").toString();
             String fullName = registrationEvent.get("fullName").toString();
             

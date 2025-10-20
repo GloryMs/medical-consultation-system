@@ -235,6 +235,44 @@ public class DoctorService {
         return doctorInfoDto;
     }
 
+    /**
+     * Rate a doctor after consultation completion
+     * Updates the doctor's average rating using the existing updateRating method
+     */
+    @Transactional
+    public Double rateDoctor(Long patientId, Long doctorId, SubmitRatingDto ratingDto) {
+        // Validate case exists and belongs to patient
+        CaseDto caseDto = caseAssignmentRepo.getCaseById(ratingDto.getCaseId());
+        if (caseDto == null) {
+            throw new BusinessException("Case not found", HttpStatus.NOT_FOUND);
+        }
+
+        if (!caseDto.getPatientId().equals(patientId)) {
+            throw new BusinessException("Unauthorized: This case does not belong to you", HttpStatus.FORBIDDEN);
+        }
+
+        // Validate case status is CONSULTATION_COMPLETE
+        if (caseDto.getStatus() != CaseStatus.CONSULTATION_COMPLETE) {
+            throw new BusinessException(
+                    "Rating is only allowed after consultation is completed",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // Find doctor
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+
+        // Update doctor's rating using the existing updateRating method
+        doctor.updateRating(ratingDto.getRating().doubleValue());
+
+        // Save updated doctor
+        Doctor savedDoctor = doctorRepository.save(doctor);
+
+        // Return new average rating
+        return savedDoctor.getRating();
+    }
+
     @Transactional
     public void acceptCase(Long userId, Long caseId) {
         Doctor doctor = doctorRepository.findByUserId(userId)
