@@ -13,6 +13,7 @@ services:
     volumes:
       - /medical-system-compose/postgres_data:/data/postgres
       - /medical-system-compose/postgres_data_lib:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
     ports:
       - "5432:5432"
     networks:
@@ -178,6 +179,8 @@ services:
     depends_on:
       - eureka-server
       - postgres
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/medical_auth_db

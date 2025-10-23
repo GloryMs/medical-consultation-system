@@ -7,7 +7,6 @@ import com.google.api.client.json.gson.GsonFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
@@ -24,12 +23,28 @@ public class GoogleTokenVerifier {
 
     private final GoogleIdTokenVerifier verifier;
 
-    public GoogleTokenVerifier(@Value("${spring.security.oauth2.client.registration.google.client-id}") String clientId) {
-        this.clientId = clientId;
+    public GoogleTokenVerifier() {
         this.verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
                 .setAudience(Collections.singletonList(clientId))
                 .build();
     }
+
+//    @Bean
+//    public GoogleIdTokenVerifier googleIdTokenVerifier() throws Exception {
+//
+//        log.info("🔧 Initializing GoogleIdTokenVerifier");
+//        log.info("   Client ID: {}", clientId);
+//
+//        // ✅ This MUST be the same as token's "aud" claim
+//        verifier = new GoogleIdTokenVerifier.Builder(
+//                GoogleNetHttpTransport.newTrustedTransport(),
+//                JacksonFactory.getDefaultInstance())
+//                .setAudience(Collections.singletonList(clientId))  // Uses from properties
+//                .build();
+//
+//        log.info("✅ GoogleIdTokenVerifier ready with Client ID");
+//        return verifier;
+//    }
 
     /**
      * Verifies the Google ID token and extracts user information
@@ -41,15 +56,32 @@ public class GoogleTokenVerifier {
      */
     public GoogleIdToken.Payload verifyToken(String idTokenString) 
             throws GeneralSecurityException, IOException {
-        
+
         log.info("Verifying Google ID token");
 
-        //private final GoogleIdTokenVerifier verifier;
+        //Verify id token
+        if (idTokenString == null || idTokenString.trim().isEmpty()) {
+            log.error("ID token string is empty or null");
+            throw new GeneralSecurityException("ID token cannot be empty");
+        }
+
+        //Validate verifier
+        if (verifier == null) {
+            log.error("GoogleIdTokenVerifier is NULL - Configuration failed");
+            throw new GeneralSecurityException(
+                    "Google OAuth configuration error: Verifier not initialized");
+        }
         GoogleIdToken idToken = verifier.verify(idTokenString);
-        
-        if (idToken != null) {
+
+        if (idToken == null) {
+            log.error("Token verification returned null");
+            throw new GeneralSecurityException(
+                    "Invalid ID token - verification failed. ");
+        }
+        else{
+            log.info("✅ Google ID token verification SUCCESSFUL");
             GoogleIdToken.Payload payload = idToken.getPayload();
-            
+
             // Print user identifier
             String userId = payload.getSubject();
             log.info("User ID: {}", userId);
@@ -62,13 +94,10 @@ public class GoogleTokenVerifier {
             String locale = (String) payload.get("locale");
             String familyName = (String) payload.get("family_name");
             String givenName = (String) payload.get("given_name");
-            
+
             log.info("Email: {}, Verified: {}, Name: {}", email, emailVerified, name);
-            
+
             return payload;
-        } else {
-            log.error("Invalid ID token");
-            throw new GeneralSecurityException("Invalid ID token");
         }
     }
 

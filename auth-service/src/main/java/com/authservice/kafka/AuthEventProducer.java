@@ -17,22 +17,9 @@ public class AuthEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void sendUserRegistrationEvent(Long userId, String email, String phoneNumber, String role, String fullName) {
+    public void sendUserRegistrationEvent(Long userId, String email, String phoneNumber,
+                                          String role, String fullName) {
         try{
-            // Send welcome notification
-            NotificationDto welcomeNotification = NotificationDto.builder()
-                    .senderId(0L) // System notification
-                    .receiverId(userId)
-                    .title("Welcome to Medical Consultation System")
-                    .message("Hi "+ fullName +", Welcome! Your account has been created successfully. Please complete your profile.")
-                    .type(NotificationType.WELCOME)
-                    .sendEmail(true)
-                    .recipientEmail(email)
-                    .build();
-
-            kafkaTemplate.send("notification-topic", welcomeNotification);
-            log.info("Welcome notification sent for user: {}", email);
-
             // Send user registration event
             Map<String, Object> registrationEvent = new HashMap<>();
             registrationEvent.put("userId", userId);

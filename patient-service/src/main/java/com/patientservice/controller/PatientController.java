@@ -94,8 +94,53 @@ public class PatientController {
             @RequestHeader("X-User-Id") Long userId,
             @PathVariable Long caseId,
             @Valid @RequestBody RescheduleRequestDto dto) {
+
+        log.info("POST /api/patients/cases/{}/reschedule-request - Patient [userId={}]", caseId, userId);
+
         patientService.requestReschedule(userId, caseId, dto);
-        return ResponseEntity.ok(ApiResponse.success(null, "Reschedule request sent"));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Reschedule request sent successfully to doctor")
+        );
+    }
+
+    @GetMapping("/cases/{caseId}/reschedule-requests")
+    public ResponseEntity<ApiResponse<List<RescheduleRequestResponseDto>>> getRescheduleRequests(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long caseId) {
+
+        log.info("GET /api/patients/cases/{}/reschedule-requests - Patient [userId={}]", caseId, userId);
+
+        List<RescheduleRequestResponseDto> requests = patientService.getRescheduleRequests(userId, caseId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(requests)
+        );
+    }
+
+    @GetMapping("/reschedule-requests/pending")
+    public ResponseEntity<ApiResponse<List<RescheduleRequestResponseDto>>> getPendingRescheduleRequests(
+            @RequestHeader("X-User-Id") Long userId) {
+
+        log.info("GET /api/patients/reschedule-requests/pending - Patient [userId={}]", userId);
+
+        List<RescheduleRequestResponseDto> pendingRequests = patientService.getPendingRescheduleRequests(userId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(pendingRequests)
+        );
+    }
+
+    @PutMapping("/reschedule-request/{requestId}/update")
+    public ResponseEntity<ApiResponse<Void>> updateRescheduleRequest(
+            @PathVariable Long requestId, @RequestParam String status) {
+
+        log.info("PUT /reschedule-request/{}/update", requestId);
+
+        patientService.updateRescheduleRequestStatus( requestId, status);
+
+        return ResponseEntity.ok(ApiResponse.success(null,"Reschedule request status updated successfully")
+        );
     }
 
     @GetMapping("/payments/history")
@@ -189,21 +234,62 @@ public class PatientController {
             @RequestParam(value = "files", required = false) List<MultipartFile> files) {
 
         try {
+            log.info("Start Calling: createCase endpoint");
+            log.info("User ID: {}", userId);
+            log.info("Case Title: {}", caseTitle);
+            log.info("Dependent ID: {}", dependentId);  // Can now be null safely
+
+            // Validate required fields
+            if (userId == null || userId <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("User ID is required and must be valid"));
+            }
+
+            if (caseTitle == null || caseTitle.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Case title is required"));
+            }
+
+            if (requiredSpecialization == null || requiredSpecialization.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Required specialization is mandatory"));
+            }
+
+            // Dependent ID is optional - can be null (for primary user's own case)
+            // If dependent ID is provided, validate it's a positive number
+            if (dependentId != null && dependentId <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Dependent ID must be a positive number or null"));
+            }
+
+            log.info("Building Create Case DTO...");
             // Build DTO from request parameters
             CreateCaseDto dto = dtoBuilder.buildCreateCaseDto(
                     caseTitle, description, primaryDiseaseCode, secondaryDiseaseCodes,
                     symptomCodes, currentMedicationCodes, requiredSpecialization,
                     secondarySpecializations, urgencyLevel, complexity,
-                    requiresSecondOpinion, minDoctorsRequired, maxDoctorsAllowed, dependentId, files
-            );
+                    requiresSecondOpinion, minDoctorsRequired, maxDoctorsAllowed, dependentId, files);
 
+            log.info("Create Case DTO has built successfully {}", dto.toString());
             Case medicalCase = patientService.createCase(userId, dto);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(ApiResponse.success(medicalCase, "Case submitted successfully with files"));
 
+        } catch (IllegalArgumentException e) {
+            log.warn("Validation error creating case for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(e.getMessage()));
+
+        } catch (RuntimeException e) {
+            log.error("Runtime error creating case for user {}: {}", userId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to create case: " + e.getMessage()));
+
         } catch (Exception e) {
-            log.error("Error creating case with files for user {}: {}", userId, e.getMessage(), e);
-            throw new BusinessException("Failed to create case: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            log.error("Unexpected error creating case for user {}: {}", userId, e.getMessage(), e);
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to create case: An unexpected error occurred"));
         }
     }
 

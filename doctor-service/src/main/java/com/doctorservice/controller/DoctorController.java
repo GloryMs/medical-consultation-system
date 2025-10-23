@@ -443,6 +443,51 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment rescheduled"));
     }
 
+    @PostMapping("/reschedule-requests/{requestId}/approve")
+    public ResponseEntity<ApiResponse<Appointment>> approveRescheduleRequest(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long requestId,
+            @Valid @RequestBody ApproveRescheduleRequestDto dto) {
+
+        Appointment updatedAppointment = doctorService.approveRescheduleRequest(
+                userId,
+                dto.getAppointmentId(),
+                requestId,
+                dto.getSelectedTimeIndex(),
+                dto.getReason()
+        );
+        return ResponseEntity.ok(
+                ApiResponse.success(updatedAppointment, "Reschedule request approved successfully"));
+    }
+
+    @PostMapping("/appointments/{appointmentId}/propose-reschedule")
+    public ResponseEntity<ApiResponse<Appointment>> proposeRescheduleTime(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long appointmentId,
+            @Valid @RequestBody ProposeRescheduleTimeDto dto) {
+        Appointment updatedAppointment = doctorService.proposeRescheduleTime(
+                userId,
+                appointmentId,
+                dto.getProposedTime(),
+                dto.getReason()
+        );
+        return ResponseEntity.ok(
+                ApiResponse.success(updatedAppointment,
+                        "Reschedule time proposed and notification sent to patient"));
+    }
+
+    @PostMapping("/reschedule-requests/{requestId}/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectRescheduleRequest(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable Long requestId,
+            @Valid @RequestBody RejectRescheduleRequestDto dto) {
+
+        doctorService.rejectRescheduleRequest(userId, requestId, dto.getRejectionReason());
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Reschedule request rejected successfully")
+        );
+    }
+
     @PutMapping("/appointments/confirm")
     public ResponseEntity<ApiResponse<Void>> confirmAppointment(
             @RequestParam Long caseId, @RequestParam Long patientId, @RequestParam Long doctorId) {

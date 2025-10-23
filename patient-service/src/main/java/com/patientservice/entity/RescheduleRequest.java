@@ -18,6 +18,9 @@ public class RescheduleRequest extends BaseEntity {
     private Long caseId;
 
     @Column(nullable = false)
+    private Long patientId;
+
+    @Column(nullable = false)
     private String requestedBy; // PATIENT or DOCTOR
 
     @Column(columnDefinition = "TEXT")

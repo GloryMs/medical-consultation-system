@@ -3,10 +3,7 @@ package com.patientservice.dto;
 import com.commonlibrary.entity.CaseComplexity;
 import com.commonlibrary.entity.UrgencyLevel;
 import jakarta.validation.constraints.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +17,9 @@ import java.util.Set;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
+@Getter
+@Setter
 public class CreateCaseDto {
 
     // NEW: Optional dependent ID - if null, case is for the patient themselves

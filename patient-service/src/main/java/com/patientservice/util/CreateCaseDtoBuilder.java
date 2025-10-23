@@ -37,38 +37,46 @@ public class CreateCaseDtoBuilder {
             List<MultipartFile> files) {
         
         CreateCaseDto dto = new CreateCaseDto();
-        
-        // Basic case information
-        dto.setCaseTitle(caseTitle);
-        dto.setDescription(description);
-        dto.setPrimaryDiseaseCode(primaryDiseaseCode);
-        
-        // Convert lists to sets
-        dto.setSecondaryDiseaseCodes(secondaryDiseaseCodes != null ? 
-            secondaryDiseaseCodes.stream().collect(Collectors.toSet()) : null);
-        dto.setSymptomCodes(symptomCodes != null ? 
-            symptomCodes.stream().collect(Collectors.toSet()) : null);
-        dto.setCurrentMedicationCodes(currentMedicationCodes != null ? 
-            currentMedicationCodes.stream().collect(Collectors.toSet()) : null);
-        dto.setSecondarySpecializations(secondarySpecializations != null ? 
-            secondarySpecializations.stream().collect(Collectors.toSet()) : null);
-        
-        // Specialization
-        dto.setRequiredSpecialization(requiredSpecialization);
-        
-        // Parse enums safely
-        dto.setUrgencyLevel(parseUrgencyLevel(urgencyLevel));
-        dto.setComplexity(parseCaseComplexity(complexity));
-        
-        // Optional fields with defaults
-        dto.setRequiresSecondOpinion(requiresSecondOpinion != null ? requiresSecondOpinion : false);
-        dto.setMinDoctorsRequired(minDoctorsRequired != null ? minDoctorsRequired : 1);
-        dto.setMaxDoctorsAllowed(maxDoctorsAllowed != null ? maxDoctorsAllowed : 2);
 
-        dto.setDependentId(dependentId);
-        
-        // Files
-        dto.setFiles(files != null ? files : List.of());
+        try{
+            // Basic case information
+            dto.setCaseTitle(caseTitle);
+            dto.setDescription(description);
+            dto.setPrimaryDiseaseCode(primaryDiseaseCode);
+
+            // Convert lists to sets
+            dto.setSecondaryDiseaseCodes(secondaryDiseaseCodes != null ?
+                    secondaryDiseaseCodes.stream().collect(Collectors.toSet()) : null);
+            dto.setSymptomCodes(symptomCodes != null ?
+                    symptomCodes.stream().collect(Collectors.toSet()) : null);
+            dto.setCurrentMedicationCodes(currentMedicationCodes != null ?
+                    currentMedicationCodes.stream().collect(Collectors.toSet()) : null);
+            dto.setSecondarySpecializations(secondarySpecializations != null ?
+                    secondarySpecializations.stream().collect(Collectors.toSet()) : null);
+
+            // Specialization
+            dto.setRequiredSpecialization(requiredSpecialization);
+
+            // Parse enums safely
+            dto.setUrgencyLevel(parseUrgencyLevel(urgencyLevel));
+            dto.setComplexity(parseCaseComplexity(complexity));
+
+            // Optional fields with defaults
+            dto.setRequiresSecondOpinion(requiresSecondOpinion != null ? requiresSecondOpinion : false);
+            dto.setMinDoctorsRequired(minDoctorsRequired != null ? minDoctorsRequired : 1);
+            dto.setMaxDoctorsAllowed(maxDoctorsAllowed != null ? maxDoctorsAllowed : 2);
+
+            try{
+                dto.setDependentId(dependentId);
+            } catch (Exception e) {
+                dto.setDependentId(null);
+            }
+
+            // Files
+            dto.setFiles(files != null ? files : List.of());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         
         return dto;
     }

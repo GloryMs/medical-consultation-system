@@ -85,7 +85,7 @@ public class PatientEventProducer {
                 .receiverId(doctorId)
                 .title("Reschedule Request")
                 .message("Patient requested to reschedule case #" + caseId + ". Reason: " + reason)
-                .type(NotificationType.SUBSCRIPTION)
+                .type(NotificationType.APPOINTMENT)
                 .sendEmail(true)
                 .build();
 

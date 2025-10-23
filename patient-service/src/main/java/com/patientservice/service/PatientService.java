@@ -1031,7 +1031,7 @@ public class PatientService {
 
     // 4. Request Reschedule Implementation
     @Transactional
-    public void requestReschedule(Long userId, Long caseId, RescheduleRequestDto dto) {
+    public void old_requestReschedule(Long userId, Long caseId, RescheduleRequestDto dto) {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
@@ -1048,7 +1048,8 @@ public class PatientService {
 
         RescheduleRequest request = RescheduleRequest.builder()
                 .caseId(caseId)
-                .requestedBy("PATIENT")
+                .patientId(patient.getId())
+                .requestedBy(patient.getFullName())
                 .reason(dto.getReason())
                 .preferredTimes(String.join(",", dto.getPreferredTimes()))
                 .status(RescheduleStatus.PENDING)
@@ -1066,6 +1067,230 @@ public class PatientService {
             log.error("Doctor not found ...");
             log.error(e.getMessage());
         }
+    }
+
+    @Transactional
+    public void requestReschedule(Long userId, Long caseId, RescheduleRequestDto dto) {
+        log.info("=== RESCHEDULE REQUEST INITIATED ===");
+        log.info("Patient [userId={}] requesting reschedule for case [caseId={}]", userId, caseId);
+
+        // ====================================================================
+        // STEP 1: VALIDATE PATIENT EXISTS
+        // ====================================================================
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> {
+                    log.error("Patient not found for userId: {}", userId);
+                    return new BusinessException("Patient not found", HttpStatus.NOT_FOUND);
+                });
+        log.debug("Patient found: [patientId={}]", patient.getId());
+
+        // ====================================================================
+        // STEP 2: VALIDATE CASE EXISTS AND BELONGS TO PATIENT
+        // ====================================================================
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> {
+                    log.error("Case not found: {}", caseId);
+                    return new BusinessException("Case/Appointment not found", HttpStatus.NOT_FOUND);
+                });
+
+        if (!medicalCase.getPatient().getId().equals(patient.getId())) {
+            log.warn("Unauthorized access attempt: Patient [{}] trying to reschedule case [{}] owned by patient [{}]",
+                    patient.getId(), caseId, medicalCase.getPatient().getId());
+            throw new BusinessException("Unauthorized access to this case", HttpStatus.FORBIDDEN);
+        }
+        log.debug("Case ownership verified");
+
+        // ====================================================================
+        // STEP 3: VALIDATE CASE IS IN SCHEDULED STATUS
+        // ====================================================================
+        if (medicalCase.getStatus() != CaseStatus.SCHEDULED) {
+            log.warn("Case not in SCHEDULED status. Current status: {}", medicalCase.getStatus());
+            throw new BusinessException(
+                    "Case must be in SCHEDULED status to request reschedule. Current status: " + medicalCase.getStatus(),
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        log.debug("Case status validated: SCHEDULED");
+
+        // ====================================================================
+        // STEP 4: VALIDATE REQUEST DTO
+        // ====================================================================
+        if (dto.getReason() == null || dto.getReason().trim().isEmpty()) {
+            throw new BusinessException("Reason is required", HttpStatus.BAD_REQUEST);
+        }
+        if (dto.getPreferredTimes() == null || dto.getPreferredTimes().isEmpty()) {
+            throw new BusinessException("At least one preferred time is required", HttpStatus.BAD_REQUEST);
+        }
+        log.debug("Request DTO validation passed");
+
+        // ====================================================================
+        // STEP 5: VALIDATE PREFERRED TIMES
+        // ====================================================================
+        LocalDateTime now = LocalDateTime.now();
+        for (String preferredTime : dto.getPreferredTimes()) {
+            try {
+                LocalDateTime dateTime = LocalDateTime.parse(preferredTime);
+
+                if (dateTime.isBefore(now)) {
+                    log.warn("Preferred time is in the past: {}", preferredTime);
+                    throw new BusinessException(
+                            "Preferred times must be in the future",
+                            HttpStatus.BAD_REQUEST
+                    );
+                }
+
+                log.debug("Preferred time validated: {}", preferredTime);
+            } catch (Exception e) {
+                log.error("Invalid date format: {}", preferredTime);
+                throw new BusinessException(
+                        "Invalid date format. Use ISO 8601 format (yyyy-MM-ddThh:mm:ss)",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+        }
+        log.debug("All preferred times validated");
+
+        // ====================================================================
+        // STEP 6: CREATE RESCHEDULE REQUEST ENTITY
+        // ====================================================================
+        String preferredTimesJoined = String.join(",", dto.getPreferredTimes());
+
+        RescheduleRequest request = RescheduleRequest.builder()
+                .caseId(caseId)
+                .patientId(patient.getId())
+                .requestedBy(patient.getFullName())
+                .reason(dto.getReason())
+                .preferredTimes(preferredTimesJoined)
+                .status(RescheduleStatus.PENDING)
+                .build();
+
+        RescheduleRequest savedRequest = rescheduleRequestRepository.save(request);
+        log.info("Reschedule request created: [requestId={}] with status PENDING", savedRequest.getId());
+
+        // ====================================================================
+        // STEP 7: NOTIFY DOCTOR VIA KAFKA EVENT
+        // ====================================================================
+        Long doctorId = -1L;
+        try {
+            // Get doctor ID from case assignments
+            if (medicalCase.getAssignments() != null && !medicalCase.getAssignments().isEmpty()) {
+                doctorId = medicalCase.getAssignments().get(0).getDoctorId();
+                log.debug("Doctor ID extracted from case assignment: {}", doctorId);
+
+                // Send Kafka event to notify doctor
+                patientEventProducer.sendRescheduleRequestEvent(
+                        caseId,
+                        patient.getId(),
+                        doctorId,
+                        dto.getReason()
+                );
+                log.info("Reschedule notification event sent to Kafka for doctor [doctorId={}]", doctorId);
+            } else {
+                log.warn("No doctor assignments found for case [caseId={}]", caseId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to send reschedule notification event to doctor: {}", e.getMessage());
+            // Don't throw exception - reschedule request is already created
+            // Log but continue so patient's request is persisted
+        }
+
+        // ====================================================================
+        // STEP 8: LOG COMPLETION
+        // ====================================================================
+        log.info("=== RESCHEDULE REQUEST COMPLETED SUCCESSFULLY ===");
+        log.info("Request [id={}] created for case [caseId={}] with {} preferred times",
+                savedRequest.getId(), caseId, dto.getPreferredTimes().size());
+    }
+
+    public List<RescheduleRequestResponseDto> getRescheduleRequests(Long userId, Long caseId) {
+        log.info("Fetching reschedule requests for case [caseId={}]", caseId);
+
+        // Validate patient owns the case
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        Case medicalCase = caseRepository.findById(caseId)
+                .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+        if (!medicalCase.getPatient().getId().equals(patient.getId())) {
+            throw new BusinessException("Unauthorized access to case", HttpStatus.FORBIDDEN);
+        }
+
+        // Fetch requests
+        List<RescheduleRequest> requests = rescheduleRequestRepository.findByCaseId(caseId);
+        log.debug("Found {} reschedule requests for case [caseId={}]", requests.size(), caseId);
+
+        return requests.stream()
+                .map(this::convertToResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    public List<RescheduleRequestResponseDto> getPendingRescheduleRequests(Long userId) {
+        log.info("Fetching pending reschedule requests for patient [userId={}]", userId);
+
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        // Get all pending requests first
+        List<RescheduleRequest> pendingRequests = rescheduleRequestRepository.findByStatus(RescheduleStatus.PENDING);
+        log.debug("Found {} total pending requests", pendingRequests.size());
+
+        // Filter only requests for this patient's cases
+        List<Case> patientCases = caseRepository.findByPatientId(patient.getId());
+        List<Long> patientCaseIds = patientCases.stream()
+                .map(Case::getId)
+                .collect(Collectors.toList());
+
+        log.debug("Patient has {} cases", patientCases.size());
+
+        List<RescheduleRequestResponseDto> result = pendingRequests.stream()
+                .filter(req -> patientCaseIds.contains(req.getCaseId()))
+                .map(this::convertToResponseDto)
+                .collect(Collectors.toList());
+
+        log.info("Returning {} pending requests for patient [userId={}]", result.size(), userId);
+        return result;
+    }
+
+    public void updateRescheduleRequestStatus(Long requestId, String status) {
+        log.info("Updating reschedule request [requestId={}] status to: {}", requestId, status);
+
+//        Patient patient = patientRepository.findByUserId(userId)
+//                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        RescheduleRequest request = rescheduleRequestRepository.findById(requestId)
+                .orElseThrow(() -> {
+                    log.error("Reschedule request not found: {}", requestId);
+                    return new BusinessException("Reschedule request not found", HttpStatus.NOT_FOUND);
+                });
+
+//        if(!Objects.equals(patient.getId(), request.getPatientId())){
+//            log.error("Reschedule request {} didn't belong to this patient: {}", requestId, patient.getId());
+//            throw new BusinessException("Reschedule request didn't belong to you !!!!", HttpStatus.CONFLICT);
+//        }
+
+        try {
+            RescheduleStatus newStatus = RescheduleStatus.valueOf(status);
+            request.setStatus(newStatus);
+            rescheduleRequestRepository.save(request);
+            log.info("Reschedule request [requestId={}] status updated to: {}", requestId, newStatus);
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid status value: {}", status);
+            throw new BusinessException("Invalid status value", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private RescheduleRequestResponseDto convertToResponseDto(RescheduleRequest request) {
+        return RescheduleRequestResponseDto.builder()
+                .id(request.getId())
+                .caseId(request.getCaseId())
+                .requestedBy(request.getRequestedBy())
+                .reason(request.getReason())
+                .preferredTimes(request.getPreferredTimes())
+                .status(request.getStatus() != null ? request.getStatus().toString() : "UNKNOWN")
+                .createdAt(request.getCreatedAt())
+                .updatedAt(request.getUpdatedAt())
+                .build();
     }
 
     // 5. Get Payment History Implementation

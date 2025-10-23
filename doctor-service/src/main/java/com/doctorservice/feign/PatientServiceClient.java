@@ -2,6 +2,7 @@ package com.doctorservice.feign;
 
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.CustomPatientDto;
+import com.commonlibrary.dto.RescheduleRequestResponseDto;
 import com.doctorservice.dto.CaseAssignmentDto;
 import com.commonlibrary.dto.CaseDto;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @FeignClient(name = "patient-service")
 public interface PatientServiceClient {
@@ -93,5 +95,17 @@ public interface PatientServiceClient {
     ResponseEntity<ApiResponse<Object>> getDoctorCaseMetrics(@PathVariable("doctorId") Long doctorId);
 
     @GetMapping("/api/patients/cases/{caseId}/custom-info")
-    ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId, @RequestParam Long doctorId );
+    ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId,
+                                                                        @RequestParam Long doctorId );
+
+    @GetMapping("/api/patients/reschedule-requests/{requestId}")
+    Optional<RescheduleRequestResponseDto> getRescheduleRequest(
+            @PathVariable Long requestId
+    );
+
+    @PutMapping("/api/patients/reschedule-request/{requestId}/update")
+    void updateRescheduleRequestStatus(
+            @PathVariable Long requestId,
+            @RequestParam String status
+    );
 }

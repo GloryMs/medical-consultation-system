@@ -1,12 +1,17 @@
 package com.patientservice.kafka;
 
 import com.commonlibrary.dto.CaseFeeUpdateEvent;
+import com.commonlibrary.dto.NotificationDto;
+import com.commonlibrary.entity.NotificationType;
+import com.patientservice.entity.Patient;
+import com.patientservice.repository.PatientRepository;
 import com.patientservice.service.PatientService;
 import com.patientservice.service.SmartCaseAssignmentService;
 import com.patientservice.util.CustomLocalDateTimeParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -21,6 +26,8 @@ public class PatientEventConsumer {
 
     private final PatientService patientService;
     private final SmartCaseAssignmentService assignmentService;
+    private final PatientRepository patientRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @KafkaListener(topics = "payment-completed-topic", groupId = "patient-group")
     public void handlePaymentCompleted(Map<String, Object> paymentEvent) {
@@ -82,6 +89,24 @@ public class PatientEventConsumer {
             // Only handle patient registrations
             if ("PATIENT".equals(role)) {
                 patientService.initializePatientProfile(userId, email, fullName, phoneNumber);
+
+                Patient patient = patientRepository.findByUserId(userId).orElse(null);
+                if( patient != null ) {
+                    // Send welcome notification
+                    NotificationDto welcomeNotification = NotificationDto.builder()
+                            .senderId(0L) // System notification
+                            .receiverId(patient.getId())
+                            .title("Welcome to Medical Consultation System")
+                            .message("Hi "+ patient.getFullName() +
+                                    ", Welcome! Your account has been created successfully. Please complete your profile.")
+                            .type(NotificationType.WELCOME)
+                            .sendEmail(true)
+                            .recipientEmail(email)
+                            .build();
+
+                    kafkaTemplate.send("notification-topic", welcomeNotification);
+                    log.info("Welcome notification sent for user: {}", email);
+                }
             }
             
         } catch (Exception e) {

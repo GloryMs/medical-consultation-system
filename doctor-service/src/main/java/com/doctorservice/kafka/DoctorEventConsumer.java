@@ -1,11 +1,16 @@
 package com.doctorservice.kafka;
 
+import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.CaseStatus;
+import com.commonlibrary.entity.NotificationType;
+import com.doctorservice.entity.Doctor;
+import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.service.DoctorService;
 import com.doctorservice.service.DoctorWorkloadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -17,6 +22,8 @@ public class DoctorEventConsumer {
 
     private final DoctorService doctorService;
     private final DoctorWorkloadService workloadService;
+    private final DoctorRepository doctorRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @KafkaListener(topics = "case-status-updated-topic", groupId = "doctor-group")
     public void handleCaseStatusUpdate(Map<String, Object> caseEvent) {
@@ -114,6 +121,25 @@ public class DoctorEventConsumer {
             // Only handle doctor registrations
             if ("DOCTOR".equals(role)) {
                 doctorService.initializeDoctorProfile(userId, email, phoneNumber);
+
+                Doctor doctor = doctorRepository.findByUserId(userId).orElse(null);
+                if( doctor != null ) {
+                    // Send welcome notification
+                    NotificationDto welcomeNotification = NotificationDto.builder()
+                            .senderId(0L) // System notification
+                            .receiverId(doctor.getId())
+                            .title("Welcome to Medical Consultation System")
+                            .message("Hi "+ doctor.getFullName() +
+                                    ", Welcome! Your account has been created successfully. Please complete your profile.")
+                            .type(NotificationType.WELCOME)
+                            .sendEmail(true)
+                            .recipientEmail(email)
+                            .build();
+
+                    kafkaTemplate.send("notification-topic", welcomeNotification);
+                    log.info("Welcome notification sent for user: {}", email);
+                }
+
             }
             
         } catch (Exception e) {

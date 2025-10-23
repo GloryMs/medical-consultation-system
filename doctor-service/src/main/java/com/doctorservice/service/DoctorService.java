@@ -242,7 +242,8 @@ public class DoctorService {
     @Transactional
     public Double rateDoctor(Long patientId, Long doctorId, SubmitRatingDto ratingDto) {
         // Validate case exists and belongs to patient
-        CaseDto caseDto = caseAssignmentRepo.getCaseById(ratingDto.getCaseId());
+        //CaseDto caseDto = caseAssignmentRepo.getCaseById(ratingDto.getCaseId());
+        CaseDto caseDto = new CaseDto();
         if (caseDto == null) {
             throw new BusinessException("Case not found", HttpStatus.NOT_FOUND);
         }
@@ -1059,7 +1060,7 @@ public class DoctorService {
 
     // 17. Reschedule Appointment Implementation
     @Transactional
-    public Appointment rescheduleAppointment(Long userId, Long appointmentId, RescheduleAppointmentDto dto) {
+    public Appointment old_rescheduleAppointment(Long userId, Long appointmentId, RescheduleAppointmentDto dto) {
         Doctor doctor = doctorRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
 
@@ -1098,18 +1099,362 @@ public class DoctorService {
 
         appointmentReminderService.cancelRemindersForAppointment(appointmentId);
 
-        //Todo fix this
-//        // Send notification to patient
-//        doctorEventProducer.SendAppointmentRescheduleNotification(
-//                appointment.getPatientId(),
-//                appointmentId,
-//                dto.getScheduledTime(),
-//                dto.getReason(),
-//                doctor.getFullName()
-//        );
+        //Send notification to Patient:
+        doctorEventProducer.SendCaseScheduleUpdate(updated.getPatientId(), updated.getCaseId(),
+                updated.getScheduledTime(), doctor.getFullName());
 
         return updated;
     }
+
+    @Transactional
+    public Appointment rescheduleAppointment(Long userId, Long appointmentId, RescheduleAppointmentDto dto) {
+        log.info("=== RESCHEDULE APPOINTMENT INITIATED ===");
+        log.info("Doctor [userId={}] rescheduling appointment [appointmentId={}]", userId, appointmentId);
+
+        // ====================================================================
+        // STEP 1: VALIDATE DOCTOR EXISTS
+        // ====================================================================
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> {
+                    log.error("Doctor not found for userId: {}", userId);
+                    return new BusinessException("Doctor not found", HttpStatus.NOT_FOUND);
+                });
+        log.debug("Doctor found: [doctorId={}]", doctor.getId());
+
+        // ====================================================================
+        // STEP 2: VALIDATE APPOINTMENT EXISTS
+        // ====================================================================
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> {
+                    log.error("Appointment not found: {}", appointmentId);
+                    return new BusinessException("Appointment not found", HttpStatus.NOT_FOUND);
+                });
+        log.debug("Appointment found: [appointmentId={}]", appointmentId);
+
+        // ====================================================================
+        // STEP 3: VERIFY APPOINTMENT BELONGS TO THIS DOCTOR
+        // ====================================================================
+        if (!appointment.getDoctor().getId().equals(doctor.getId())) {
+            log.warn("Unauthorized access: Doctor [{}] trying to reschedule appointment [{}] owned by doctor [{}]",
+                    doctor.getId(), appointmentId, appointment.getDoctor().getId());
+            throw new BusinessException(
+                    "Unauthorized to reschedule this appointment",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+        log.debug("Appointment ownership verified");
+
+        // ====================================================================
+        // STEP 4: VALIDATE APPOINTMENT CAN BE RESCHEDULED
+        // ====================================================================
+        if (appointment.getStatus() == AppointmentStatus.COMPLETED ||
+                appointment.getStatus() == AppointmentStatus.CANCELLED) {
+            log.warn("Cannot reschedule appointment with status: {}", appointment.getStatus());
+            throw new BusinessException(
+                    "Cannot reschedule a " + appointment.getStatus() + " appointment",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        log.debug("Appointment status valid for rescheduling");
+
+        // ====================================================================
+        // STEP 5: VALIDATE NEW TIME IS IN FUTURE
+        // ====================================================================
+        if (dto.getScheduledTime().isBefore(LocalDateTime.now())) {
+            log.warn("Proposed time is in the past: {}", dto.getScheduledTime());
+            throw new BusinessException(
+                    "Cannot reschedule appointment to a past time",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        log.debug("New scheduled time is valid (future)");
+
+        // ====================================================================
+        // STEP 6: VALIDATE NEW TIME DOESN'T CONFLICT WITH OTHER APPOINTMENTS
+        // ====================================================================
+        Integer duration = dto.getDuration() != null ? dto.getDuration() : appointment.getDuration();
+        log.debug("Checking for time conflicts with duration: {} minutes", duration);
+
+        validateAppointmentConflict(
+                doctor.getId(),
+                dto.getScheduledTime(),
+                duration,
+                appointmentId  // Exclude current appointment from conflict check
+        );
+        log.debug("No time conflicts detected");
+
+        // ====================================================================
+        // STEP 7: STORE OLD APPOINTMENT DETAILS FOR REFERENCE
+        // ====================================================================
+        LocalDateTime oldScheduledTime = appointment.getScheduledTime();
+        Integer oldDuration = appointment.getDuration();
+        log.debug("Old appointment time: {} (duration: {} min)", oldScheduledTime, oldDuration);
+
+        // ====================================================================
+        // STEP 8: UPDATE APPOINTMENT WITH NEW TIME
+        // ====================================================================
+        appointment.setScheduledTime(dto.getScheduledTime());
+        appointment.setRescheduleReason(dto.getReason());
+        appointment.setRescheduleCount(appointment.getRescheduleCount() + 1);
+        appointment.setStatus(AppointmentStatus.RESCHEDULED);
+
+        // Update duration if provided
+        if (dto.getDuration() != null) {
+            appointment.setDuration(dto.getDuration());
+            log.debug("Duration updated to: {} minutes", dto.getDuration());
+        }
+
+        Appointment updated = appointmentRepository.save(appointment);
+        log.info("Appointment updated: [appointmentId={}]", appointmentId);
+        log.info("New time: {} (Reschedule count: {})",
+                dto.getScheduledTime(), updated.getRescheduleCount());
+
+        // ====================================================================
+        // STEP 9: CANCEL OLD APPOINTMENT REMINDERS
+        // ====================================================================
+        try {
+            appointmentReminderService.cancelRemindersForAppointment(appointmentId);
+            log.info("Old appointment reminders cancelled for [appointmentId={}]", appointmentId);
+        } catch (Exception e) {
+            log.warn("Failed to cancel reminders for appointment [appointmentId={}]: {}",
+                    appointmentId, e.getMessage());
+            // Don't throw - reminders are nice-to-have, not critical
+        }
+
+        // ====================================================================
+        // STEP 10: SEND NOTIFICATION TO PATIENT VIA KAFKA EVENT
+        // ====================================================================
+        try {
+            //Send notification to Patient:
+                doctorEventProducer.SendCaseScheduleUpdate(updated.getPatientId(), updated.getCaseId(),
+                    updated.getScheduledTime(), doctor.getFullName());
+
+            log.info("Reschedule notification sent to patient [patientId={}]", appointment.getPatientId());
+        } catch (Exception e) {
+            log.error("Failed to send reschedule notification to patient [patientId={}]: {}",
+                    appointment.getPatientId(), e.getMessage());
+            // Don't throw - notification failure shouldn't block the reschedule
+        }
+
+        // ====================================================================
+        // STEP 11: LOG COMPLETION
+        // ====================================================================
+        log.info("=== RESCHEDULE APPOINTMENT COMPLETED SUCCESSFULLY ===");
+        log.info("Appointment [id={}] rescheduled from {} to {}",
+                appointmentId, oldScheduledTime, dto.getScheduledTime());
+
+        return updated;
+    }
+
+    @Transactional
+    public Appointment approveRescheduleRequest(
+            Long userId,
+            Long appointmentId,
+            Long rescheduleRequestId,
+            Integer selectedTimeIndex,
+            String reason) {
+
+        log.info("=== APPROVE RESCHEDULE REQUEST INITIATED ===");
+        log.info("Doctor [userId={}] approving reschedule request [requestId={}]",
+                userId, rescheduleRequestId);
+
+        // ====================================================================
+        // STEP 1: FETCH RESCHEDULE REQUEST FROM PATIENT SERVICE (Via Feign)
+        // ====================================================================
+        RescheduleRequestResponseDto rescheduleRequest = patientServiceClient
+                .getRescheduleRequest(rescheduleRequestId)
+                .orElseThrow(() -> {
+                    log.error("Reschedule request not found: {}", rescheduleRequestId);
+                    return new BusinessException(
+                            "Reschedule request not found",
+                            HttpStatus.NOT_FOUND
+                    );
+                });
+        log.debug("Reschedule request fetched from patient service: [requestId={}]", rescheduleRequestId);
+
+        // ====================================================================
+        // STEP 2: PARSE PATIENT'S PREFERRED TIMES
+        // ====================================================================
+        String[] preferredTimes = rescheduleRequest.getPreferredTimes().split(",");
+        log.debug("Patient provided {} preferred times", preferredTimes.length);
+
+        // ====================================================================
+        // STEP 3: VALIDATE SELECTED TIME INDEX
+        // ====================================================================
+        if (selectedTimeIndex < 0 || selectedTimeIndex >= preferredTimes.length) {
+            log.error("Invalid selected time index: {} (valid range: 0-{})",
+                    selectedTimeIndex, preferredTimes.length - 1);
+            throw new BusinessException(
+                    "Invalid selected time index",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        log.debug("Selected time index validated: {}", selectedTimeIndex);
+
+        // ====================================================================
+        // STEP 4: PARSE THE SELECTED TIME
+        // ====================================================================
+        LocalDateTime selectedTime;
+        try {
+            selectedTime = LocalDateTime.parse(preferredTimes[selectedTimeIndex]);
+            log.debug("Selected time parsed: {}", selectedTime);
+        } catch (Exception e) {
+            log.error("Failed to parse selected time: {}", preferredTimes[selectedTimeIndex]);
+            throw new BusinessException(
+                    "Invalid time format in reschedule request",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // ====================================================================
+        // STEP 5: CREATE RESCHEDULE DTO AND RESCHEDULE
+        // ====================================================================
+        String approvalReason = reason != null ? reason : rescheduleRequest.getReason();
+
+        RescheduleAppointmentDto rescheduleDto = RescheduleAppointmentDto.builder()
+                .scheduledTime(selectedTime)
+                .reason(approvalReason)
+                .build();
+
+        Appointment rescheduledAppointment = rescheduleAppointment(
+                userId,
+                appointmentId,
+                rescheduleDto
+        );
+        log.info("Appointment rescheduled to selected time: {}", selectedTime);
+
+        // ====================================================================
+        // STEP 6: UPDATE RESCHEDULE REQUEST STATUS TO APPROVED IN PATIENT SERVICE
+        // ====================================================================
+        try {
+            patientServiceClient.updateRescheduleRequestStatus(
+                    rescheduleRequestId,
+                    RescheduleStatus.APPROVED.toString()
+            );
+            log.info("Reschedule request status updated to APPROVED [requestId={}]", rescheduleRequestId);
+        } catch (Exception e) {
+            log.warn("Failed to update reschedule request status in patient service: {}", e.getMessage());
+            // Don't throw - the appointment is already rescheduled, this is just status update
+        }
+
+        // ====================================================================
+        // STEP 7: LOG COMPLETION
+        // ====================================================================
+        log.info("=== APPROVE RESCHEDULE REQUEST COMPLETED SUCCESSFULLY ===");
+        log.info("Request [id={}] approved. Appointment [id={}] rescheduled to {}",
+                rescheduleRequestId, appointmentId, selectedTime);
+
+        return rescheduledAppointment;
+    }
+
+    @Transactional
+    public Appointment proposeRescheduleTime(
+            Long userId,
+            Long appointmentId,
+            LocalDateTime proposedTime,
+            String reason) {
+
+        log.info("=== PROPOSE NEW RESCHEDULE TIME INITIATED ===");
+        log.info("Doctor [userId={}] proposing new time for appointment [appointmentId={}]",
+                userId, appointmentId);
+
+        // ====================================================================
+        // STEP 1: VALIDATE NEW TIME IS IN FUTURE
+        // ====================================================================
+        if (proposedTime.isBefore(LocalDateTime.now())) {
+            log.warn("Proposed time is in the past: {}", proposedTime);
+            throw new BusinessException(
+                    "Proposed time must be in the future",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        log.debug("Proposed time is valid (future)");
+
+        // ====================================================================
+        // STEP 2: CREATE RESCHEDULE DTO AND RESCHEDULE
+        // ====================================================================
+        RescheduleAppointmentDto rescheduleDto = RescheduleAppointmentDto.builder()
+                .scheduledTime(proposedTime)
+                .reason(reason)
+                .build();
+
+        Appointment rescheduledAppointment = rescheduleAppointment(
+                userId,
+                appointmentId,
+                rescheduleDto
+        );
+        log.info("Appointment rescheduled to proposed time: {}", proposedTime);
+
+//        // ====================================================================
+//        // STEP 3: SEND PROPOSAL NOTIFICATION TO PATIENT VIA KAFKA EVENT
+//        // ====================================================================
+//        try {
+//            Doctor doctor = doctorRepository.findByUserId(userId)
+//                    .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
+//
+//            doctorEventProducer.sendAppointmentRescheduleProposal(
+//                    rescheduledAppointment.getPatientId(),
+//                    appointmentId,
+//                    proposedTime,
+//                    reason,
+//                    doctor.getFullName()
+//            );
+//            log.info("Reschedule proposal sent to patient [patientId={}]",
+//                    rescheduledAppointment.getPatientId());
+//        } catch (Exception e) {
+//            log.error("Failed to send reschedule proposal to patient [appointmentId={}]: {}",
+//                    appointmentId, e.getMessage());
+//            // Don't throw - proposal failure shouldn't block the reschedule
+//        }
+
+        // ====================================================================
+        // STEP 4: LOG COMPLETION
+        // ====================================================================
+        log.info("=== PROPOSE NEW RESCHEDULE TIME COMPLETED SUCCESSFULLY ===");
+        log.info("Proposal sent to patient. Appointment [id={}] rescheduled to {}",
+                appointmentId, proposedTime);
+
+        return rescheduledAppointment;
+    }
+
+    @Transactional
+    public void rejectRescheduleRequest(
+            Long userId,
+            Long rescheduleRequestId,
+            String rejectionReason) {
+
+        log.info("=== REJECT RESCHEDULE REQUEST INITIATED ===");
+        log.info("Doctor [userId={}] rejecting reschedule request [requestId={}]",
+                userId, rescheduleRequestId);
+
+        // ====================================================================
+        // STEP 1: UPDATE REQUEST STATUS TO REJECTED IN PATIENT SERVICE (Via Feign)
+        // ====================================================================
+        try {
+            patientServiceClient.updateRescheduleRequestStatus(
+                    rescheduleRequestId,
+                    RescheduleStatus.REJECTED.toString()
+            );
+            log.info("Reschedule request status updated to REJECTED [requestId={}]", rescheduleRequestId);
+        } catch (Exception e) {
+            log.error("Failed to update reschedule request status [requestId={}]: {}",
+                    rescheduleRequestId, e.getMessage());
+            throw new BusinessException(
+                    "Failed to reject reschedule request",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+
+        //TODO send kafka event to inform the patient
+
+        // ====================================================================
+        // STEP 2: LOG COMPLETION
+        // ====================================================================
+        log.info("=== REJECT RESCHEDULE REQUEST COMPLETED SUCCESSFULLY ===");
+        log.info("Request [id={}] rejected with reason: {}", rescheduleRequestId, rejectionReason);
+    }
+
+
 
     @Transactional
     public void completeAppointment(Long userId, CompleteAppointmentDto dto) {

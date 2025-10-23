@@ -222,6 +222,12 @@ public class AuthService {
                     user.setPreferredLanguage(locale.toUpperCase());
                 }
 
+                //Check the role if the same:
+                if( !request.getRole().equals(user.getRole()) ){
+                    throw new BusinessException("Role does not match, you've already logged in with different role",
+                            HttpStatus.FORBIDDEN);
+                }
+
                 log.info("Updated existing user: {}", email);
             } else {
                 // Create new user
@@ -256,7 +262,6 @@ public class AuthService {
                 );
 
                 log.info("Google OAuth registration - kafka event sent: {}", user.getEmail());
-
             }
 
             // Generate JWT token
