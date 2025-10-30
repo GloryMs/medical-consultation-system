@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * DTO for doctor approving a reschedule request
+ * DTO for doctor approving a re-schedule request
  * Sent when doctor selects one of patient's proposed times
  */
 @Data
@@ -16,7 +16,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ApproveRescheduleRequestDto {
-    
+
+    /**
+     * Re-schedule ID
+     */
+    @NotNull(message = "Re-schedule ID is required")
+    private Long rescheduleId;
+
     /**
      * The appointment ID to reschedule
      */
@@ -26,9 +32,8 @@ public class ApproveRescheduleRequestDto {
     /**
      * Index of the selected preferred time from reschedule request
      */
-    @NotNull(message = "Selected time index is required")
-    @Min(value = 0, message = "Selected time index must be valid")
-    private Integer selectedTimeIndex;
+    @NotNull(message = "Selected time required")
+    private String newScheduledTime;
     
     /**
      * Optional reason or notes from doctor

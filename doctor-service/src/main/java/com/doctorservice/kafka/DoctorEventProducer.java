@@ -34,7 +34,26 @@ public class DoctorEventProducer {
                 .build();
 
         kafkaTemplate.send("notification-topic", notification);
-        log.info("Payment completion notification sent for patient: {}", patientId);
+        log.info("An appointment has been scheduled for your case# {}", caseId);
+    }
+
+    public void SendRejectRescheduleRequest(Long patientId, Long caseId, String doctorName, String reason) {
+        // Send notification to notification service
+        NotificationDto notification = NotificationDto.builder()
+                .senderId(0L) // System notification
+                .receiverId(patientId)
+                .title("Reschedule Request Rejection")
+                .message("Unfortunately Doctor: " + doctorName +
+                        ", has rejected your re-schedule request for the case#  " + caseId
+                        +", for the following reason: " + reason )
+                .type(NotificationType.APPOINTMENT)
+                .priority(NotificationPriority.HIGH)
+                .sendEmail(true)
+                .build();
+
+        kafkaTemplate.send("notification-topic", notification);
+        log.info("Doctor: {} has rejected your re-schedule request for the case#  {}, for the following reason: {} "
+                ,doctorName, caseId, reason);
     }
 
     /**

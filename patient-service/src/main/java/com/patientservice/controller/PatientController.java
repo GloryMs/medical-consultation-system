@@ -21,10 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -106,12 +103,12 @@ public class PatientController {
 
     @GetMapping("/cases/{caseId}/reschedule-requests")
     public ResponseEntity<ApiResponse<List<RescheduleRequestResponseDto>>> getRescheduleRequests(
-            @RequestHeader("X-User-Id") Long userId,
+            //@RequestHeader("X-User-Id") Long userId,
             @PathVariable Long caseId) {
 
-        log.info("GET /api/patients/cases/{}/reschedule-requests - Patient [userId={}]", caseId, userId);
+        log.info("GET /api/patients/cases/{}/reschedule-requests", caseId);
 
-        List<RescheduleRequestResponseDto> requests = patientService.getRescheduleRequests(userId, caseId);
+        List<RescheduleRequestResponseDto> requests = patientService.getRescheduleRequests(caseId);
 
         return ResponseEntity.ok(
                 ApiResponse.success(requests)

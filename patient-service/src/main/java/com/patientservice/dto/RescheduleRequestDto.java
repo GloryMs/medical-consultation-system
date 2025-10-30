@@ -29,4 +29,6 @@ public class RescheduleRequestDto {
      */
     @Size(max = 500, message = "Additional notes cannot exceed 500 characters")
     private String additionalNotes;
+
+    private Long appointmentId;
 }

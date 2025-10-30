@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.userdetails.MapReactiveUserDetailsService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -1107,7 +1108,7 @@ public class DoctorService {
     }
 
     @Transactional
-    public Appointment rescheduleAppointment(Long userId, Long appointmentId, RescheduleAppointmentDto dto) {
+    public Appointment rescheduleAppointment(Long userId, Long appointmentId,  RescheduleAppointmentDto dto) {
         log.info("=== RESCHEDULE APPOINTMENT INITIATED ===");
         log.info("Doctor [userId={}] rescheduling appointment [appointmentId={}]", userId, appointmentId);
 
@@ -1250,59 +1251,81 @@ public class DoctorService {
     public Appointment approveRescheduleRequest(
             Long userId,
             Long appointmentId,
-            Long rescheduleRequestId,
-            Integer selectedTimeIndex,
+            Long reScheduleRequestId,
+            Long caseId,
+            String newScheduledTime,
             String reason) {
 
         log.info("=== APPROVE RESCHEDULE REQUEST INITIATED ===");
-        log.info("Doctor [userId={}] approving reschedule request [requestId={}]",
-                userId, rescheduleRequestId);
+        log.info("Doctor [userId={}] approving reschedule request [caseId={}]",
+                userId, caseId);
 
         // ====================================================================
         // STEP 1: FETCH RESCHEDULE REQUEST FROM PATIENT SERVICE (Via Feign)
         // ====================================================================
-        RescheduleRequestResponseDto rescheduleRequest = patientServiceClient
-                .getRescheduleRequest(rescheduleRequestId)
-                .orElseThrow(() -> {
-                    log.error("Reschedule request not found: {}", rescheduleRequestId);
-                    return new BusinessException(
-                            "Reschedule request not found",
-                            HttpStatus.NOT_FOUND
-                    );
-                });
-        log.debug("Reschedule request fetched from patient service: [requestId={}]", rescheduleRequestId);
+        RescheduleRequestResponseDto rescheduleRequest = new RescheduleRequestResponseDto();
+        try{
+             List<RescheduleRequestResponseDto> tempRescheduleRequest = patientServiceClient
+                    .getRescheduleRequest(caseId).getBody().getData();
+             if(tempRescheduleRequest != null && !tempRescheduleRequest.isEmpty()){
+                 rescheduleRequest = tempRescheduleRequest.get(0);
+             }
+             else{
+                 log.error("Reschedule request not found for case: {}", caseId);
+                 throw new BusinessException("Reschedule request not found", HttpStatus.NOT_FOUND);
+             }
+        }catch(Exception e) {
+            e.printStackTrace();
+        }
+
+        log.info("Reschedule request fetched from patient service: [caseId={}]", caseId);
 
         // ====================================================================
         // STEP 2: PARSE PATIENT'S PREFERRED TIMES
         // ====================================================================
+        log.info("Reschedule requested by {}", rescheduleRequest.getRequestedBy());
+        log.info("Reschedule reason {}", rescheduleRequest.getReason());
+        log.info("Converting comma separated preferred times into an array {}",
+                rescheduleRequest.getPreferredTimes());
         String[] preferredTimes = rescheduleRequest.getPreferredTimes().split(",");
-        log.debug("Patient provided {} preferred times", preferredTimes.length);
+        log.info("Patient provided {} preferred times", preferredTimes.length);
 
         // ====================================================================
         // STEP 3: VALIDATE SELECTED TIME INDEX
         // ====================================================================
-        if (selectedTimeIndex < 0 || selectedTimeIndex >= preferredTimes.length) {
-            log.error("Invalid selected time index: {} (valid range: 0-{})",
-                    selectedTimeIndex, preferredTimes.length - 1);
+        if (newScheduledTime == null || newScheduledTime.trim().isEmpty()) {
+            log.error("Invalid selected time: {} ",
+                    newScheduledTime);
             throw new BusinessException(
-                    "Invalid selected time index",
+                    "Invalid selected time",
                     HttpStatus.BAD_REQUEST
             );
         }
-        log.debug("Selected time index validated: {}", selectedTimeIndex);
+        log.debug("Selected time validated: {}", newScheduledTime);
 
         // ====================================================================
         // STEP 4: PARSE THE SELECTED TIME
         // ====================================================================
+
         LocalDateTime selectedTime;
-        try {
-            selectedTime = LocalDateTime.parse(preferredTimes[selectedTimeIndex]);
-            log.debug("Selected time parsed: {}", selectedTime);
-        } catch (Exception e) {
-            log.error("Failed to parse selected time: {}", preferredTimes[selectedTimeIndex]);
+        //check if the new selected time already existed in preferred times then parse it:
+        List<String> preferredTimeslist = Arrays.asList(preferredTimes);
+        if (preferredTimeslist.contains(newScheduledTime)) {
+            try {
+                selectedTime = LocalDateTime.parse(newScheduledTime);
+                log.debug("Selected time parsed: {}", selectedTime);
+            } catch (Exception e) {
+                log.error("Failed to parse selected time: {}", newScheduledTime);
+                throw new BusinessException(
+                        "Invalid time format in reschedule request",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+        }
+        else {
             throw new BusinessException(
-                    "Invalid time format in reschedule request",
-                    HttpStatus.BAD_REQUEST
+                    "The selected new schedule time not found",
+                    HttpStatus.NOT_FOUND
             );
         }
 
@@ -1328,10 +1351,10 @@ public class DoctorService {
         // ====================================================================
         try {
             patientServiceClient.updateRescheduleRequestStatus(
-                    rescheduleRequestId,
+                    reScheduleRequestId,
                     RescheduleStatus.APPROVED.toString()
             );
-            log.info("Reschedule request status updated to APPROVED [requestId={}]", rescheduleRequestId);
+            log.info("Reschedule request status updated to APPROVED [requestId={}]", reScheduleRequestId);
         } catch (Exception e) {
             log.warn("Failed to update reschedule request status in patient service: {}", e.getMessage());
             // Don't throw - the appointment is already rescheduled, this is just status update
@@ -1342,7 +1365,7 @@ public class DoctorService {
         // ====================================================================
         log.info("=== APPROVE RESCHEDULE REQUEST COMPLETED SUCCESSFULLY ===");
         log.info("Request [id={}] approved. Appointment [id={}] rescheduled to {}",
-                rescheduleRequestId, appointmentId, selectedTime);
+                caseId, appointmentId, selectedTime);
 
         return rescheduledAppointment;
     }
@@ -1421,8 +1444,12 @@ public class DoctorService {
     public void rejectRescheduleRequest(
             Long userId,
             Long rescheduleRequestId,
-            String rejectionReason) {
+            String rejectionReason,
+            Long patientId,
+            Long caseId,
+            String doctorName) {
 
+        //TODO you have to add some validation
         log.info("=== REJECT RESCHEDULE REQUEST INITIATED ===");
         log.info("Doctor [userId={}] rejecting reschedule request [requestId={}]",
                 userId, rescheduleRequestId);
@@ -1445,7 +1472,14 @@ public class DoctorService {
             );
         }
 
-        //TODO send kafka event to inform the patient
+        try{
+            log.info("Send Kafka Event for Patient: {}", patientId);
+            doctorEventProducer.SendRejectRescheduleRequest(patientId, caseId, doctorName,rejectionReason);
+        }catch(Exception e){
+            log.info("Failed to end Kafka Event for Patient: {}", patientId);
+            e.printStackTrace();
+        }
+
 
         // ====================================================================
         // STEP 2: LOG COMPLETION

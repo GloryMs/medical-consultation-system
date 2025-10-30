@@ -19,6 +19,8 @@ public class RescheduleRequestResponseDto {
     private Long id;
     
     private Long caseId;
+
+    private Long appointmentId;
     
     private String requestedBy;
     

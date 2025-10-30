@@ -443,17 +443,18 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(null, "Appointment rescheduled"));
     }
 
-    @PostMapping("/reschedule-requests/{requestId}/approve")
+    @PostMapping("/reschedule-requests/{caseId}/approve")
     public ResponseEntity<ApiResponse<Appointment>> approveRescheduleRequest(
             @RequestHeader("X-User-Id") Long userId,
-            @PathVariable Long requestId,
+            @PathVariable Long caseId,
             @Valid @RequestBody ApproveRescheduleRequestDto dto) {
 
         Appointment updatedAppointment = doctorService.approveRescheduleRequest(
                 userId,
                 dto.getAppointmentId(),
-                requestId,
-                dto.getSelectedTimeIndex(),
+                dto.getRescheduleId(),
+                caseId,
+                dto.getNewScheduledTime(),
                 dto.getReason()
         );
         return ResponseEntity.ok(
@@ -482,7 +483,8 @@ public class DoctorController {
             @PathVariable Long requestId,
             @Valid @RequestBody RejectRescheduleRequestDto dto) {
 
-        doctorService.rejectRescheduleRequest(userId, requestId, dto.getRejectionReason());
+        doctorService.rejectRescheduleRequest(userId, requestId, dto.getRejectionReason(),
+                dto.getPatientId(), dto.getCaseId(), dto.getDoctorName());
         return ResponseEntity.ok(
                 ApiResponse.success(null, "Reschedule request rejected successfully")
         );

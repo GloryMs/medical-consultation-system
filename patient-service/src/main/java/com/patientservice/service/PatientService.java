@@ -1162,6 +1162,7 @@ public class PatientService {
                 .reason(dto.getReason())
                 .preferredTimes(preferredTimesJoined)
                 .status(RescheduleStatus.PENDING)
+                .appointmentId(dto.getAppointmentId())
                 .build();
 
         RescheduleRequest savedRequest = rescheduleRequestRepository.save(request);
@@ -1202,27 +1203,39 @@ public class PatientService {
                 savedRequest.getId(), caseId, dto.getPreferredTimes().size());
     }
 
-    public List<RescheduleRequestResponseDto> getRescheduleRequests(Long userId, Long caseId) {
+    public List<RescheduleRequestResponseDto> getRescheduleRequests(Long caseId) {
         log.info("Fetching reschedule requests for case [caseId={}]", caseId);
-
-        // Validate patient owns the case
-        Patient patient = patientRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
         Case medicalCase = caseRepository.findById(caseId)
                 .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
 
-        if (!medicalCase.getPatient().getId().equals(patient.getId())) {
-            throw new BusinessException("Unauthorized access to case", HttpStatus.FORBIDDEN);
-        }
+        //TODO re-activate the validation
+//        // Validate patient owns the case
+//        Patient patient = patientRepository.findByUserId(userId)
+//                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+//
+//        if (!medicalCase.getPatient().getId().equals(patient.getId())) {
+//            throw new BusinessException("Unauthorized access to case", HttpStatus.FORBIDDEN);
+//        }
 
         // Fetch requests
         List<RescheduleRequest> requests = rescheduleRequestRepository.findByCaseId(caseId);
         log.debug("Found {} reschedule requests for case [caseId={}]", requests.size(), caseId);
 
-        return requests.stream()
-                .map(this::convertToResponseDto)
-                .collect(Collectors.toList());
+        if( !requests.isEmpty() ) {
+            log.info(" Preferred times found: " + requests.get(0).getPreferredTimes());
+        }
+
+        List<RescheduleRequestResponseDto> reScheduleReqquests = new ArrayList<>();
+        try{
+            reScheduleReqquests = requests.stream()
+                    .map(this::convertToResponseDto)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return reScheduleReqquests;
     }
 
     public List<RescheduleRequestResponseDto> getPendingRescheduleRequests(Long userId) {
@@ -1284,6 +1297,7 @@ public class PatientService {
         return RescheduleRequestResponseDto.builder()
                 .id(request.getId())
                 .caseId(request.getCaseId())
+                .appointmentId(request.getAppointmentId())
                 .requestedBy(request.getRequestedBy())
                 .reason(request.getReason())
                 .preferredTimes(request.getPreferredTimes())

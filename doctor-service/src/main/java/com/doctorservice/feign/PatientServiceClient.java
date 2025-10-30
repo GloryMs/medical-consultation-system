@@ -98,14 +98,11 @@ public interface PatientServiceClient {
     ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId,
                                                                         @RequestParam Long doctorId );
 
-    @GetMapping("/api/patients/reschedule-requests/{requestId}")
-    Optional<RescheduleRequestResponseDto> getRescheduleRequest(
-            @PathVariable Long requestId
+    @GetMapping("/api/patients/cases/{caseId}/reschedule-requests")
+    ResponseEntity<ApiResponse<List<RescheduleRequestResponseDto>>> getRescheduleRequest(
+            @PathVariable Long caseId
     );
 
     @PutMapping("/api/patients/reschedule-request/{requestId}/update")
-    void updateRescheduleRequestStatus(
-            @PathVariable Long requestId,
-            @RequestParam String status
-    );
+    void updateRescheduleRequestStatus(@PathVariable Long requestId, @RequestParam String status);
 }
