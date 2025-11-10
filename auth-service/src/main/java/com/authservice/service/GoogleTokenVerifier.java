@@ -2,8 +2,11 @@ package com.authservice.service;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,30 +24,50 @@ public class GoogleTokenVerifier {
     @Value("${spring.security.oauth2.client.registration.google.client-id}")
     private String clientId;
 
-    private final GoogleIdTokenVerifier verifier;
+    private GoogleIdTokenVerifier verifier;  // No longer final, since it's initialized post-construction
 
-    public GoogleTokenVerifier() {
+
+    public GoogleTokenVerifier() {}
+
+    @PostConstruct
+    public void init() {
+        log.info("Initializing GoogleTokenVerifier with clientId={}", clientId);
         this.verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
                 .setAudience(Collections.singletonList(clientId))
+                // Add clock skew allowance to account for time differences
+                .setAcceptableTimeSkewSeconds(300) // 5 minutes allowance
                 .build();
     }
 
-//    @Bean
-//    public GoogleIdTokenVerifier googleIdTokenVerifier() throws Exception {
+
+//    public GoogleTokenVerifier() {
+//        log.info("Initializing GoogleTokenVerifier with clientId: {}", clientId);
 //
-//        log.info("🔧 Initializing GoogleIdTokenVerifier");
-//        log.info("   Client ID: {}", clientId);
-//
-//        // ✅ This MUST be the same as token's "aud" claim
-//        verifier = new GoogleIdTokenVerifier.Builder(
-//                GoogleNetHttpTransport.newTrustedTransport(),
-//                JacksonFactory.getDefaultInstance())
-//                .setAudience(Collections.singletonList(clientId))  // Uses from properties
+//        this.verifier = new GoogleIdTokenVerifier.Builder(
+//                new NetHttpTransport(),
+//                new GsonFactory()
+//        )
+//                .setAudience(Collections.singletonList(clientId))
 //                .build();
-//
-//        log.info("✅ GoogleIdTokenVerifier ready with Client ID");
-//        return verifier;
 //    }
+
+
+
+    public GoogleIdTokenVerifier googleIdTokenVerifier() throws Exception {
+
+        log.info("🔧 Initializing GoogleIdTokenVerifier");
+        log.info("   Client ID: {}", clientId);
+
+        // ✅ This MUST be the same as token's "aud" claim
+        verifier = new GoogleIdTokenVerifier.Builder(
+                GoogleNetHttpTransport.newTrustedTransport(),
+                JacksonFactory.getDefaultInstance())
+                .setAudience(Collections.singletonList(clientId))  // Uses from properties
+                .build();
+
+        log.info("✅ GoogleIdTokenVerifier ready with Client ID");
+        return verifier;
+    }
 
     /**
      * Verifies the Google ID token and extracts user information
@@ -56,6 +79,7 @@ public class GoogleTokenVerifier {
      */
     public GoogleIdToken.Payload verifyToken(String idTokenString) 
             throws GeneralSecurityException, IOException {
+
 
         log.info("Verifying Google ID token");
 
@@ -71,12 +95,45 @@ public class GoogleTokenVerifier {
             throw new GeneralSecurityException(
                     "Google OAuth configuration error: Verifier not initialized");
         }
-        GoogleIdToken idToken = verifier.verify(idTokenString);
+
+        GoogleIdToken idToken = null;
+
+        try{
+            idToken = verifier.verify(idTokenString);
+        }catch(Exception e){
+            e.printStackTrace();
+        }
 
         if (idToken == null) {
             log.error("Token verification returned null");
-            throw new GeneralSecurityException(
-                    "Invalid ID token - verification failed. ");
+            // Parse without verification to inspect claims for debugging
+            try {
+                idTokenString = idTokenString.replace("Bearer ", "").trim();
+                GoogleIdToken parsedToken = GoogleIdToken.parse(new GsonFactory(), idTokenString);
+                if (parsedToken != null) {
+                    GoogleIdToken.Payload parsedPayload = parsedToken.getPayload();
+                    log.info("Parsed audience (aud): {}", parsedPayload.getAudience());
+                    log.info("Parsed issuer (iss): {}", parsedPayload.getIssuer());
+                    log.info("Parsed subject (sub): {}", parsedPayload.getSubject());
+
+                    // Check if token is expired based on current time
+                    long currentTime = System.currentTimeMillis() / 1000;
+                    long expirationTime = parsedPayload.getExpirationTimeSeconds();
+                    long issuedAtTime = parsedPayload.getIssuedAtTimeSeconds();
+
+                    log.info("Current server time: {} (seconds since epoch)", currentTime);
+                    log.info("Token expiration time: {} (seconds since epoch)", expirationTime);
+                    log.info("Token issued at: {} (seconds since epoch)", issuedAtTime);
+                    log.info("Time until expiration: {} seconds", expirationTime - currentTime);
+                    log.info("Time since issuance: {} seconds", currentTime - issuedAtTime);
+                    // Add more if needed, e.g., email
+                } else {
+                    log.error("Even parsing without verification returned null - malformed token?");
+                }
+            } catch (Exception e) {
+                log.error("Failed to parse token for debugging", e);
+            }
+            throw new GeneralSecurityException("Invalid ID token - verification failed.");
         }
         else{
             log.info("✅ Google ID token verification SUCCESSFUL");

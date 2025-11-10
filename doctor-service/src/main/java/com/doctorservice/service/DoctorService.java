@@ -387,6 +387,7 @@ public class DoctorService {
                 .caseId(dto.getCaseId())
                 .doctor(doctor)
                 .patientId(dto.getPatientId())
+                .patientName(dto.getPatientName())
                 .scheduledTime(dto.getScheduledTime())
                 .duration(dto.getDuration())
                 .consultationType(dto.getConsultationType())
@@ -1375,7 +1376,7 @@ public class DoctorService {
             Long userId,
             Long appointmentId,
             LocalDateTime proposedTime,
-            String reason) {
+            String reason, Long reScheduleRequestId) {
 
         log.info("=== PROPOSE NEW RESCHEDULE TIME INITIATED ===");
         log.info("Doctor [userId={}] proposing new time for appointment [appointmentId={}]",
@@ -1429,6 +1430,20 @@ public class DoctorService {
 //                    appointmentId, e.getMessage());
 //            // Don't throw - proposal failure shouldn't block the reschedule
 //        }
+
+        // ====================================================================
+        // STEP 3: UPDATE RESCHEDULE REQUEST STATUS TO APPROVED IN PATIENT SERVICE
+        // ====================================================================
+        try {
+            patientServiceClient.updateRescheduleRequestStatus(
+                    reScheduleRequestId,
+                    RescheduleStatus.APPROVED.toString()
+            );
+            log.info("Reschedule request status updated to APPROVED [requestId={}]", reScheduleRequestId);
+        } catch (Exception e) {
+            log.warn("Failed to update reschedule request status in patient service: {}", e.getMessage());
+            // Don't throw - the appointment is already rescheduled, this is just status update
+        }
 
         // ====================================================================
         // STEP 4: LOG COMPLETION

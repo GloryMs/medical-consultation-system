@@ -29,6 +29,8 @@ public class Appointment extends BaseEntity {
     @Column(nullable = false)
     private Long patientId;
 
+    private String patientName;
+
     @Column(nullable = false)
     private LocalDateTime scheduledTime;
 

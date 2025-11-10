@@ -29,7 +29,7 @@ public class CaseDetailsDto {
     private LocalDateTime closedAt;
     private String rejectionReason;
     private Boolean isDeleted = false;
-
+    private String patientName;
     private String primaryDiseaseCode;
     private Set<String> secondaryDiseaseCodes;
     private Set<String> symptomCodes;

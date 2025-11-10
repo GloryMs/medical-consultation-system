@@ -470,7 +470,7 @@ public class DoctorController {
                 userId,
                 appointmentId,
                 dto.getProposedTime(),
-                dto.getReason()
+                dto.getReason(), dto.getRescheduleId()
         );
         return ResponseEntity.ok(
                 ApiResponse.success(updatedAppointment,

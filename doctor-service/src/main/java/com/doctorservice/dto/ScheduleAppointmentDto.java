@@ -13,4 +13,5 @@ public class ScheduleAppointmentDto {
     private LocalDateTime scheduledTime;
     private Integer duration = 30; // default 30 minutes
     private ConsultationType consultationType;
+    private String patientName;
 }

@@ -5,14 +5,21 @@ import com.commonlibrary.dto.DoctorEarningsSummaryDto;
 import com.commonlibrary.dto.PaymentDto;
 import com.commonlibrary.entity.PaymentStatus;
 import com.commonlibrary.dto.ChartDataPointDto;
+import com.paymentservice.config.StripeConfig;
 import com.paymentservice.dto.EarningsReportDto;
 import com.paymentservice.dto.PaymentHistoryDto;
 import com.paymentservice.dto.PaymentReceiptDto;
 import com.commonlibrary.dto.ProcessPaymentDto;
 import com.paymentservice.entity.Payment;
+import com.paymentservice.service.PaymentProcessingService;
 import com.paymentservice.service.PaymentService;
+import com.paymentservice.service.stripe.StripeSubscriptionService;
+import com.stripe.exception.SignatureVerificationException;
+import com.stripe.model.*;
+import com.stripe.net.Webhook;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,6 +34,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -255,4 +263,5 @@ public class PaymentController {
         );
         return ResponseEntity.ok(ApiResponse.success(distribution));
     }
+
 }

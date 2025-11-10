@@ -174,6 +174,7 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse googleLogin(GoogleLoginRequest request) {
+        User user = null;
         try {
             log.info("googleLogin: Processing Google login request");
             log.info("googleLogin   ===> IdToken: {}", request.getIdToken());
@@ -200,7 +201,7 @@ public class AuthService {
                 existingUser = userRepository.findByEmail(email);
             }
 
-            User user;
+
             boolean isNewUser = false;
 
             if (existingUser.isPresent()) {
@@ -224,8 +225,8 @@ public class AuthService {
 
                 //Check the role if the same:
                 if( !request.getRole().equals(user.getRole()) ){
-                    throw new BusinessException("Role does not match, you've already logged in with different role",
-                            HttpStatus.FORBIDDEN);
+                    throw new BusinessException("Role does not match, you've already registered in with different role",
+                            HttpStatus.CONFLICT);
                 }
 
                 log.info("Updated existing user: {}", email);
@@ -284,9 +285,16 @@ public class AuthService {
             log.error("Error verifying Google ID token", e);
             e.printStackTrace();
             throw new BusinessException("Error verifying Google credentials", HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             log.error("Unexpected error during Google login", e);
+
             e.printStackTrace();
+            if( !request.getRole().equals(user.getRole()) ){
+                throw new BusinessException("Role does not match, you've already registered in with different role",
+                        HttpStatus.CONFLICT);
+            }
+            else
             throw new BusinessException("Google login failed", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -373,6 +381,10 @@ public class AuthService {
                 .attemptCount(0)
                 .deliveryMethod(isEmail ? "EMAIL" : "SMS")
                 .build();
+
+        //TODO you have to remove below line:
+        log.info("Verification code: {}", code);
+
 
         resetCodeRepository.save(resetCode);
 

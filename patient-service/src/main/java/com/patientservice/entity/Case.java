@@ -26,6 +26,8 @@ public class Case extends BaseEntity {
     @JsonBackReference
     private Patient patient;
 
+    private String patientName;
+
     // NEW: Link to dependent (nullable - if null, case is for the patient themselves)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dependent_id", nullable = true)

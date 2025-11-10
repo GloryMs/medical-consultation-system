@@ -14,6 +14,7 @@ import java.util.Set;
 public class CaseDto {
     private Long id;
     private Long patientId;
+    private String patientName;
     private Long dependantId;
     private String caseTitle;
     private String description;

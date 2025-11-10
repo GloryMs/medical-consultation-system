@@ -21,6 +21,7 @@ public class AppointmentDto{
     private Long caseId;
     private DoctorDto doctor;
     private Long patientId;
+    private String patientName;
     private BigDecimal consultationFee;
     private LocalDateTime scheduledTime;
     private Integer duration;
