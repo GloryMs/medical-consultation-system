@@ -6,6 +6,7 @@ import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.patientservice.config.CaseAssignmentSchedulerConfig;
 import com.patientservice.dto.*;
 import com.patientservice.entity.*;
 import com.patientservice.feign.DoctorServiceClient;
@@ -35,7 +36,7 @@ public class SmartCaseAssignmentService {
     private final CaseRepository caseRepository;
     private final CaseAssignmentRepository caseAssignmentRepository;
     private final MedicalConfigurationService configService;
-    private final NotificationServiceClient notificationService;
+    private final CaseAssignmentSchedulerConfig config;
     private final PatientEventProducer patientEventProducer;
 
     // Scoring weights for matching algorithm
@@ -59,7 +60,13 @@ public class SmartCaseAssignmentService {
     /**
      * Main method to assign a case to multiple doctors using workload-aware algorithm
      */
-    public List<CaseAssignment> assignCaseToMultipleDoctors(Long caseId) {
+    @Transactional
+    public void assignCaseToMultipleDoctors(Long caseId) {
+
+        assignCaseToMultipleDoctorsWithExclusion(caseId, Set.of());
+    }
+
+    public List<CaseAssignment> Old_assignCaseToMultipleDoctors(Long caseId) {
         log.info("Starting smart case assignment for case ID: {}", caseId);
         System.out.println("Starting smart case assignment for case ID: " + caseId);
 
@@ -103,7 +110,8 @@ public class SmartCaseAssignmentService {
         }
 
         // Sort by score and select top doctors
-        List<DoctorMatchingResultDto> selectedDoctors = selectBestDoctorsWithWorkloadBalance(medicalCase, matchingResults);
+        List<DoctorMatchingResultDto> selectedDoctors = selectBestDoctorsWithWorkloadBalance(medicalCase,
+                matchingResults);
         System.out.println("=====================>  Sort by score and select top doctors, selectedDoctors : " + selectedDoctors.size());
 
         // Create assignments with workload updates
@@ -122,6 +130,94 @@ public class SmartCaseAssignmentService {
         System.out.println("=====================>  Successfully assigned case : "+caseId+" to "+
                 assignments.size()+ " doctors with workload consideration");
         return assignments;
+    }
+
+    /**
+     * NEW METHOD: Assign case to multiple doctors with exclusion list
+     * This method is called during reassignment after expiration
+     *
+     * @param caseId The case to assign
+     * @param excludedDoctorIds Set of doctor IDs to exclude from assignment
+     */
+    @Transactional
+    public void assignCaseToMultipleDoctorsWithExclusion(Long caseId, Set<Long> excludedDoctorIds) {
+        log.info("Starting case assignment for case {} with {} excluded doctors",
+                caseId, excludedDoctorIds != null ? excludedDoctorIds.size() : 0);
+
+        try {
+            // Validate and retrieve case
+            Case medicalCase = caseRepository.findById(caseId)
+                    .orElseThrow(() -> new BusinessException("Case not found", HttpStatus.NOT_FOUND));
+
+            validateCaseForAssignment(medicalCase);
+
+            // Get eligible doctors
+            List<DoctorCapacityDto> eligibleDoctors = findEligibleDoctorsWithWorkload(medicalCase);
+
+            if (eligibleDoctors.isEmpty()) {
+                log.warn("No eligible doctors found for case {}", caseId);
+                throw new BusinessException("No eligible doctors available", HttpStatus.NOT_FOUND);
+            }
+
+            // Filter out excluded doctors
+            if (excludedDoctorIds != null && !excludedDoctorIds.isEmpty()) {
+                eligibleDoctors = eligibleDoctors.stream()
+                        .filter(doctor -> !excludedDoctorIds.contains(doctor.getDoctorId()))
+                        .collect(Collectors.toList());
+
+                log.info("After exclusion filter: {} eligible doctors remaining for case {}",
+                        eligibleDoctors.size(), caseId);
+
+                if (eligibleDoctors.isEmpty()) {
+                    log.error("All eligible doctors have been excluded for case {}", caseId);
+                    throw new BusinessException(
+                            "No eligible doctors available after applying exclusion filters",
+                            HttpStatus.NOT_FOUND);
+                }
+            }
+
+            // Perform matching and assignment
+            List<DoctorMatchingResultDto> matchingResults = calculateWorkloadAwareMatchingScores(medicalCase, eligibleDoctors);
+
+            for (DoctorMatchingResultDto matchingResult : matchingResults) {
+                try {
+                    System.out.println("Matching Results 1 : " + new ObjectMapper().writeValueAsString(matchingResult));
+                } catch (JsonProcessingException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            List<DoctorMatchingResultDto> selectedDoctors = selectBestDoctorsWithWorkloadBalance(medicalCase, matchingResults);
+
+            if (selectedDoctors.isEmpty()) {
+                log.error("No suitable doctors found after matching for case {}", caseId);
+                throw new BusinessException("No suitable doctors found", HttpStatus.NOT_FOUND);
+            }
+
+            // Create assignments
+            List<CaseAssignment> assignments = createCaseAssignmentsWithWorkloadUpdate(
+                    medicalCase,
+                    selectedDoctors
+            );
+
+            // Update case status
+            updateCaseAfterAssignment(medicalCase, assignments);
+
+            // Send notifications
+            sendAssignmentNotifications(medicalCase, assignments);
+
+            log.info("Successfully reassigned case {} to {} doctors (excluded {})",
+                    caseId, assignments.size(), excludedDoctorIds != null ? excludedDoctorIds.size() : 0);
+
+        } catch (BusinessException e) {
+            log.error("Business rule violation in case assignment for case {}: {}",
+                    caseId, e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error in case assignment for case {}: {}",
+                    caseId, e.getMessage(), e);
+            throw new BusinessException("Failed to assign case", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**
@@ -154,10 +250,16 @@ public class SmartCaseAssignmentService {
 
             // Find if one of the eligible doctors had rejected the case before to exclude him:
             List<Long> excludedDoctorIds = new ArrayList<>();
-            medicalCase.getAssignments().stream().filter(c->c.getStatus() == AssignmentStatus.REJECTED).
-                    findFirst().ifPresent(assignment->{excludedDoctorIds.add(assignment.getDoctorId());});
+            medicalCase.getAssignments().stream().filter(
+                    c->c.getStatus() == AssignmentStatus.REJECTED || // In cas of the doctor rejected the assignment
+                            c.getStatus() == AssignmentStatus.CANCELLED). // In case of the doctor cancelled the appointment
+                    findFirst().ifPresent(assignment->
+                    {
+                        excludedDoctorIds.add(assignment.getDoctorId());
+                    }
+                    );
 
-            //Remove excluded doctors who rejected the case before:
+            //Remove excluded doctors who rejected the case before or cancelled the appointment:
             filteredDoctors = eligibleDoctors.stream()
                     .filter(doctor -> !excludedDoctorIds.contains(doctor.getDoctorId()))
                     .toList();
@@ -173,7 +275,7 @@ public class SmartCaseAssignmentService {
 
             }
 
-            System.out.println( "final count of elegible doctors: " + uniqueDoctors.size());
+            System.out.println( "final count of eligible doctors: " + uniqueDoctors.size());
             return uniqueDoctors.values().stream()
                     .filter(doctor -> isDoctorEligibleForCase(medicalCase, doctor))
                     .collect(Collectors.toList());
@@ -831,10 +933,8 @@ public class SmartCaseAssignmentService {
     private LocalDateTime calculateExpirationTime(UrgencyLevel urgency) {
         LocalDateTime now = LocalDateTime.now();
         return switch (urgency) {
-            case CRITICAL -> now.plusHours(1);   // 1 hour for critical
-            case HIGH -> now.plusHours(4);       // 4 hours for high
-            case MEDIUM -> now.plusHours(12);    // 12 hours for medium
-            case LOW -> now.plusHours(24);       // 24 hours for low
+            case CRITICAL -> now.plusHours(config.getCriticalAssignmentTimeoutHours());
+            case HIGH, MEDIUM, LOW -> now.plusHours(config.getAssignmentTimeoutHours());
         };
     }
 

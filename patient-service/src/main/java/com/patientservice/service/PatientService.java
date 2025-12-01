@@ -689,6 +689,26 @@ public class PatientService {
         return patientAppointments;
     }
 
+    public List<AppointmentDto> getUpcomingPatientAppointments(Long patientId) {
+//        Patient patient = patientRepository.findByUserId(userId)
+//                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+        List<AppointmentDto> patientAppointments = new ArrayList<>();
+        try{
+            patientAppointments = doctorServiceClient.getPatientUpcomingAppointments(patientId).getBody().getData();
+            List<Case> cases = caseRepository.findByPatientId(patientId);
+
+            patientAppointments.forEach(appointmentDto -> cases.stream()
+                    .filter(caseItem -> caseItem.getId().equals(appointmentDto.getCaseId())).
+                    findFirst()
+                    .ifPresent(caseitem -> appointmentDto.setConsultationFee(caseitem.getConsultationFee())));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return patientAppointments;
+    }
+
+
+
     @Transactional
     public void updateCaseForMedicalReport(Long caseId, String pdfUrl, Long patientId, Long reportId){
         //some validation
@@ -1594,15 +1614,16 @@ public class PatientService {
             statusList.add(IN_PROGRESS);
             statusList.add(SCHEDULED);
             statusList.add(CONSULTATION_COMPLETE);
+
             stats.setTotalCases( caseRepository.countByPatientIdAndIsDeletedFalse(patient.getId()) );
             stats.setActiveCases( caseRepository.countByStatusInAndPatientIdAndIsDeletedFalse(statusList, patient.getId()) );
             stats.setCompletedCases(caseRepository.countByPatientIdAndStatusAndIsDeletedFalse(patient.getId() ,CLOSED));
             dto.setStats(stats);
             List<Case> recentCases = caseRepository.findLastSubmittedCases(patient.getId(), 3);
             dto.setRecentCases(recentCases.stream().map(this::convertToCaseDto).toList());
-            dto.setUpcomingAppointments(getPatientAppointments(userId));
-            stats.setUpcomingAppointments(dto.getUpcomingAppointments().stream().count());
-            List<NotificationDto> recentNotifications = getMyNotifications(userId);
+            dto.setUpcomingAppointments(getUpcomingPatientAppointments(userId));
+            stats.setUpcomingAppointments((long) dto.getUpcomingAppointments().size());
+            List<NotificationDto> recentNotifications = getMyNotifications(userId).stream().limit(3).toList();
             dto.setRecentNotifications(recentNotifications);
         }catch(Exception e){
             log.error("Failed to get patient dashboard");

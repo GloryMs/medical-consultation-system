@@ -427,6 +427,60 @@ public class DoctorService {
         return patientAppointments;
     }
 
+    /**
+     * Get upcoming appointments for a patient
+     * Returns all future appointments that are SCHEDULED, CONFIRMED, or RESCHEDULED
+     *
+     * @param patientId The patient's ID
+     * @return List of upcoming appointment DTOs ordered by scheduled time
+     */
+    public List<AppointmentDto> getPatientUpcomingAppointments(Long patientId) {
+        log.info("Fetching upcoming appointments for patient: {}", patientId);
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Define statuses that represent "upcoming" appointments
+        List<AppointmentStatus> upcomingStatuses = Arrays.asList(
+                AppointmentStatus.SCHEDULED,
+                AppointmentStatus.CONFIRMED,
+                AppointmentStatus.RESCHEDULED
+        );
+
+        List<Appointment> upcomingAppointments = appointmentRepository
+                .findPatientUpcomingAppointments(patientId, now, upcomingStatuses);
+
+        log.info("Found {} upcoming appointments for patient: {}",
+                upcomingAppointments.size(), patientId);
+
+        return upcomingAppointments.stream()
+                .map(this::convertToAppointmentDto)
+                .toList();
+    }
+
+    public List<AppointmentDto> getDoctorUpcomingAppointments(Long doctorId) {
+        log.info("Fetching upcoming appointments for doctor: {}", doctorId);
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Define statuses that represent "upcoming" appointments
+        List<AppointmentStatus> upcomingStatuses = Arrays.asList(
+                AppointmentStatus.SCHEDULED,
+                AppointmentStatus.CONFIRMED,
+                AppointmentStatus.RESCHEDULED
+        );
+
+        List<Appointment> upcomingAppointments = appointmentRepository
+                .findUpcomingAppointments(doctorId, now, upcomingStatuses);
+
+        log.info("Found {} upcoming appointments for doctor: {}",
+                upcomingAppointments.size(), doctorId);
+
+        return upcomingAppointments.stream()
+                .map(this::convertToAppointmentDto)
+                .toList();
+    }
+
+
     public AppointmentDto convertToAppointmentDto(Appointment appointment) {
         AppointmentDto appointmentDto = new AppointmentDto();
         ModelMapper modelMapper = new ModelMapper();

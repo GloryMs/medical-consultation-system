@@ -16,8 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 @Component
 @RequiredArgsConstructor
@@ -68,6 +67,53 @@ public class PatientEventConsumer {
             System.out.println("Kafka - Failed to handle assign new case automatically");
             System.out.println(e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    @KafkaListener(topics = "smart-case-assignment-topic", groupId = "patient-group")
+    public void handleCaseAssignmentEvent(Map<String, Object> event) {
+        try {
+            Long caseId = getLongFromMap(event, "caseId");
+            Boolean isReassignment = (Boolean) event.getOrDefault("reassignment", false);
+
+            //TODO  this sleep must be replaced with validation to insure that case was inserted ok.
+            Thread.sleep(3000); // Small delay to ensure transaction is committed
+            System.out.println("Kafka - A new Case has been added, Case#: " + caseId + "\n");
+            System.out.println("Kafka - Smart Case Assignment started asynchronously @: " +
+                    LocalDateTime.now() + "\n");
+
+            log.info("Received case assignment event for case {} (reassignment: {})",
+                    caseId, isReassignment);
+
+            if (isReassignment && event.containsKey("excludedDoctorIds")) {
+                // Handle reassignment with excluded doctors
+                @SuppressWarnings("unchecked")
+                List<Integer> excludedIds = (List<Integer>) event.get("excludedDoctorIds");
+
+                Set<Long> excludedDoctorIds = new HashSet<>();
+                if (excludedIds != null) {
+                    for (Integer id : excludedIds) {
+                        excludedDoctorIds.add(id.longValue());
+                    }
+                }
+
+                log.info("Processing reassignment for case {} excluding {} doctors",
+                        caseId, excludedDoctorIds.size());
+
+                assignmentService.assignCaseToMultipleDoctorsWithExclusion(
+                        caseId,
+                        excludedDoctorIds
+                );
+            } else {
+                // Handle normal assignment (no exclusions)
+                log.info("Processing normal assignment for case {}", caseId);
+                assignmentService.assignCaseToMultipleDoctors(caseId);
+            }
+
+            log.info("Successfully processed case assignment for case {}", caseId);
+
+        } catch (Exception e) {
+            log.error("Error processing case assignment event: {}", e.getMessage(), e);
         }
     }
 
@@ -190,5 +236,18 @@ public class PatientEventConsumer {
         } catch (Exception e) {
             log.error("Error processing medical report update: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * Helper method to safely extract Long values from Map
+     */
+    private Long getLongFromMap(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value instanceof Integer) {
+            return ((Integer) value).longValue();
+        } else if (value instanceof Long) {
+            return (Long) value;
+        }
+        throw new IllegalArgumentException("Invalid value for key: " + key);
     }
 }

@@ -69,4 +69,26 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
     @Query("SELECT c FROM Case c WHERE c.id = :caseId AND c.patient.id = :patientId")
     Optional<Case> findByIdAndPatientIdIncludingDependents(@Param("caseId") Long caseId,
                                                            @Param("patientId") Long patientId);
+
+    /**
+     * Count cases that have reached or exceeded the maximum number of expirations
+     * Used to identify cases requiring manual intervention
+     */
+    @Query("SELECT COUNT(DISTINCT c.id) FROM Case c " +
+            "JOIN CaseAssignment ca ON ca.caseEntity.id = c.id " +
+            "WHERE ca.status = 'EXPIRED' " +
+            "GROUP BY c.id " +
+            "HAVING COUNT(ca.id) >= :maxAttempts")
+    long countCasesWithMultipleExpirations(@Param("maxAttempts") Integer maxAttempts);
+
+    /**
+     * Find cases with multiple expirations (for admin dashboard)
+     */
+    @Query("SELECT c FROM Case c " +
+            "JOIN CaseAssignment ca ON ca.caseEntity.id = c.id " +
+            "WHERE ca.status = 'EXPIRED' " +
+            "GROUP BY c.id " +
+            "HAVING COUNT(ca.id) >= :minExpirations " +
+            "ORDER BY COUNT(ca.id) DESC")
+    List<Case> findCasesWithMultipleExpirations(@Param("minExpirations") Integer minExpirations);
 }

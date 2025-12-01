@@ -1,6 +1,7 @@
 package com.patientservice.kafka;
 
 import com.commonlibrary.dto.NotificationDto;
+import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
 import com.patientservice.service.SmartCaseAssignmentService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -60,16 +62,16 @@ public class PatientEventProducer {
         log.info("Kafka - Subscription notification sent for patient: {}", patientId);
     }
 
-    public void sendStartSmartCaseAssignmentService(Long caseId){
-
-        Map<String, Object> caseEvent = new HashMap<>();
-        caseEvent.put("caseId", caseId);
-        caseEvent.put("timestamp", System.currentTimeMillis());
-
-        kafkaTemplate.send("case-create-assign-topic", caseEvent);
-        log.info("Kafka - Trigger SmartCaseAssignmentService for case: {}", caseId);
-
-    }
+//    public void sendStartSmartCaseAssignmentService(Long caseId){
+//
+//        Map<String, Object> caseEvent = new HashMap<>();
+//        caseEvent.put("caseId", caseId);
+//        caseEvent.put("timestamp", System.currentTimeMillis());
+//
+//        kafkaTemplate.send("case-create-assign-topic", caseEvent);
+//        log.info("Kafka - Trigger SmartCaseAssignmentService for case: {}", caseId);
+//
+//    }
 
     public void sendUpdateDoctorWorkLoadTrigger(Long doctorId){
         Map<String, Object> doctorEvent = new HashMap<>();
@@ -130,5 +132,103 @@ public class PatientEventProducer {
 
         kafkaTemplate.send("case-appointment-confirmation-topic", appointmentConfirmationEvent);
         log.info("Kafka - Appointment confirmation for case: {} , by patient {}, and doctor", caseId, patientId);
+    }
+
+    // ========== NEW METHODS FOR SCHEDULER ==========
+
+    /**
+     * Send case assignment event with excluded doctor IDs
+     * Used when reassigning after expiration
+     */
+    public void sendStartSmartCaseAssignmentService(Long caseId, Set<Long> excludedDoctorIds) {
+        try {
+            Map<String, Object> event = new HashMap<>();
+            event.put("caseId", caseId);
+            if(!excludedDoctorIds.isEmpty()) event.put("excludedDoctorIds", excludedDoctorIds);
+            event.put("reassignment", true);
+            event.put("timestamp", System.currentTimeMillis());
+
+            kafkaTemplate.send("smart-case-assignment-topic", event);
+            log.info("Sent reassignment event for case {} excluding {} doctors",
+                    caseId, excludedDoctorIds.size());
+
+        } catch (Exception e) {
+            log.error("Failed to send reassignment event for case {}: {}", caseId, e.getMessage());
+        }
+    }
+
+    /**
+     * Overloaded method for backward compatibility
+     */
+    public void sendStartSmartCaseAssignmentService(Long caseId) {
+        sendStartSmartCaseAssignmentService(caseId, Set.of());
+    }
+
+    /**
+     * Send reminder notification to doctor about pending assignment
+     */
+    public void sendAssignmentReminderNotification(Long doctorId, Long caseId, Long assignmentId,
+                                                   String title, String message) {
+        try {
+            Map<String, Object> notification = new HashMap<>();
+            notification.put("recipientId", doctorId);
+            notification.put("recipientType", "DOCTOR");
+            notification.put("notificationType", "CASE_ASSIGNMENT_REMINDER");
+            notification.put("title", title);
+            notification.put("message", message);
+            notification.put("caseId", caseId);
+            notification.put("assignmentId", assignmentId);
+            notification.put("priority", "HIGH");
+            notification.put("timestamp", System.currentTimeMillis());
+
+            NotificationDto assignmentReminder = NotificationDto.builder()
+                    .senderId(0L)
+                    .receiverId(doctorId)
+                    .title(title)
+                    .message(message)
+                    .type(NotificationType.CASE_ASSIGNMENT_REMINDER)
+                    .sendEmail(true)
+                    .priority(NotificationPriority.HIGH)
+                    .build();
+
+
+            kafkaTemplate.send("notification-topic", assignmentReminder);
+            log.info("Sent assignment reminder to doctor {} for case {}", doctorId, caseId);
+
+        } catch (Exception e) {
+            log.error("Failed to send reminder notification to doctor {}: {}",
+                    doctorId, e.getMessage());
+        }
+    }
+
+    /**
+     * Send notification to admin (existing method - add if not present)
+     */
+    public void sendAdminNotification(String title, String message, String notificationType) {
+        try {
+            Map<String, Object> notification = new HashMap<>();
+            notification.put("recipientType", "ADMIN");
+            notification.put("notificationType", notificationType);
+            notification.put("title", title);
+            notification.put("message", message);
+            notification.put("priority", "HIGH");
+            notification.put("timestamp", System.currentTimeMillis());
+
+            NotificationDto adminNotification = NotificationDto.builder()
+                    .senderId(0L)
+                    .receiverId(1L)
+                    .title(title)
+                    .message(message)
+                    .type(NotificationType.valueOf(notificationType))
+                    .sendEmail(true)
+                    .priority(NotificationPriority.HIGH)
+                    .build();
+
+            kafkaTemplate.send("notification-topic", adminNotification);
+            log.info("Sent admin notification: {}", notificationType);
+
+        } catch (Exception e) {
+            log.error("Failed to send admin notification: {}", e.getMessage());
+        }
     }
 }

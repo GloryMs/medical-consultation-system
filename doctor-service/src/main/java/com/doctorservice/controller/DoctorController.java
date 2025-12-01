@@ -224,6 +224,13 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(response, "Availability checked"));
     }
 
+    @GetMapping("/upcoming-appointments/{patientId}")
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientUpcomingAppointments(
+            @PathVariable Long patientId) {
+        List<AppointmentDto> appointments = doctorService.getPatientUpcomingAppointments(patientId);
+        return ResponseEntity.ok(ApiResponse.success(appointments));
+    }
+
     @GetMapping("/appointments/{patientId}")
     public ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointments(
             @PathVariable Long patientId) {

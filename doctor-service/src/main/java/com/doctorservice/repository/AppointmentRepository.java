@@ -58,12 +58,27 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Query("SELECT a FROM Appointment a WHERE " +
             "a.doctor.id = :doctorId AND " +
             "a.scheduledTime >= :fromTime AND " +
-            "a.status = :status " +
+            "a.status IN :statuses " +
             "ORDER BY a.scheduledTime ASC")
     List<Appointment> findUpcomingAppointments(
             @Param("doctorId") Long doctorId,
             @Param("fromTime") LocalDateTime fromTime,
-            @Param("status") AppointmentStatus status
+            @Param("statuses") List<AppointmentStatus> statuses
+    );
+
+    /**
+     * Find upcoming appointments for a patient
+     * Returns appointments that are scheduled in the future and not cancelled/completed
+     */
+    @Query("SELECT a FROM Appointment a WHERE " +
+            "a.patientId = :patientId AND " +
+            "a.scheduledTime >= :fromTime AND " +
+            "a.status IN :statuses " +
+            "ORDER BY a.scheduledTime ASC")
+    List<Appointment> findPatientUpcomingAppointments(
+            @Param("patientId") Long patientId,
+            @Param("fromTime") LocalDateTime fromTime,
+            @Param("statuses") List<AppointmentStatus> statuses
     );
 
 

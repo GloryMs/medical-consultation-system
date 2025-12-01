@@ -30,6 +30,9 @@ public interface DoctorServiceClient {
     @GetMapping("/api/doctors/appointments/{patientId}")
     ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointments(@PathVariable Long patientId);
 
+    @GetMapping("/api/doctors/upcoming-appointments/{patientId}")
+    ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientUpcomingAppointments(@PathVariable Long patientId);
+
     // ===== NEW WORKLOAD-RELATED METHODS =====
 
     /**

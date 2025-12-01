@@ -30,4 +30,5 @@ public class NotificationDto {
     private Boolean isRead;
     private Boolean emailSent;
     private LocalDateTime readAt;
+    private LocalDateTime createdAt;
 }
