@@ -158,7 +158,7 @@ public class AdminController {
         } catch (Exception e) {
             log.error("Failed to process payout", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Failed to process payout: " + e.getMessage()));
+                .body(ApiResponse.error("Failed to process payout: " + e.getMessage(), HttpStatus.BAD_REQUEST));
         }
     }
     

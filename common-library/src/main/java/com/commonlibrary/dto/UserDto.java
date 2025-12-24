@@ -13,6 +13,7 @@ public class UserDto {
     private String email;
     private String role;
     private String status;
+    private String fullName;
     private Boolean emailVerified;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

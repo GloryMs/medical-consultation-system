@@ -53,7 +53,7 @@ public class AuthController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<ApiResponse<UserStasDto>> getUserStas(){
+    public ResponseEntity<ApiResponse<UserStasDto>> getUserStats(){
         UserStasDto userStasDto = authService.getUsersStats();
         return ResponseEntity.ok(ApiResponse.success(userStasDto, "User stats successful"));
     }
@@ -71,4 +71,50 @@ public class AuthController {
         String message = authService.verifyCodeAndResetPassword(request);
         return ResponseEntity.ok(ApiResponse.success(message, "Password reset successful"));
     }
+
+    /**
+     * Get user by ID
+     * GET /api/auth/users/{userId}
+     */
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<ApiResponse<UserDto>> getUserById(@PathVariable Long userId) {
+        UserDto user = authService.getUserById(userId);
+        return ResponseEntity.ok(ApiResponse.success(user, "User retrieved successfully"));
+    }
+
+    /**
+     * Update user status (for admin operations like suspend/activate)
+     * PUT /api/auth/users/{userId}/status
+     */
+    @PutMapping("/users/{userId}/status")
+    public ResponseEntity<ApiResponse<Void>> updateUserStatus(
+            @PathVariable Long userId,
+            @RequestParam String status,
+            @RequestParam String reason) {
+        authService.updateUserStatus(userId, status, reason);
+        return ResponseEntity.ok(ApiResponse.success(null, "User status updated successfully"));
+    }
+
+    /**
+     * Delete user account permanently
+     * DELETE /api/auth/users/{userId}
+     */
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Long userId) {
+        authService.deleteUser(userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "User deleted successfully"));
+    }
+
+    /**
+     * Reset user password (admin initiated)
+     * POST /api/auth/users/{userId}/reset-password
+     */
+    @PostMapping("/users/{userId}/reset-password")
+    public ResponseEntity<ApiResponse<Void>> adminResetPassword(
+            @PathVariable Long userId,
+            @RequestParam String temporaryPassword) {
+        authService.adminResetPassword(userId, temporaryPassword);
+        return ResponseEntity.ok(ApiResponse.success(null, "Password reset successfully"));
+    }
+
 }

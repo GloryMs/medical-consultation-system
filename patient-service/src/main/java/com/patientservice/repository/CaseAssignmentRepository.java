@@ -18,6 +18,9 @@ public interface CaseAssignmentRepository extends JpaRepository<CaseAssignment, 
     List<CaseAssignment> findByDoctorIdAndStatus(Long doctorId, AssignmentStatus status);
     boolean existsByCaseEntityIdAndDoctorId(Long caseId, Long doctorId);
     List<CaseAssignment> findByStatusAndExpiresAtBefore(AssignmentStatus status, LocalDateTime dateTim);
+    List<CaseAssignment> findByCaseEntityIdIn(List<Long> caseIds);
+
+    List<CaseAssignment> findByCaseEntityIn(List<Case> cases);
 
     Optional<CaseAssignment> findByCaseEntityAndDoctorId(Case caseEntity, Long doctorId);
 

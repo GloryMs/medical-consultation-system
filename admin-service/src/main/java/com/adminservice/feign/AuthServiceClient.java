@@ -30,4 +30,18 @@ public interface AuthServiceClient {
 
     @GetMapping("/api/auth/stats")
     ResponseEntity<ApiResponse<UserStasDto>> getUsersStats();
+
+    /**
+     * Get user by ID
+     */
+    @GetMapping("/api/auth/users/{userId}")
+    ResponseEntity<ApiResponse<UserDto>> getUserById(@PathVariable Long userId);
+
+    /**
+     * Delete user account permanently
+     */
+    @DeleteMapping("/api/auth/users/{userId}")
+    void deleteUser(@PathVariable Long userId);
+
+
 }

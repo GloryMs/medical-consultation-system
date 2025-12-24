@@ -5,6 +5,7 @@ import com.adminservice.entity.Complaint;
 import com.adminservice.entity.SystemConfig;
 import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
+import com.adminservice.service.AdminCaseService;
 import com.adminservice.service.AdminService;
 import com.adminservice.service.ComplaintService;
 import com.commonlibrary.dto.*;
@@ -14,10 +15,12 @@ import com.commonlibrary.entity.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -49,6 +52,154 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(null, "Doctor verification updated"));
     }
 
+    /**
+     * Verify Doctor - Approve or Reject
+     * POST /api/admin/doctors/{doctorId}/verify
+     * Request body example:
+     * {
+     *   "doctorId": 1,
+     *   "approved": true,
+     *   "reason": "Credentials verified",  // optional if approved
+     *   "notes": "All documents are valid"  // optional
+     * }
+     */
+    @PostMapping("/doctors/{doctorId}/verify")
+    public ResponseEntity<ApiResponse<DoctorVerificationResponseDto>> verifyDoctor(
+            @PathVariable Long doctorId,
+            @Valid @RequestBody VerifyDoctorRequestDto verificationData) {
+
+        // Ensure doctorId in path matches body (if present)
+        if (verificationData.getDoctorId() != null &&
+                !verificationData.getDoctorId().equals(doctorId)) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("Doctor ID in path and body must match", HttpStatus.BAD_REQUEST)
+            );
+        }
+
+        verificationData.setDoctorId(doctorId);
+
+        DoctorVerificationResponseDto response = adminService.verifyDoctor(doctorId, verificationData);
+
+        String message = verificationData.getApproved()
+                ? "Doctor verified and approved successfully"
+                : "Doctor verification rejected";
+
+        return ResponseEntity.ok(ApiResponse.success(response, message));
+    }
+
+    /**
+     * Reject Doctor Verification
+     * POST /api/admin/doctors/{doctorId}/reject
+     * Request body example:
+     * {
+     *   "reason": "Invalid medical license"
+     * }
+     */
+    @PostMapping("/doctors/{doctorId}/reject")
+    public ResponseEntity<ApiResponse<DoctorVerificationResponseDto>> rejectDoctorVerification(
+            @PathVariable Long doctorId,
+            @Valid @RequestBody RejectDoctorRequestDto request) {
+
+        DoctorVerificationResponseDto response =
+                adminService.rejectDoctorVerification(doctorId, request.getReason());
+
+        return ResponseEntity.ok(ApiResponse.success(response, "Doctor verification rejected"));
+    }
+
+    /**
+     * Update Doctor Status
+     * PUT /api/admin/doctors/{doctorId}/status
+     * Request body example:
+     * {
+     *   "status": "INACTIVE",
+     *   "reason": "Doctor requested leave"  // optional
+     * }
+     */
+    @PutMapping("/doctors/{doctorId}/status")
+    public ResponseEntity<ApiResponse<Void>> updateDoctorStatus(
+            @PathVariable Long doctorId,
+            @Valid @RequestBody UpdateDoctorStatusRequestDto request) {
+
+        adminService.updateDoctorStatus(doctorId, request.getStatus());
+
+        return ResponseEntity.ok(ApiResponse.success(
+                null,
+                "Doctor status updated to " + request.getStatus() + " successfully"
+        ));
+    }
+
+    /**
+     * Get All Doctors with Filters
+     * GET /api/admin/doctors
+     * Query parameters (all optional):
+     * - searchTerm: Search in name, license, email
+     * - verificationStatus: PENDING, VERIFIED, REJECTED
+     * - specialization: Primary specialization
+     * - isAvailable: true/false
+     * - emergencyMode: true/false
+     * - minYearsExperience: Minimum years of experience
+     * - maxYearsExperience: Maximum years of experience
+     * - minRating: Minimum rating (0-5)
+     * - city: City filter
+     * - country: Country filter
+     * - page: Page number (default 0)
+     * - size: Page size (default 20)
+     * - sortBy: Sort field (default createdAt)
+     * - sortDirection: ASC or DESC (default DESC)
+     *
+     * Example: GET /api/admin/doctors?verificationStatus=PENDING&specialization=Cardiology&page=0&size=10
+     */
+    @GetMapping("/doctors")
+    public ResponseEntity<ApiResponse<Page<DoctorSummaryDto>>> getAllDoctors(
+            @RequestParam(required = false) String searchTerm,
+            @RequestParam(required = false) VerificationStatus verificationStatus,
+            @RequestParam(required = false) String specialization,
+            @RequestParam(required = false) Boolean isAvailable,
+            @RequestParam(required = false) Boolean emergencyMode,
+            @RequestParam(required = false) Integer minYearsExperience,
+            @RequestParam(required = false) Integer maxYearsExperience,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String country,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "DESC") String sortDirection) {
+
+        // Build filter DTO
+        DoctorFilterDto filters = DoctorFilterDto.builder()
+                .searchTerm(searchTerm)
+                .verificationStatus(verificationStatus)
+                .specialization(specialization)
+                .isAvailable(isAvailable)
+                .emergencyMode(emergencyMode)
+                .minYearsExperience(minYearsExperience)
+                .maxYearsExperience(maxYearsExperience)
+                .minRating(minRating)
+                .city(city)
+                .country(country)
+                .page(page)
+                .size(size)
+                .sortBy(sortBy)
+                .sortDirection(sortDirection)
+                .build();
+
+        Page<DoctorSummaryDto> doctors = adminService.getAllDoctors(filters);
+
+        return ResponseEntity.ok(ApiResponse.success(
+                doctors,
+                String.format("Retrieved %d doctors", doctors.getNumberOfElements())
+        ));
+    }
+
+
+    @GetMapping ("/notifications/{userId}")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long userId){
+        List<NotificationDto> notificationsDto = new ArrayList<>();
+        notificationsDto = adminService.getMyNotificationsByUserId(userId);
+        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+    }
+
     // 26. Get System Metrics - MISSING ENDPOINT
     @GetMapping("/metrics")
     public ResponseEntity<ApiResponse<SystemMetricsDto>> getSystemMetrics() {
@@ -70,6 +221,14 @@ public class AdminController {
     public ResponseEntity<ApiResponse<List<PendingVerificationDto>>> getPendingVerifications() {
         List<PendingVerificationDto> pending = adminService.getPendingVerifications();
         return ResponseEntity.ok(ApiResponse.success(pending));
+    }
+
+    @GetMapping("/doctors/{doctorId}/verification")
+    public ResponseEntity<ApiResponse<DoctorVerificationDetailsDto>> getDoctorVerificationDetails(
+            @PathVariable Long doctorId) {
+
+        DoctorVerificationDetailsDto details = adminService.getDoctorVerificationDetails(doctorId);
+        return ResponseEntity.ok(ApiResponse.success(details, "Doctor verification details retrieved successfully"));
     }
 
     // 29. Get All Users - MISSING ENDPOINT
@@ -154,7 +313,7 @@ public class AdminController {
         if( complaint != null ){
             return ResponseEntity.ok(ApiResponse.success(null, "Complaint submitted"));
         }
-            return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint .."));
+            return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint ..", HttpStatus.BAD_REQUEST));
     }
 
     @GetMapping("/complaints/{patientId}")
@@ -253,5 +412,47 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Void>> clearCache() {
         //configService.clearCache();
         return ResponseEntity.ok(ApiResponse.success(null, "Cache cleared successfully"));
+    }
+
+    /**
+     * Suspend a user account
+     * POST /api/admin/users/{userId}/suspend
+     */
+    @PostMapping("/users/{userId}/suspend")
+    public ResponseEntity<ApiResponse<Void>> suspendUser(
+            @PathVariable Long userId,
+            @RequestBody SuspendUserDto dto) {
+        adminService.suspendUser(userId, dto.getReason());
+        return ResponseEntity.ok(ApiResponse.success(null, "User suspended successfully"));
+    }
+
+    /**
+     * Unsuspend (Activate) a user account
+     * POST /api/admin/users/{userId}/unsuspend
+     */
+    @PostMapping("/users/{userId}/unsuspend")
+    public ResponseEntity<ApiResponse<Void>> unsuspendUser(@PathVariable Long userId) {
+        adminService.unsuspendUser(userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "User activated successfully"));
+    }
+
+    /**
+     * Delete a user account permanently
+     * DELETE /api/admin/users/{userId}
+     */
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Long userId) {
+        adminService.deleteUser(userId);
+        return ResponseEntity.ok(ApiResponse.success(null, "User deleted successfully"));
+    }
+
+    /**
+     * Get a specific user by ID
+     * GET /api/admin/users/{userId}
+     */
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<ApiResponse<UserDto>> getUserById(@PathVariable Long userId) {
+        UserDto user = adminService.getUserById(userId);
+        return ResponseEntity.ok(ApiResponse.success(user));
     }
 }

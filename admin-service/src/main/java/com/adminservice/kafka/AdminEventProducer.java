@@ -1,6 +1,7 @@
 // 1. AdminEventProducer class
 package com.adminservice.kafka;
 
+import com.commonlibrary.dto.DoctorStatusEvent;
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
@@ -85,13 +86,13 @@ public class AdminEventProducer {
     /**
      * Send notification when doctor status changes (approved/rejected)
      */
-    public void sendDoctorStatusChangeNotification(Long doctorUserId, String doctorEmail, 
+    public void sendDoctorStatusChangeNotification(Long doctorId, String doctorEmail,
                                                  String doctorName, String newStatus, 
-                                                 String reason) {
+                                                 String reason, Boolean approved) {
         try {
             NotificationDto statusNotification = NotificationDto.builder()
                     .senderId(0L)
-                    .receiverId(doctorUserId) // Send to doctor
+                    .receiverId(doctorId) // Send to doctor
                     .title("Account Status Update")
                     .message(String.format(
                         "Hello Dr. %s,\n\n" +
@@ -115,6 +116,24 @@ public class AdminEventProducer {
         } catch (Exception e) {
             log.error("Error sending doctor status change notification: {}", e.getMessage(), e);
         }
+
+        // Send Event for Auth-Service to update doctor's record in User's table
+        try {
+
+            DoctorStatusEvent doctorStatusEvent = new DoctorStatusEvent();
+            doctorStatusEvent.setDoctorEmail(doctorEmail);
+            doctorStatusEvent.setNewStatus(newStatus);
+            doctorStatusEvent.setApproved(approved);
+
+            kafkaTemplate.send("auth-system-events-topic", doctorStatusEvent);
+            log.info("Auth system event sent: update doctor (email {}) account verification status , to {}" ,
+                    doctorEmail, newStatus);
+
+        } catch (Exception e) {
+            log.error("Error sending admin system event: {}", e.getMessage(), e);
+            e.printStackTrace();
+        }
+
     }
 
     /**

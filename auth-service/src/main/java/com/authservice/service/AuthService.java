@@ -322,6 +322,7 @@ public class AuthService {
         userDto.setId(user.getId());
         userDto.setEmail(user.getEmail());
         userDto.setRole(user.getRole().name());
+        userDto.setFullName(user.getFullName());
         userDto.setStatus(user.getStatus().name());
         userDto.setEmailVerified(user.getEmailVerified());
         userDto.setCreatedAt(user.getCreatedAt());
@@ -553,4 +554,175 @@ public class AuthService {
             </html>
             """, fullName);
     }
+
+    // ========== ADMIN USER MANAGEMENT METHODS ==========
+
+    /**
+     * Get user by ID
+     */
+    public UserDto getUserById(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        return convertToUserDto(user);
+    }
+
+    /**
+     * Update user status (ACTIVE, SUSPENDED, INACTIVE, etc.)
+     */
+    @Transactional
+    public void updateUserStatus(Long userId, String status, String reason) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        UserStatus newStatus;
+        try {
+            newStatus = UserStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("Invalid status: " + status, HttpStatus.BAD_REQUEST);
+        }
+
+        UserStatus oldStatus = user.getStatus();
+        user.setStatus(newStatus);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        log.info("User {} status changed from {} to {}. Reason: {}",
+                userId, oldStatus, newStatus, reason);
+
+        // Send notification via Kafka
+        try {
+            EmailNotificationDto notification = new EmailNotificationDto();
+            notification.setRecipient(user.getEmail());
+            notification.setSubject("Account Status Update");
+
+            if (newStatus == UserStatus.SUSPENDED) {
+                notification.setBody(String.format(
+                        "Dear %s,\n\nYour account has been suspended.\nReason: %s\n\n" +
+                                "If you believe this is a mistake, please contact support.\n\n" +
+                                "Best regards,\nMedical Consultation System",
+                        user.getFullName(), reason
+                ));
+            } else if (newStatus == UserStatus.ACTIVE && oldStatus == UserStatus.SUSPENDED) {
+                notification.setBody(String.format(
+                        "Dear %s,\n\nYour account has been reactivated.\n" +
+                                "You can now access your account normally.\n\n" +
+                                "Best regards,\nMedical Consultation System",
+                        user.getFullName()
+                ));
+            }
+
+            authEventProducer.sendEmailNotification(notification);
+        } catch (Exception e) {
+            log.error("Failed to send status update notification: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Delete user account permanently
+     */
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        // Prevent deletion of admin accounts (optional safety check)
+        if (user.getRole() == UserRole.ADMIN) {
+            throw new BusinessException("Cannot delete admin accounts", HttpStatus.FORBIDDEN);
+        }
+
+        log.info("Deleting user: {} ({})", user.getId(), user.getEmail());
+
+        // Send final notification before deletion
+        try {
+            EmailNotificationDto notification = new EmailNotificationDto();
+            notification.setRecipient(user.getEmail());
+            notification.setSubject("Account Deleted");
+            notification.setBody(String.format(
+                    "Dear %s,\n\nYour account has been permanently deleted from our system.\n\n" +
+                            "If you did not request this action, please contact support immediately.\n\n" +
+                            "Best regards,\nMedical Consultation System",
+                    user.getFullName()
+            ));
+
+            authEventProducer.sendEmailNotification(notification);
+        } catch (Exception e) {
+            log.error("Failed to send deletion notification: {}", e.getMessage());
+        }
+
+        // Delete the user
+        user.setIsDeleted(true);
+        userRepository.save(user);
+
+        log.info("User {} deleted successfully", userId);
+
+        // TODO: Publish Kafka event for other services to clean up related data
+        // Example: authEventProducer.sendUserDeletedEvent(userId, user.getRole());
+    }
+
+    /**
+     * Admin-initiated password reset
+     */
+    @Transactional
+    public void adminResetPassword(Long userId, String temporaryPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        // Hash the temporary password
+        //String hashedPassword = passwordEncoder.encode(temporaryPassword);
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        log.info("Password reset for user {} by admin", userId);
+
+        // Send notification with temporary password
+        try {
+            EmailNotificationDto notification = new EmailNotificationDto();
+            notification.setRecipient(user.getEmail());
+            notification.setSubject("Password Reset by Administrator");
+            notification.setBody(String.format(
+                    "Dear %s,\n\nYour password has been reset by an administrator.\n\n" +
+                            "Your temporary password is: %s\n\n" +
+                            "Please log in and change your password immediately.\n\n" +
+                            "Best regards,\nMedical Consultation System",
+                    user.getFullName(), temporaryPassword
+            ));
+
+            authEventProducer.sendEmailNotification(notification);
+        } catch (Exception e) {
+            log.error("Failed to send password reset notification: {}", e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void verifyDoctorUser(String doctorEmail, String newStatus, Boolean approved){
+        User user = userRepository.findByEmail(doctorEmail)
+                .orElseThrow(() -> new BusinessException("Doctor user not found", HttpStatus.NOT_FOUND));
+
+        if( user.getStatus().equals(UserStatus.PENDING_VERIFICATION) && !user.getIsDeleted()  && approved ){
+            user.setStatus(UserStatus.ACTIVE);
+            user.setUpdatedAt(LocalDateTime.now());
+            userRepository.save(user);
+        }
+        log.info("Doctor {} verification status has been updated to: {}", doctorEmail, newStatus);
+    }
+
+    /**
+     * Helper method to convert User entity to UserDto
+     * (This should already exist in your code, but including it for completeness)
+     */
+//    private UserDto convertToUserDto(User user) {
+//        UserDto userDto = new UserDto();
+//        userDto.setId(user.getId());
+//        userDto.setEmail(user.getEmail());
+//        userDto.setFullName(user.getFullName());
+//        userDto.setRole(user.getRole().toString());
+//        userDto.setStatus(user.getStatus().toString());
+//        //userDto.setP(user.getPhoneNumber());
+//        userDto.setCreatedAt(user.getCreatedAt());
+//        userDto.setUpdatedAt(user.getUpdatedAt());
+//        userDto.setLastLoginAt(user.getLastLogin());
+//        return userDto;
+//    }
 }

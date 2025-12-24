@@ -2,11 +2,13 @@ package com.doctorservice.repository;
 
 import com.doctorservice.entity.Doctor;
 import com.commonlibrary.entity.VerificationStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +22,10 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long> {
     Long countByVerificationStatus(VerificationStatus status);
     @Query("SELECT D FROM Doctor D WHERE D.verificationStatus = ?1 AND D.isAvailable = ?2" )
     List<Doctor> findbyVerificationStatusAndIsAvailable(VerificationStatus status, Boolean isAvailable);
+    List<Doctor> findByPrimarySpecializationAndVerificationStatus(String primarySpecialization,
+                                                                  VerificationStatus verificationStatus);
+
+    List<Doctor> findByPrimarySpecialization(String primarySpecialization);
 
 
     // ===== WORKLOAD MANAGEMENT QUERIES =====
@@ -81,4 +87,5 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long> {
             "d.lastWorkloadUpdate < :cutoffTime")
     List<Doctor> findDoctorsWithOutdatedWorkload(@Param("cutoffTime") java.time.LocalDateTime cutoffTime);
 
+    Page<Doctor> findAll(Specification<Doctor> spec, Pageable pageable);
 }

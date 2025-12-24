@@ -21,6 +21,9 @@ public class UserDetailsNew extends BaseEntity {
     @Column(unique = true, nullable = false)
     private String email;
 
+    @Column(nullable = false, unique = true)
+    private Long userId;
+
     private String role;
 
     private String status;

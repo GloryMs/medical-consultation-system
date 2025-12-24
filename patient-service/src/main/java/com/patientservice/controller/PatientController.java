@@ -173,7 +173,7 @@ public class PatientController {
         if( success){
             return ResponseEntity.ok(ApiResponse.success(null, "Complaint submitted"));
         }
-        return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint .."));
+        return ResponseEntity.ok(ApiResponse.error("Something went wrong while submitting the complaint ..", HttpStatus.BAD_REQUEST));
     }
 
     // 8. View My Complaints - MISSING ENDPOINT
@@ -239,24 +239,24 @@ public class PatientController {
             // Validate required fields
             if (userId == null || userId <= 0) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("User ID is required and must be valid"));
+                        .body(ApiResponse.error("User ID is required and must be valid", HttpStatus.BAD_REQUEST));
             }
 
             if (caseTitle == null || caseTitle.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("Case title is required"));
+                        .body(ApiResponse.error("Case title is required", HttpStatus.BAD_REQUEST));
             }
 
             if (requiredSpecialization == null || requiredSpecialization.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("Required specialization is mandatory"));
+                        .body(ApiResponse.error("Required specialization is mandatory", HttpStatus.BAD_REQUEST));
             }
 
             // Dependent ID is optional - can be null (for primary user's own case)
             // If dependent ID is provided, validate it's a positive number
             if (dependentId != null && dependentId <= 0) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("Dependent ID must be a positive number or null"));
+                        .body(ApiResponse.error("Dependent ID must be a positive number or null", HttpStatus.BAD_REQUEST));
             }
 
             log.info("Building Create Case DTO...");
@@ -275,18 +275,18 @@ public class PatientController {
         } catch (IllegalArgumentException e) {
             log.warn("Validation error creating case for user {}: {}", userId, e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage()));
+                    .body(ApiResponse.error(e.getMessage(), HttpStatus.BAD_REQUEST));
 
         } catch (RuntimeException e) {
             log.error("Runtime error creating case for user {}: {}", userId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to create case: " + e.getMessage()));
+                    .body(ApiResponse.error("Failed to create case: " + e.getMessage(), HttpStatus.BAD_REQUEST));
 
         } catch (Exception e) {
             log.error("Unexpected error creating case for user {}: {}", userId, e.getMessage(), e);
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to create case: An unexpected error occurred"));
+                    .body(ApiResponse.error("Failed to create case: An unexpected error occurred", HttpStatus.BAD_REQUEST));
         }
     }
 
@@ -472,7 +472,7 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(assignments));
     }
 
-    @GetMapping("/cases/all-metrics")
+    @GetMapping("/cases/metrics")
     public ResponseEntity<ApiResponse<Map<String,Long>>> getAllMetrics(){
         Map<String,Long> metrics = new HashMap<>();
         metrics = patientService.getAllCassesMetrics();

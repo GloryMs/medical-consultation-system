@@ -13,9 +13,14 @@ import com.commonlibrary.entity.ComplaintPriority;
 import com.commonlibrary.entity.ComplaintStatus;
 import com.commonlibrary.dto.DoctorDto;
 import com.commonlibrary.dto.*;
+import com.commonlibrary.exception.BusinessException;
 import com.commonlibrary.kafka.NotificationProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +42,7 @@ public class AdminService {
     private final StaticContentRepository staticContentRepository;
     private final UserRepository userRepository;
     private final AdminEventProducer adminEventProducer;
+    private final NotificationServiceClient notificationServiceClient;
 
     public DashboardDto getDashboard() {
         // Simulate dashboard data
@@ -92,12 +98,16 @@ public class AdminService {
         metrics.setNewUsersThisMonth(Long.parseLong("10.0"));
 
         // Case metrics
-        Map<String,Long> metricsMap = new HashMap<>();
+        CaseMetricsDto metricsMap = new CaseMetricsDto();
         try{
-            metricsMap = patientServiceClient.getAllMetrics().getBody().getData();
-            metrics.setTotalCases(metricsMap.get("totalCasesCount"));
-            metrics.setCasesInProgress(metricsMap.get("inProgressCasesCunt"));
-            metrics.setAverageCaseResolutionTime(Double.valueOf(metricsMap.get("averageCaseResolutionTime").toString()));
+
+            String startDate = "2025-01-01";
+            String endDate = "2025-12-31";
+
+            metricsMap = patientServiceClient.getCaseMetrics(startDate, endDate).getBody().getData();
+            metrics.setTotalCases(metricsMap.getTotalCases());
+            metrics.setCasesInProgress(metricsMap.getInProgressCount());
+            metrics.setAverageCaseResolutionTime(Double.valueOf("2.5"));
         } catch (Exception e) {
             log.error("Failed to retrieve cases metrics", e);
             log.error(e.getMessage());
@@ -159,6 +169,42 @@ public class AdminService {
         return pendingVerifications;
     }
 
+    /**
+     * Get Doctor Verification Details
+     * Retrieves complete doctor information from doctor-service for admin verification
+     *
+     * @param doctorId The ID of the doctor to retrieve details for
+     * @return Complete doctor verification details
+     * @throws BusinessException if doctor not found or service unavailable
+     */
+    public DoctorVerificationDetailsDto getDoctorVerificationDetails(Long doctorId) {
+        try {
+            log.info("Fetching verification details for doctor ID: {}", doctorId);
+
+            // Call doctor-service via Feign client
+            ResponseEntity<ApiResponse<DoctorVerificationDetailsDto>> response =
+                    doctorServiceClient.getDoctorVerificationDetails(doctorId);
+
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                DoctorVerificationDetailsDto details = response.getBody().getData();
+                log.info("Successfully retrieved verification details for doctor: {}", details.getFullName());
+                return details;
+            } else {
+                log.error("No data returned from doctor-service for doctor ID: {}", doctorId);
+                throw new BusinessException("Doctor verification details not found", HttpStatus.NOT_FOUND);
+            }
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error fetching doctor verification details for ID {}: {}", doctorId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to retrieve doctor verification details: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
     public PendingVerificationDto convertToPendingVerificationDto(DoctorDto doctor) {
         PendingVerificationDto pendingVerificationDto = new PendingVerificationDto();
         pendingVerificationDto.setDoctorId(doctor.getId());
@@ -189,6 +235,18 @@ public class AdminService {
 //        }
 //    }
 
+    public List<NotificationDto> getMyNotificationsByUserId(Long userId){
+        UserDetailsNew adminUser = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("Admin user not found", HttpStatus.NOT_FOUND));
+        List<NotificationDto> dtos = new ArrayList<>();
+        try{
+            dtos = notificationServiceClient.getUserNotifications(adminUser.getId()).getBody().getData();
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+        return dtos;
+    }
+
     public DoctorDetailsDto convertToDoctorDetailsDto(DoctorDto doctor){
         DoctorDetailsDto doctorDetailsDto = new DoctorDetailsDto();
         doctorDetailsDto.setId(doctor.getUserId());
@@ -210,7 +268,7 @@ public class AdminService {
             // Get doctor details
             DoctorProfileDto doctor =  doctorServiceClient.getDoctorDetails(doctorId).getBody().getData();
             report.setDoctorName(doctor.getFullName());
-            report.setSpecialization(doctor.getPrimarySpecializationCode());
+            report.setSpecialization(doctor.getPrimarySpecialization());
 
             // Performance metrics
             Map<String, Object> performance = doctorServiceClient.getDoctorPerformance
@@ -257,6 +315,9 @@ public class AdminService {
     // 32. Reset Password Implementation
     public ResetPasswordResponseDto resetUserPassword(Long userId) {
         String temporaryPassword = generateTemporaryPassword();
+        //TODO remove this log.
+        log.info("Reset password for user {}, temp password: {}", userId, temporaryPassword);
+
         authServiceClient.resetPassword(userId, temporaryPassword);
 
         ResetPasswordResponseDto response = new ResetPasswordResponseDto();
@@ -461,5 +522,304 @@ public class AdminService {
         // Update payment and revenue statistics
         log.info("Updating payment stats: type={}, amount={}", paymentType, amount);
         // Implement financial statistics logic
+    }
+
+    /**
+     * Suspend a user account
+     */
+    @Transactional
+    public void suspendUser(Long userId, String reason) {
+        try {
+            // Update user status to SUSPENDED via auth service
+            authServiceClient.updateUserStatus(userId, "SUSPENDED", reason);
+
+            log.info("User account {} suspended. Reason: {}", userId, reason);
+
+            // TODO: Send notification to user about suspension
+            // You can add Kafka event publishing here if needed
+
+        } catch (Exception e) {
+            log.error("Failed to suspend user {}: {}", userId, e.getMessage());
+            throw new BusinessException("Failed to suspend user account", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Unsuspend (Activate) a user account
+     */
+    @Transactional
+    public void unsuspendUser(Long userId) {
+        try {
+            // Update user status to ACTIVE via auth service
+            authServiceClient.updateUserStatus(userId, "ACTIVE", "Account re-enabled by admin");
+
+            log.info("User account {} activated", userId);
+
+            // TODO: Send notification to user about activation
+            // You can add Kafka event publishing here if needed
+
+        } catch (Exception e) {
+            log.error("Failed to activate user {}: {}", userId, e.getMessage());
+            throw new BusinessException("Failed to activate user account", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Delete a user account permanently
+     */
+    @Transactional
+    public void deleteUser(Long userId) {
+        try {
+            // Call auth service to delete the user
+            authServiceClient.deleteUser(userId);
+
+            log.info("User account {} deleted", userId);
+
+            // TODO: You may want to add cleanup logic here:
+            // - Delete related data in other microservices via Kafka events
+            // - Archive user data for compliance
+            // - Send final notification to user email
+
+        } catch (Exception e) {
+            log.error("Failed to delete user {}: {}", userId, e.getMessage());
+            throw new BusinessException("Failed to delete user account", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Get user details by ID
+     */
+    public UserDto getUserById(Long userId) {
+        try {
+            // Call auth service to get user details
+            ResponseEntity<ApiResponse<UserDto>> response = authServiceClient.getUserById(userId);
+            return response.getBody().getData();
+        } catch (Exception e) {
+            log.error("Failed to get user {}: {}", userId, e.getMessage());
+            throw new BusinessException("User not found", HttpStatus.NOT_FOUND);
+        }
+    }
+
+    /**
+     * Verify Doctor - Approve or Reject
+     * @param doctorId The ID of the doctor to verify
+     * @param verificationData Contains approved status, reason, and notes
+     * @return Verification response with status and message
+     */
+    public DoctorVerificationResponseDto verifyDoctor(Long doctorId, VerifyDoctorRequestDto verificationData) {
+        try {
+            log.info("Admin verifying doctor ID: {} - Approved: {}", doctorId, verificationData.getApproved());
+
+            // Validate request
+            if (!verificationData.getApproved() &&
+                    (verificationData.getReason() == null || verificationData.getReason().trim().isEmpty())) {
+                throw new BusinessException(
+                        "Rejection reason is required when rejecting a doctor",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Call doctor-service via Feign
+            ResponseEntity<ApiResponse<DoctorVerificationResponseDto>> response =
+                    doctorServiceClient.verifyDoctor(doctorId, verificationData);
+
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                DoctorVerificationResponseDto result = response.getBody().getData();
+
+                // Log the action
+                log.info("Doctor {} verification {} by admin",
+                        doctorId,
+                        verificationData.getApproved() ? "APPROVED" : "REJECTED");
+
+                publishDoctorVerificationNotification(result, verificationData.getApproved(), verificationData.getReason());
+
+                return result;
+            } else {
+                log.error("Empty response from doctor-service for doctor ID: {}", doctorId);
+                throw new BusinessException(
+                        "Failed to verify doctor: Empty response from service",
+                        HttpStatus.INTERNAL_SERVER_ERROR
+                );
+            }
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error verifying doctor ID {}: {}", doctorId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to verify doctor: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    /**
+     * Reject Doctor Verification
+     * Convenience method specifically for rejections
+     */
+    public DoctorVerificationResponseDto rejectDoctorVerification(Long doctorId, String reason) {
+        try {
+            log.info("Admin rejecting doctor ID: {} with reason: {}", doctorId, reason);
+
+            if (reason == null || reason.trim().isEmpty()) {
+                throw new BusinessException(
+                        "Rejection reason is required",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+
+            RejectDoctorRequestDto request = RejectDoctorRequestDto.builder()
+                    .reason(reason)
+                    .build();
+
+            ResponseEntity<ApiResponse<DoctorVerificationResponseDto>> response =
+                    doctorServiceClient.rejectDoctor(doctorId, request);
+
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                DoctorVerificationResponseDto result = response.getBody().getData();
+
+                publishDoctorVerificationNotification(result, false, reason);
+                log.info("Doctor {} rejected successfully", doctorId);
+                return result;
+            } else {
+                throw new BusinessException(
+                        "Failed to reject doctor: Empty response from service",
+                        HttpStatus.INTERNAL_SERVER_ERROR
+                );
+            }
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error rejecting doctor ID {}: {}", doctorId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to reject doctor: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    /**
+     * Update Doctor Status (Active/Inactive/Suspended)
+     * @param doctorId The ID of the doctor
+     * @param status The new status (ACTIVE, INACTIVE, SUSPENDED)
+     */
+    public void updateDoctorStatus(Long doctorId, String status) {
+        try {
+            log.info("Admin updating doctor ID {} status to: {}", doctorId, status);
+
+            // Validate status
+            if (!status.matches("(?i)ACTIVE|INACTIVE|SUSPENDED")) {
+                throw new BusinessException(
+                        "Invalid status. Valid values: ACTIVE, INACTIVE, SUSPENDED",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+
+            UpdateDoctorStatusRequestDto request = UpdateDoctorStatusRequestDto.builder()
+                    .status(status.toUpperCase())
+                    .build();
+
+            ResponseEntity<ApiResponse<Void>> response =
+                    doctorServiceClient.updateDoctorStatus(doctorId, request);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("Doctor {} status updated to {} successfully", doctorId, status);
+
+
+            } else {
+                throw new BusinessException(
+                        "Failed to update doctor status",
+                        HttpStatus.INTERNAL_SERVER_ERROR
+                );
+            }
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error updating doctor ID {} status: {}", doctorId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to update doctor status: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    /**
+     * Get All Doctors with Filters and Pagination
+     * @param filters Filter criteria for doctors
+     * @return Paginated list of doctor summaries
+     */
+    public Page<DoctorSummaryDto> getAllDoctors(DoctorFilterDto filters) {
+        try {
+            log.info("Fetching all doctors with filters: verificationStatus={}, specialization={}, searchTerm={}",
+                    filters.getVerificationStatus(),
+                    filters.getSpecialization(),
+                    filters.getSearchTerm());
+
+            ResponseEntity<ApiResponse<Page<DoctorSummaryDto>>> response =
+                    doctorServiceClient.getAllDoctors(
+                            filters.getSearchTerm(),
+                            filters.getVerificationStatus(),
+                            filters.getSpecialization(),
+                            filters.getIsAvailable(),
+                            filters.getEmergencyMode(),
+                            filters.getMinYearsExperience(),
+                            filters.getMaxYearsExperience(),
+                            filters.getMinRating(),
+                            filters.getCity(),
+                            filters.getCountry(),
+                            filters.getPage(),
+                            filters.getSize(),
+                            filters.getSortBy(),
+                            filters.getSortDirection()
+                    );
+
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                Page<DoctorSummaryDto> doctors = response.getBody().getData();
+                log.info("Retrieved {} doctors (page {} of {})",
+                        doctors.getNumberOfElements(),
+                        doctors.getNumber() + 1,
+                        doctors.getTotalPages());
+                return doctors;
+            } else {
+                log.warn("Empty response when fetching doctors");
+                return Page.empty();
+            }
+
+        } catch (Exception e) {
+            log.error("Error fetching doctors: {}", e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to fetch doctors: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    private void publishDoctorVerificationNotification(
+            DoctorVerificationResponseDto result,
+            Boolean approved, String reason) {
+
+        // Example notification event
+    /*
+    NotificationEvent event = NotificationEvent.builder()
+        .recipientId(result.getDoctorId())
+        .recipientType("DOCTOR")
+        .type(approved ? "VERIFICATION_APPROVED" : "VERIFICATION_REJECTED")
+        .title(approved ? "Verification Approved" : "Verification Rejected")
+        .message(approved
+            ? "Congratulations! Your doctor profile has been verified."
+            : "Your doctor verification was not approved. Please contact support.")
+        .build();
+
+    notificationProducer.sendNotification(event);
+    */
+
+        log.info("Send notification to doctor {} about verification {}",
+                result.getDoctorId(),
+                approved ? "approval" : "rejection");
+
+        adminEventProducer.sendDoctorStatusChangeNotification( result.getDoctorId(), result.getDoctorEmail(),
+                result.getFullName(), result.getStatus(), reason, approved);
     }
 }

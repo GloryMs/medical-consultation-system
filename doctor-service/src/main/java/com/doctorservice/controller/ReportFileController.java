@@ -13,7 +13,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Controller for serving encrypted PDF report files
@@ -167,7 +166,7 @@ public class ReportFileController {
             boolean exists = fileStorageService.fileExists(fileUrl);
             if (!exists) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error("File not found"));
+                        .body(ApiResponse.error("File not found", HttpStatus.BAD_REQUEST));
             }
 
             long encryptedSize = fileStorageService.getFileSize(fileUrl);
@@ -189,7 +188,7 @@ public class ReportFileController {
         } catch (Exception ex) {
             log.error("Error getting file metadata: {}", ex.getMessage(), ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Error getting file metadata"));
+                    .body(ApiResponse.error("Error getting file metadata", HttpStatus.BAD_REQUEST));
         }
     }
 

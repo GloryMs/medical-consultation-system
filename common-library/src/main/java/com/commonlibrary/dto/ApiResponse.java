@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
 
@@ -34,7 +35,7 @@ public class ApiResponse<T> {
                 .build();
     }
 
-    public static <T> ApiResponse<T> error(String message) {
+    public static <T> ApiResponse<T> error(String message, HttpStatus badRequest) {
         return ApiResponse.<T>builder()
                 .success(false)
                 .message(message)

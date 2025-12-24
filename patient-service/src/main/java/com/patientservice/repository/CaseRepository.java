@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +31,8 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
     Long countByStatusInAndPatientIdAndIsDeletedFalse(List<CaseStatus> statuses, Long patientId);
     Long countByStatusInAndIsDeletedFalse(List<CaseStatus> statuses);
     Long countByPatientIdAndIsDeletedFalse(Long patientId);
+
+    List<Case> findBySubmittedAtBetweenAndIsDeletedFalse(LocalDateTime submittedAtAfter, LocalDateTime submittedAtBefore);
 
 //    @Query("SELECT AVG(AGE(c.closedAt, c.createdAt)) FROM Case c WHERE c.status = 'CLOSED'")
 //    String calculateAverageResolutionTime();

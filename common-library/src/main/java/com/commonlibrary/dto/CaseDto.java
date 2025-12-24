@@ -43,4 +43,8 @@ public class CaseDto {
     private LocalDateTime feeSetAt;
     private String medicalReportFileLink;
     private Long reportId;
+
+    //added for admin use for now: must be checked later to be added/updated from different places
+    private String doctorName;
+    private Long assignedDoctorId;
 }

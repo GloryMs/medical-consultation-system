@@ -153,6 +153,19 @@ public class Doctor extends BaseEntity {
     @JsonManagedReference
     private List<ConsultationReport> consultationReports;
 
+    // ===== VERIFICATION TRACKING =====
+    @Column(length = 2000)
+    private String verificationNotes;  // Admin notes during verification process
+
+    @Column(length = 500)
+    private String rejectionReason;    // Reason for rejection if verification failed
+
+    @ElementCollection
+    @CollectionTable(name = "doctor_certifications",
+            joinColumns = @JoinColumn(name = "doctor_id"))
+    @Column(name = "certification", length = 255)
+    private Set<String> certifications = new HashSet<>();
+
     // ===== BUSINESS LOGIC METHODS =====
 
     /**

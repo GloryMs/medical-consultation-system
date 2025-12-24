@@ -18,7 +18,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleBusinessException(BusinessException ex) {
         return ResponseEntity
                 .status(ex.getStatus())
-                .body(ApiResponse.error(ex.getMessage()));
+                .body(ApiResponse.error(ex.getMessage(), HttpStatus.BAD_REQUEST));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -32,13 +32,13 @@ public class GlobalExceptionHandler {
         });
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(errors.toString()));
+                .body(ApiResponse.error(errors.toString(), HttpStatus.BAD_REQUEST));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<?>> handleGlobalException(Exception ex) {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("An unexpected error occurred: " + ex.getMessage()));
+                .body(ApiResponse.error("An unexpected error occurred: " + ex.getMessage(), HttpStatus.BAD_REQUEST));
     }
 }

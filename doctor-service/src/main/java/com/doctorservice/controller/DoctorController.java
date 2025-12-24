@@ -17,6 +17,10 @@ import com.doctorservice.service.DoctorService;
 import com.doctorservice.service.InternalDoctorService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.converters.models.Pageable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -638,10 +642,131 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(doctors));
     }
 
+    /**
+     * Verify Doctor (Approve/Reject)
+     * Internal endpoint called by admin-service
+     * POST /api/doctors/{doctorId}/verify
+     */
+    @PostMapping("/{doctorId}/verify")
+    public ResponseEntity<ApiResponse<DoctorVerificationResponseDto>> verifyDoctor(
+            @PathVariable Long doctorId,
+            @Valid @RequestBody VerifyDoctorRequestDto request) {
+
+        DoctorVerificationResponseDto response = internalDoctorService.verifyDoctor(
+                doctorId,
+                request.getApproved(),
+                request.getReason(),
+                request.getNotes()
+        );
+
+        String message = request.getApproved()
+                ? "Doctor verified successfully"
+                : "Doctor verification rejected";
+
+        return ResponseEntity.ok(ApiResponse.success(response, message));
+    }
+
+    /**
+     * Reject Doctor Verification
+     * Internal endpoint called by admin-service
+     * POST /api/doctors/{doctorId}/reject
+     */
+    @PostMapping("/{doctorId}/reject")
+    public ResponseEntity<ApiResponse<DoctorVerificationResponseDto>> rejectDoctor(
+            @PathVariable Long doctorId,
+            @Valid @RequestBody RejectDoctorRequestDto request) {
+
+        DoctorVerificationResponseDto response = internalDoctorService.rejectDoctor(
+                doctorId,
+                request.getReason(),
+                request.getAdditionalNotes()
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(response, "Doctor verification rejected"));
+    }
+
+    /**
+     * Update Doctor Status (Active/Inactive/Suspended)
+     * Internal endpoint called by admin-service
+     * PUT /api/doctors/{doctorId}/status
+     */
+    @PutMapping("/{doctorId}/status")
+    public ResponseEntity<ApiResponse<Void>> updateDoctorStatus(
+            @PathVariable Long doctorId,
+            @Valid @RequestBody UpdateDoctorStatusRequestDto request) {
+
+        internalDoctorService.updateDoctorStatus(
+                doctorId,
+                request.getStatus(),
+                request.getReason()
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(null, "Doctor status updated to " + request.getStatus()));
+    }
+
+    /**
+     * Get All Doctors with Filters
+     * Internal endpoint called by admin-service
+     * GET /api/doctors
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<DoctorSummaryDto>>> getAllDoctors(
+            @RequestParam(required = false) String searchTerm,
+            @RequestParam(required = false) VerificationStatus verificationStatus,
+            @RequestParam(required = false) String specialization,
+            @RequestParam(required = false) Boolean isAvailable,
+            @RequestParam(required = false) Boolean emergencyMode,
+            @RequestParam(required = false) Integer minYearsExperience,
+            @RequestParam(required = false) Integer maxYearsExperience,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String country,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "DESC") String sortDirection) {
+
+        // Build filter DTO
+        DoctorFilterDto filters = DoctorFilterDto.builder()
+                .searchTerm(searchTerm)
+                .verificationStatus(verificationStatus)
+                .specialization(specialization)
+                .isAvailable(isAvailable)
+                .emergencyMode(emergencyMode)
+                .minYearsExperience(minYearsExperience)
+                .maxYearsExperience(maxYearsExperience)
+                .minRating(minRating)
+                .city(city)
+                .country(country)
+                .page(page)
+                .size(size)
+                .sortBy(sortBy)
+                .sortDirection(sortDirection)
+                .build();
+
+        // Create pageable
+        Sort.Direction direction = sortDirection.equalsIgnoreCase("DESC")
+                ? Sort.Direction.DESC
+                : Sort.Direction.ASC;
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+
+        Page<DoctorSummaryDto> doctors = internalDoctorService.getAllDoctors(filters, pageable);
+
+        return ResponseEntity.ok(ApiResponse.success(doctors));
+    }
+
     @GetMapping("/status/pending-verifications/count")
     public ResponseEntity<ApiResponse<Long>> getPendingVerificationsCount(){
         Long count = doctorRepository.countByVerificationStatus(VerificationStatus.PENDING);
         return ResponseEntity.ok(ApiResponse.success(count));
+    }
+
+    @GetMapping("/{doctorId}/verification-details")
+    public ResponseEntity<ApiResponse<DoctorVerificationDetailsDto>> getDoctorVerificationDetails(
+            @PathVariable Long doctorId) {
+
+        DoctorVerificationDetailsDto details = internalDoctorService.getDoctorVerificationDetails(doctorId);
+        return ResponseEntity.ok(ApiResponse.success(details));
     }
 
     @GetMapping("/status/{doctorId}")

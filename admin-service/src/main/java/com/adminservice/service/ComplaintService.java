@@ -78,12 +78,13 @@ public class ComplaintService {
 
         complaintRepository.save(complaint);
 
+        //TODO handle this:
         // Notify the patient
-        notificationServiceClient.sendNotification(
-                0L, // System notification
-                complaint.getPatientId(),
-                "Complaint Response",
-                "Your complaint has been reviewed. Status: " + dto.getStatus()
-        );
+//        notificationServiceClient.sendNotification(
+//                0L, // System notification
+//                complaint.getPatientId(),
+//                "Complaint Response",
+//                "Your complaint has been reviewed. Status: " + dto.getStatus()
+//        );
     }
 }

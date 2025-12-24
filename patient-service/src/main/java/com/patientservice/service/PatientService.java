@@ -153,6 +153,7 @@ public class PatientService {
                 .patient(patient)
                 .dependent(dependent) // NEW: Link to dependent (can be null)
                 .caseTitle(dto.getCaseTitle())
+                .patientName(patient.getFullName())
                 .description(dto.getDescription())
                 .primaryDiseaseCode(dto.getPrimaryDiseaseCode())
                 .secondaryDiseaseCodes(dto.getSecondaryDiseaseCodes())

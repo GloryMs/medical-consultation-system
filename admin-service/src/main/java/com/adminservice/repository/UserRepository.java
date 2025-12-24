@@ -4,13 +4,16 @@ import com.adminservice.entity.UserDetailsNew;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<UserDetailsNew, Long> {
     Long countByRole(String role);
     Long countByStatus(String status);
+
+    Optional<UserDetailsNew> findByUserId(Long userId);
     
 //    @Query("SELECT COUNT(u) FROM UserDetailsNew u WHERE DATE(u.createdAt) = CURRENT_DATE")
 //    Long countUsersCreatedToday();
