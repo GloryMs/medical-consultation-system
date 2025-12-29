@@ -2,6 +2,7 @@ package com.paymentservice.service;
 
 import com.commonlibrary.dto.DoctorEarningsSummaryDto;
 import com.commonlibrary.dto.PaymentDto;
+import com.commonlibrary.dto.PaymentRecordDto;
 import com.commonlibrary.entity.PaymentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.commonlibrary.dto.ChartDataPointDto;
@@ -136,20 +137,23 @@ public class PaymentService {
                 .collect(Collectors.toList());
     }
 
-    public List<Payment> getAllPaymentsBetweenDates(LocalDate startDate, LocalDate endDate) {
+    public List<PaymentRecordDto> getAllPaymentsBetweenDates(LocalDate startDate, LocalDate endDate) {
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end = endDate.atTime(23, 59, 59);
-        return paymentRepository.findByProcessedAtBetween(start, end);
+        List<Payment> payments = paymentRepository.findByProcessedAtBetween(start, end);
+        return payments.stream()
+                .map(this::mapToRecordDto)
+                .collect(Collectors.toList());
     }
 
-    public Double getTotalRevenue() {
-        return paymentRepository.calculateTotalRevenue();
+    public BigDecimal getTotalRevenue() {
+        return  paymentRepository.calculateTotalRevenue(PaymentStatus.COMPLETED);
     }
 
-    public Double getMonthlyRevenue() {
+    public BigDecimal getMonthlyRevenue() {
         LocalDateTime startOfMonth = LocalDate.now().withDayOfMonth(1).atStartOfDay();
         LocalDateTime now = LocalDateTime.now();
-        return paymentRepository.calculateRevenueBetween(startOfMonth, now);
+        return paymentRepository.calculateRevenueBetween( PaymentStatus.COMPLETED, startOfMonth, now);
     }
 
     public Map<String, Object> getPaymentDataBetweenDates(LocalDate startDate, LocalDate endDate) {
@@ -336,9 +340,9 @@ public class PaymentService {
     public Map<String, Object> getDoctorEarningsStats(Long doctorId) {
         Map<String, Object> stats = new HashMap<>();
 
-        Double totalEarnings = paymentRepository.calculateDoctorTotalEarnings(doctorId);
-        Long completedCount = paymentRepository.countCompletedPaymentsByDoctor(doctorId);
-        Double averageEarnings = paymentRepository.calculateDoctorAverageEarnings(doctorId);
+        BigDecimal totalEarnings = paymentRepository.calculateDoctorTotalEarnings(doctorId, PaymentStatus.COMPLETED);
+        Long completedCount = paymentRepository.countCompletedPaymentsByDoctor(doctorId, PaymentStatus.COMPLETED);
+        BigDecimal averageEarnings = paymentRepository.calculateDoctorAverageEarnings(doctorId, PaymentStatus.COMPLETED);
 
         stats.put("totalEarnings", totalEarnings != null ? totalEarnings : 0.0);
         stats.put("completedConsultations", completedCount != null ? completedCount : 0L);
@@ -364,6 +368,16 @@ public class PaymentService {
         dto.setDescription(description);
 
         return dto;
+    }
+
+    private PaymentRecordDto mapToRecordDto(Payment payment) {
+        return PaymentRecordDto.builder()
+                .id(payment.getId())
+                .type(payment.getPaymentType().toString())
+                .amount(payment.getAmount().doubleValue())
+                .status(payment.getStatus().toString())
+                .processedAt(payment.getProcessedAt())
+                .build();
     }
 
     /**

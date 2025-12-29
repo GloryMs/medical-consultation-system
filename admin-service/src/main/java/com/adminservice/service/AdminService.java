@@ -398,7 +398,7 @@ public class AdminService {
 
     // Payment-related methods
     public List<PaymentRecordDto> getAllPaymentRecords(LocalDate startDate, LocalDate endDate) {
-        return paymentServiceClient.getAllPayments(startDate, endDate);
+        return paymentServiceClient.getAllPayments(startDate, endDate).getBody().getData();
     }
 
     public List<SubscriptionPaymentDto> getSubscriptionPayments() {

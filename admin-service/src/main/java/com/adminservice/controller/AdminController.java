@@ -5,6 +5,7 @@ import com.adminservice.entity.Complaint;
 import com.adminservice.entity.SystemConfig;
 import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
+import com.adminservice.feign.PaymentServiceClient;
 import com.adminservice.service.AdminCaseService;
 import com.adminservice.service.AdminService;
 import com.adminservice.service.ComplaintService;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,6 +34,7 @@ public class AdminController {
     private final CommonConfigClient configService;
     private final AuthServiceClient authServiceClient;
     private final ComplaintService complaintService;
+    private final PaymentServiceClient paymentServiceClient;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardDto>> getDashboard() {
@@ -343,8 +346,17 @@ public class AdminController {
     // View All Payment Records - Already exists in original implementation
     @GetMapping("/payments")
     public ResponseEntity<ApiResponse<List<PaymentRecordDto>>> getAllPaymentRecords(
-            @RequestParam LocalDate startDate,
-            @RequestParam LocalDate endDate) {
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+
+        // Set default dates if not provided
+        if (startDate == null) {
+            startDate = LocalDate.now().minusYears(1); // Default to 1 year ago
+        }
+        if (endDate == null) {
+            endDate = LocalDate.now(); // Default to today
+        }
+
         List<PaymentRecordDto> records = adminService.getAllPaymentRecords(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(records));
     }
@@ -366,6 +378,25 @@ public class AdminController {
             @Valid @RequestBody RefundRequestDto dto) {
         adminService.processRefund(dto);
         return ResponseEntity.ok(ApiResponse.success(null, "Refund processed"));
+    }
+
+    /**
+     * Get comprehensive payment analytics
+     * GET /api/admin/payments/analytics
+     *
+     * @param startDate Start of analytics period (optional, defaults to 30 days ago) - ISO 8601 format
+     * @param endDate End of analytics period (optional, defaults to now) - ISO 8601 format
+     * @return Comprehensive payment analytics data
+     */
+    @GetMapping("/payments/analytics")
+    public ResponseEntity<ApiResponse<PaymentAnalyticsDto>> getPaymentAnalytics(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        ResponseEntity<ApiResponse<PaymentAnalyticsDto>> response =
+                paymentServiceClient.getPaymentAnalytics(startDate, endDate);
+
+        return response;
     }
 
     @GetMapping("/config/diseases")

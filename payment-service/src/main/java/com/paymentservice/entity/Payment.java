@@ -1,5 +1,6 @@
 package com.paymentservice.entity;
 
+import com.commonlibrary.converter.PaymentMethodConverter;
 import com.commonlibrary.entity.BaseEntity;
 import com.commonlibrary.entity.PaymentMethod;
 import com.commonlibrary.entity.PaymentStatus;
@@ -58,7 +59,7 @@ public class Payment extends BaseEntity {
     @Column(nullable = false, length = 50)
     private PaymentStatus status;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = PaymentMethodConverter.class)
     @Column(length = 50)
     private PaymentMethod paymentMethod;
 

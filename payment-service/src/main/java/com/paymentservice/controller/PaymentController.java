@@ -1,15 +1,11 @@
 package com.paymentservice.controller;
 
-import com.commonlibrary.dto.ApiResponse;
-import com.commonlibrary.dto.DoctorEarningsSummaryDto;
-import com.commonlibrary.dto.PaymentDto;
+import com.commonlibrary.dto.*;
 import com.commonlibrary.entity.PaymentStatus;
-import com.commonlibrary.dto.ChartDataPointDto;
 import com.paymentservice.config.StripeConfig;
 import com.paymentservice.dto.EarningsReportDto;
 import com.paymentservice.dto.PaymentHistoryDto;
 import com.paymentservice.dto.PaymentReceiptDto;
-import com.commonlibrary.dto.ProcessPaymentDto;
 import com.paymentservice.entity.Payment;
 import com.paymentservice.service.PaymentProcessingService;
 import com.paymentservice.service.PaymentService;
@@ -26,6 +22,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -80,29 +77,47 @@ public class PaymentController {
     }
 
     @GetMapping("/all")
-    public ResponseEntity<ApiResponse<List<Payment>>> getAllPayments(
-            @RequestParam LocalDate startDate,
-            @RequestParam LocalDate endDate) {
-        List<Payment> payments = paymentService.getAllPaymentsBetweenDates(startDate, endDate);
+    public ResponseEntity<ApiResponse<List<PaymentRecordDto>>> getAllPayments(
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+
+        // Set default dates if not provided
+        if (startDate == null) {
+            startDate = LocalDate.now().minusYears(1); // Default to 1 year ago
+        }
+        if (endDate == null) {
+            endDate = LocalDate.now(); // Default to today
+        }
+
+        List<PaymentRecordDto> payments = paymentService.getAllPaymentsBetweenDates(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(payments));
     }
 
     @GetMapping("/revenue/total")
-    public ResponseEntity<ApiResponse<Double>> getTotalRevenue() {
-        Double revenue = paymentService.getTotalRevenue();
+    public ResponseEntity<ApiResponse<BigDecimal>> getTotalRevenue() {
+        BigDecimal revenue = paymentService.getTotalRevenue();
         return ResponseEntity.ok(ApiResponse.success(revenue));
     }
 
     @GetMapping("/revenue/monthly")
-    public ResponseEntity<ApiResponse<Double>> getMonthlyRevenue() {
-        Double revenue = paymentService.getMonthlyRevenue();
+    public ResponseEntity<ApiResponse<BigDecimal>> getMonthlyRevenue() {
+        BigDecimal revenue = paymentService.getMonthlyRevenue();
         return ResponseEntity.ok(ApiResponse.success(revenue));
     }
 
     @GetMapping("/data")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getPaymentDataBetweenDates(
-            @RequestParam LocalDate startDate,
-            @RequestParam LocalDate endDate) {
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+
+        // Set default dates if not provided
+        if (startDate == null) {
+            startDate = LocalDate.now().minusYears(1); // Default to 1 year ago
+        }
+        if (endDate == null) {
+            endDate = LocalDate.now(); // Default to today
+        }
+
         Map<String, Object> data = paymentService.getPaymentDataBetweenDates(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(data));
     }

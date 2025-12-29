@@ -1,12 +1,14 @@
 package com.paymentservice.controller;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.PaymentAnalyticsDto;
 import com.paymentservice.dto.DoctorBalanceDto;
 import com.paymentservice.dto.PayoutRequestDto;
 import com.paymentservice.dto.PayoutResponseDto;
 import com.paymentservice.entity.ConsultationFee;
 import com.paymentservice.service.ConsultationFeeService;
 import com.paymentservice.service.DoctorBalanceService;
+import com.paymentservice.service.PaymentAnalyticsService;
 import com.paymentservice.service.RefundService;
 import com.paymentservice.service.SystemConfigurationService;
 import jakarta.validation.Valid;
@@ -34,6 +36,7 @@ public class AdminController {
     private final DoctorBalanceService doctorBalanceService;
     private final RefundService refundService;
     private final SystemConfigurationService systemConfigService;
+    private final PaymentAnalyticsService paymentAnalyticsService;
     
     // ===== Consultation Fee Management =====
     
@@ -218,11 +221,78 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getRefundStatistics(
             @RequestParam LocalDateTime startDate,
             @RequestParam LocalDateTime endDate) {
-        
+
         Map<String, Object> stats = refundService.getRefundStatistics(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
-    
+
+    // ===== Payment Analytics =====
+
+    /**
+     * Get comprehensive payment analytics
+     *
+     * @param startDate Start of analytics period (optional, defaults to 30 days ago)
+     * @param endDate End of analytics period (optional, defaults to now)
+     * @return Payment analytics data including overview, revenue, transactions, payment methods, trends, and refunds
+     */
+    @GetMapping("/payments/analytics")
+    public ResponseEntity<ApiResponse<PaymentAnalyticsDto>> getPaymentAnalytics(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        try {
+            // Parse ISO 8601 datetime strings with timezone to LocalDateTime
+            LocalDateTime start = startDate != null ? parseDateTime(startDate) : null;
+            LocalDateTime end = endDate != null ? parseDateTime(endDate) : null;
+
+            PaymentAnalyticsDto analytics = paymentAnalyticsService.getPaymentAnalytics(start, end);
+
+            String message = String.format("Payment analytics generated for %d payments",
+                    analytics.getTotalPaymentsAnalyzed());
+
+            return ResponseEntity.ok(ApiResponse.success(analytics, message));
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid request parameters: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(e.getMessage(), HttpStatus.BAD_REQUEST));
+        } catch (Exception e) {
+            log.error("Failed to generate payment analytics", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to generate analytics: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+
+    /**
+     * Parse ISO 8601 datetime string (with or without timezone) to LocalDateTime
+     */
+    private LocalDateTime parseDateTime(String dateTimeStr) {
+        if (dateTimeStr == null || dateTimeStr.isEmpty()) {
+            return null;
+        }
+
+        try {
+            // Handle ISO 8601 format with 'Z' timezone indicator
+            if (dateTimeStr.endsWith("Z")) {
+                return java.time.Instant.parse(dateTimeStr)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalDateTime();
+            }
+            // Handle ISO 8601 format with timezone offset
+            else if (dateTimeStr.contains("+") || dateTimeStr.lastIndexOf('-') > 10) {
+                return java.time.OffsetDateTime.parse(dateTimeStr).toLocalDateTime();
+            }
+            // Handle plain LocalDateTime format
+            else {
+                return LocalDateTime.parse(dateTimeStr);
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse datetime: {}", dateTimeStr, e);
+            throw new IllegalArgumentException("Invalid datetime format: " + dateTimeStr +
+                    ". Expected ISO 8601 format (e.g., 2025-11-28T06:22:24.224Z)");
+        }
+    }
+
     // ===== System Configuration =====
     
     /**

@@ -26,7 +26,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ConsultationFeeService {
+public class StripeConsultationFeeService {
     
     private final ConsultationFeeRepository feeRepository;
     private final ConsultationFeeHistoryRepository feeHistoryRepository;

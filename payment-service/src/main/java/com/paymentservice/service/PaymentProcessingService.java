@@ -9,7 +9,7 @@ import com.paymentservice.entity.Payment;
 import com.paymentservice.exception.StripePaymentException;
 import com.paymentservice.kafka.PaymentEventProducer;
 import com.paymentservice.repository.PaymentRepository;
-import com.paymentservice.service.stripe.ConsultationFeeService;
+import com.paymentservice.service.stripe.StripeConsultationFeeService;
 import com.paymentservice.service.stripe.StripePaymentGateway;
 import com.stripe.model.BalanceTransaction;
 import com.stripe.model.Charge;
@@ -35,7 +35,7 @@ public class PaymentProcessingService {
     
     private final StripePaymentGateway stripePaymentGateway;
     private final PaymentRepository paymentRepository;
-    private final ConsultationFeeService consultationFeeService;
+    private final StripeConsultationFeeService stripeConsultationFeeService;
     private final SystemConfigurationService systemConfigService;
     private final PaymentEventProducer paymentEventProducer;
     
@@ -55,7 +55,7 @@ public class PaymentProcessingService {
             });
         
         // Get consultation fee based on doctor's specialization
-        BigDecimal consultationFee = consultationFeeService.getApplicableFee(doctorSpecialization);
+        BigDecimal consultationFee = stripeConsultationFeeService.getApplicableFee(doctorSpecialization);
         
         // Calculate platform fee
         BigDecimal platformFeePercentage = systemConfigService.getPlatformFeePercentage();

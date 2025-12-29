@@ -1,6 +1,7 @@
 package com.paymentservice.service;
 
 import com.commonlibrary.entity.PaymentStatus;
+import com.commonlibrary.entity.PaymentType;
 import com.paymentservice.entity.Payment;
 import com.paymentservice.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ public class InternalPaymentService {
     private final PaymentRepository paymentRepository;
     
     public Double getAverageConsultationFee() {
-        List<Payment> consultationPayments = paymentRepository.findByPaymentType("CONSULTATION");
+        List<Payment> consultationPayments = paymentRepository.findByPaymentType(PaymentType.CONSULTATION);
         if (consultationPayments.isEmpty()) {
             return 0.0;
         }
@@ -29,13 +30,13 @@ public class InternalPaymentService {
     }
     
     public List<Object> getSubscriptionPayments() {
-        return paymentRepository.findByPaymentType("SUBSCRIPTION").stream()
+        return paymentRepository.findByPaymentType(PaymentType.SUBSCRIPTION).stream()
                 .map(this::mapToSubscriptionPaymentDto)
                 .collect(Collectors.toList());
     }
     
     public List<Object> getConsultationPayments() {
-        return paymentRepository.findByPaymentType("CONSULTATION").stream()
+        return paymentRepository.findByPaymentType(PaymentType.CONSULTATION).stream()
                 .map(this::mapToConsultationPaymentDto)
                 .collect(Collectors.toList());
     }
