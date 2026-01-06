@@ -104,9 +104,9 @@ public class Case extends BaseEntity {
     private Integer maxDoctorsAllowed = 3;
 
     @Column(precision = 10, scale = 2)
-    private BigDecimal consultationFee; // Fee set by doctor for this specific case
+    private BigDecimal consultationFee = BigDecimal.valueOf(200.00);
 
-    private LocalDateTime feeSetAt; // When the doctor set the fee
+    private LocalDateTime feeSetAt;
 
     // Metadata
     private LocalDateTime submittedAt;
@@ -143,4 +143,16 @@ public class Case extends BaseEntity {
     public boolean isForDependent() {
         return dependent != null;
     }
+
+    //Medical Supervisor
+
+    @Column(name = "submitted_by_supervisor_id")
+    private Long submittedBySupervisorId;
+
+    @Column(name = "is_supervisor_managed")
+    private Boolean isSupervisorManaged = false;
+
+    @Column(name = "supervisor_notes")
+    private String supervisorNotes;
+
 }

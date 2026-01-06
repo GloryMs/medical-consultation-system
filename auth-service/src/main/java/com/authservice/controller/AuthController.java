@@ -5,6 +5,7 @@ import com.authservice.service.AuthService;
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.UserDto;
 import com.commonlibrary.dto.UserStasDto;
+import com.commonlibrary.entity.User;
 import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.entity.UserStatus;
 import jakarta.validation.Valid;
@@ -115,6 +116,30 @@ public class AuthController {
             @RequestParam String temporaryPassword) {
         authService.adminResetPassword(userId, temporaryPassword);
         return ResponseEntity.ok(ApiResponse.success(null, "Password reset successfully"));
+    }
+
+    /**
+     * Get user by email (for inter-service communication)
+     * GET /api/auth/users/by-email?email={email}
+     */
+    @GetMapping("/users/by-email")
+    public ResponseEntity<ApiResponse<User>> getUserByEmail(@RequestParam String email) {
+        User user = authService.getUserByEmail(email);
+        if (user == null) {
+            return ResponseEntity.ok(ApiResponse.success(null, "User not found"));
+        }
+        return ResponseEntity.ok(ApiResponse.success(user, "User retrieved successfully"));
+    }
+
+    /**
+     * Create user account (supervisor creating patient)
+     * POST /api/auth/users/create
+     */
+    @PostMapping("/users/create")
+    public ResponseEntity<ApiResponse<UserDto>> createUser(@Valid @RequestBody com.commonlibrary.dto.CreateUserRequest request) {
+        UserDto user = authService.createUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(user, "User created successfully"));
     }
 
 }

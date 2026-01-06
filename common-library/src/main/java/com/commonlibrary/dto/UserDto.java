@@ -14,6 +14,7 @@ public class UserDto {
     private String role;
     private String status;
     private String fullName;
+    private String phoneNumber;
     private Boolean emailVerified;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

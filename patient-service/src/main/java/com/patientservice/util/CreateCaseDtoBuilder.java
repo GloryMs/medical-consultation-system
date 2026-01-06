@@ -2,12 +2,11 @@ package com.patientservice.util;
 
 import com.commonlibrary.entity.CaseComplexity;
 import com.commonlibrary.entity.UrgencyLevel;
-import com.patientservice.dto.CreateCaseDto;
+import com.commonlibrary.dto.CreateCaseDto;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**

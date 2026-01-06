@@ -47,4 +47,7 @@ public class CaseDto {
     //added for admin use for now: must be checked later to be added/updated from different places
     private String doctorName;
     private Long assignedDoctorId;
+
+    //Medical Supervisor Info
+    private Long supervisorId;
 }

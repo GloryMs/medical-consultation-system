@@ -32,6 +32,7 @@ public class AdminEventConsumer {
             if ("DOCTOR".equals(role)) {
                 adminService.notifyAdminOfNewDoctor(userId, email);
             }
+
             
         } catch (Exception e) {
             log.error("Error processing user registration event: {}", e.getMessage(), e);

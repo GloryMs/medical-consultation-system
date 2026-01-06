@@ -80,4 +80,14 @@ public class Patient extends BaseEntity {
     private String country;
 
     private String postalCode;
+
+    //Medical Supervisor:
+    // Add these fields:
+
+    @Column(name = "created_by_supervisor_id")
+    private Long createdBySupervisorId;
+
+    @Column(name = "is_supervisor_managed")
+    private Boolean isSupervisorManaged = false;
+
 }

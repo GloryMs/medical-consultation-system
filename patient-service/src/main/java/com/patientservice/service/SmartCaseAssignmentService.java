@@ -942,18 +942,26 @@ public class SmartCaseAssignmentService {
      * Validate that a case can be assigned
      */
     private void validateCaseForAssignment(Case medicalCase) {
-        if (medicalCase.getStatus() != CaseStatus.PENDING && medicalCase.getStatus() != CaseStatus.SUBMITTED) {
+        if (medicalCase.getStatus() != CaseStatus.PENDING &&
+                medicalCase.getStatus() != CaseStatus.SUBMITTED) {
             throw new BusinessException("Case is not in a state that allows assignment", HttpStatus.BAD_REQUEST);
         }
 
-        Patient patient = medicalCase.getPatient();
-        if ( patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
-            throw new BusinessException("Patient must have active subscription", HttpStatus.PAYMENT_REQUIRED);
-        }
+        //Check if the case was submitted by Medical Supervisor or by Patient
+        //If case was submitted by Medical Supervisor, no need to check subscription
+        boolean isManagedBySupervisor = medicalCase.getIsSupervisorManaged();
+        Long supervisorId = medicalCase.getSubmittedBySupervisorId();
 
-        if (patient.getSubscriptionExpiry() != null &&
-                patient.getSubscriptionExpiry().isBefore(LocalDateTime.now())) {
-            throw new BusinessException("Patient subscription has expired", HttpStatus.PAYMENT_REQUIRED);
+        if( !isManagedBySupervisor && supervisorId == null ) {
+            Patient patient = medicalCase.getPatient();
+            if ( patient.getAccountLocked() || patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+                throw new BusinessException("Patient must have active subscription", HttpStatus.PAYMENT_REQUIRED);
+            }
+
+            if (patient.getSubscriptionExpiry() != null &&
+                    patient.getSubscriptionExpiry().isBefore(LocalDateTime.now())) {
+                throw new BusinessException("Patient subscription has expired", HttpStatus.PAYMENT_REQUIRED);
+            }
         }
     }
 

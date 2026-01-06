@@ -290,6 +290,57 @@ public class PatientController {
         }
     }
 
+    /**
+     * JSON-based case creation endpoint for supervisor-service and other internal services
+     * Files can be uploaded separately via /cases/{caseId}/attachments endpoint
+     */
+    @PostMapping(value = "/cases/json", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ApiResponse<CaseDto>> createCaseJson(
+            @RequestHeader("X-User-Id") Long userId,
+            @Valid @RequestBody CreateCaseDto dto) {
+
+        try {
+            log.info("JSON endpoint - Creating case for user: {}", userId);
+            log.info("Case Title: {}", dto.getCaseTitle());
+            log.info("Required Specialization: {}", dto.getRequiredSpecialization());
+
+            // Validate required fields
+            if (userId == null || userId <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("User ID is required and must be valid", HttpStatus.BAD_REQUEST));
+            }
+
+            // Set files to empty list for JSON endpoint (files uploaded separately)
+            dto.setFiles(new java.util.ArrayList<>());
+
+            // Create case using the existing service method
+            Case medicalCase = patientService.createCase(userId, dto);
+
+            // Convert Case entity to CaseDto
+            CaseDto caseDto = convertToCaseDto(medicalCase);
+
+            log.info("Case created successfully via JSON endpoint - caseId: {}", medicalCase.getId());
+
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success(caseDto, "Case created successfully. Files can be uploaded via /cases/" + medicalCase.getId() + "/attachments"));
+
+        } catch (BusinessException e) {
+            log.error("Business error creating case via JSON for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.status(e.getStatus())
+                    .body(ApiResponse.error(e.getMessage(), e.getStatus()));
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Validation error creating case via JSON for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(e.getMessage(), HttpStatus.BAD_REQUEST));
+
+        } catch (Exception e) {
+            log.error("Unexpected error creating case via JSON for user {}: {}", userId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to create case: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+
     @PutMapping("/cases/{caseId}")
     public ResponseEntity<ApiResponse<Void>> updateCase(@PathVariable Long caseId,
                                                         @RequestBody  UpdateCaseDto updatedCase){
@@ -508,5 +559,74 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
 
+    /**
+     * Helper method to convert Case entity to CaseDto
+     */
+    private CaseDto convertToCaseDto(Case medicalCase) {
+        CaseDto dto = new CaseDto();
+        dto.setId(medicalCase.getId());
+        dto.setPatientId(medicalCase.getPatient().getId());
+        dto.setPatientName(medicalCase.getPatient().getFullName());
+        dto.setDependantId(medicalCase.getDependent() != null ? medicalCase.getDependent().getId() : null);
+        dto.setCaseTitle(medicalCase.getCaseTitle());
+        dto.setDescription(medicalCase.getDescription());
+        dto.setStatus(medicalCase.getStatus());
+        dto.setRequiredSpecialization(medicalCase.getRequiredSpecialization());
+        dto.setCreatedAt(medicalCase.getCreatedAt());
+        dto.setPrimaryDiseaseCode(medicalCase.getPrimaryDiseaseCode());
+        dto.setSecondaryDiseaseCodes(medicalCase.getSecondaryDiseaseCodes());
+        dto.setSymptomCodes(medicalCase.getSymptomCodes());
+        dto.setCurrentMedicationCodes(medicalCase.getCurrentMedicationCodes());
+        dto.setSecondarySpecializations(medicalCase.getSecondarySpecializations());
+        dto.setPaymentStatus(medicalCase.getPaymentStatus());
+        dto.setComplexity(medicalCase.getComplexity());
+        dto.setUrgencyLevel(medicalCase.getUrgencyLevel());
+        dto.setRequiresSecondOpinion(medicalCase.getRequiresSecondOpinion());
+        dto.setMinDoctorsRequired(medicalCase.getMinDoctorsRequired());
+        dto.setMaxDoctorsAllowed(medicalCase.getMaxDoctorsAllowed());
+        dto.setSubmittedAt(medicalCase.getSubmittedAt());
+        dto.setFirstAssignedAt(medicalCase.getFirstAssignedAt());
+        dto.setLastAssignedAt(medicalCase.getLastAssignedAt());
+        dto.setClosedAt(medicalCase.getClosedAt());
+        dto.setAssignmentAttempts(medicalCase.getAssignmentAttempts());
+        dto.setRejectionCount(medicalCase.getRejectionCount());
+        dto.setIsDeleted(medicalCase.getIsDeleted());
+        dto.setConsultationFee(medicalCase.getConsultationFee());
+        dto.setFeeSetAt(medicalCase.getFeeSetAt());
+        dto.setMedicalReportFileLink(medicalCase.getMedicalReportFileLink());
+        dto.setReportId(medicalCase.getReportId());
+        return dto;
+    }
+
+    /**
+     * Create patient profile by supervisor
+     */
+    @PostMapping("/create-by-supervisor")
+    public ResponseEntity<ApiResponse<PatientProfileDto>> createPatientBySupervisor(
+            @Valid @RequestBody CreatePatientProfileRequest request,
+            @RequestHeader("X-Supervisor-Id") Long supervisorId) {
+
+        log.info("Creating patient profile by supervisor: {}", supervisorId);
+
+        PatientProfileDto patient = patientService.createPatientBySupervisor(request, supervisorId);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success(patient, "Patient profile created successfully" ));
+    }
+
+    /**
+     * Get patient by email
+     */
+    @GetMapping("/by-email")
+    public ResponseEntity<ApiResponse<PatientProfileDto>> getPatientByEmail(
+            @RequestParam String email) {
+
+        log.info("Getting patient by email: {}", email);
+
+        PatientProfileDto patient = patientService.getPatientByEmail(email);
+
+        return ResponseEntity.ok(ApiResponse.success(patient));
+    }
 
 }

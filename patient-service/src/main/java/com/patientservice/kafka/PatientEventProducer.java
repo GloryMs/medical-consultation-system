@@ -110,6 +110,22 @@ public class PatientEventProducer {
         log.info("Kafka - Assignment Notification for case {}", caseId);
     }
 
+    public void sendCreatePatientBySupervisorNotification(Long senderId, Long receiverId,
+                                                          String email, String password) {
+        NotificationDto doctorNotification = NotificationDto.builder()
+                .senderId(senderId)
+                .receiverId(receiverId)
+                .title("Account Created")
+                .message("Welcome to MediLink 24 platform, this notification is to inform your that your account with email: "+
+                        email +", has been created with temp password: "+ password)
+                .type(NotificationType.CASE)
+                .sendEmail(true)
+                .build();
+
+        kafkaTemplate.send("notification-topic", doctorNotification);
+        log.info("Kafka - Send temp password after creating an account for patient email {}", email);
+    }
+
     public void sendScheduleConfirmationEvent(Long caseId, Long patientId, Long doctorId) {
         // Send notification to Doctor about appointment confirmation
         NotificationDto patientNotification = NotificationDto.builder()
@@ -229,6 +245,26 @@ public class PatientEventProducer {
 
         } catch (Exception e) {
             log.error("Failed to send admin notification: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Send patient created event
+     * Used when supervisor creates a new patient account
+     */
+    public void sendPatientCreatedEvent(Long patientId, Long supervisorId) {
+        try {
+            Map<String, Object> event = new HashMap<>();
+            event.put("patientId", patientId);
+            event.put("supervisorId", supervisorId);
+            event.put("eventType", "PATIENT_CREATED_BY_SUPERVISOR");
+            event.put("timestamp", System.currentTimeMillis());
+
+            kafkaTemplate.send("patient-created-topic", event);
+            log.info("Sent patient created event - patientId: {}, supervisorId: {}", patientId, supervisorId);
+
+        } catch (Exception e) {
+            log.error("Failed to send patient created event for patientId {}: {}", patientId, e.getMessage());
         }
     }
 }

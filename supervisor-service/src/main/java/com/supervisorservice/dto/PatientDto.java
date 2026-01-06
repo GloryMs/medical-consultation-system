@@ -1,14 +1,13 @@
-package com.patientservice.dto;
+package com.supervisorservice.dto;
 
 import com.commonlibrary.entity.Gender;
 import com.commonlibrary.entity.SubscriptionStatus;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.time.LocalDate;
 
 @Data
-public class PatientProfileDto {
+public class PatientDto {
     private Long id;
     private Long userId;
     private String fullName;

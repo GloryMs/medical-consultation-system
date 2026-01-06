@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.authservice.entity.PasswordResetCode;
+import org.springframework.ui.ModelMap;
 
 
 @Service
@@ -324,6 +325,7 @@ public class AuthService {
         userDto.setRole(user.getRole().name());
         userDto.setFullName(user.getFullName());
         userDto.setStatus(user.getStatus().name());
+        userDto.setPhoneNumber(user.getPhoneNumber());
         userDto.setEmailVerified(user.getEmailVerified());
         userDto.setCreatedAt(user.getCreatedAt());
         userDto.setUpdatedAt(user.getUpdatedAt());
@@ -709,20 +711,75 @@ public class AuthService {
     }
 
     /**
-     * Helper method to convert User entity to UserDto
-     * (This should already exist in your code, but including it for completeness)
+     * Get user by email address (for inter-service communication)
+     * Used by supervisor-service to check if patient account exists
      */
-//    private UserDto convertToUserDto(User user) {
-//        UserDto userDto = new UserDto();
-//        userDto.setId(user.getId());
-//        userDto.setEmail(user.getEmail());
-//        userDto.setFullName(user.getFullName());
-//        userDto.setRole(user.getRole().toString());
-//        userDto.setStatus(user.getStatus().toString());
-//        //userDto.setP(user.getPhoneNumber());
-//        userDto.setCreatedAt(user.getCreatedAt());
-//        userDto.setUpdatedAt(user.getUpdatedAt());
-//        userDto.setLastLoginAt(user.getLastLogin());
-//        return userDto;
-//    }
+    public com.commonlibrary.entity.User getUserByEmail(String email) {
+//        log.debug("Getting user by email: {}", email);
+//        com.commonlibrary.entity.User user = userRepository.findByEmail(email).orElse(null);
+//        return user;
+        log.debug("Getting user by email: {}", email);
+        com.authservice.entity.User authUser = userRepository.findByEmail(email).orElse(null);
+        if (authUser == null) {
+            return null;
+        }
+        // Map auth-service User to common-library User
+        com.commonlibrary.entity.User commonUser = new com.commonlibrary.entity.User();
+
+        commonUser.setId(authUser.getId());
+        commonUser.setEmail(authUser.getEmail());
+        commonUser.setFullName(authUser.getFullName());
+        commonUser.setRole(authUser.getRole().toString());
+        commonUser.setStatus(authUser.getStatus().toString());
+        commonUser.setEmailVerified(authUser.getEmailVerified());
+        commonUser.setCreatedAt(authUser.getCreatedAt());
+        commonUser.setUpdatedAt(authUser.getUpdatedAt());
+        commonUser.setLastLoginAt(authUser.getLastLogin());
+
+        return commonUser;
+    }
+
+    /**
+     * Create user account (for supervisor creating patient)
+     * This allows supervisors to create patient accounts on their behalf
+     */
+    @Transactional
+    public UserDto createUser(com.commonlibrary.dto.CreateUserRequest request) {
+        log.info("Creating user account: {}", request.getEmail());
+
+        // Check if user already exists
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException("User with this email already exists", HttpStatus.CONFLICT);
+        }
+
+        // Create user
+        User user = User.builder()
+                .email(request.getEmail())
+                .fullName(request.getFullName())
+                .phoneNumber(request.getPhoneNumber())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .role(UserRole.valueOf(request.getRole()))
+                .status(UserStatus.ACTIVE) // Directly active since created by supervisor
+                .emailVerified(false)
+                .isDeleted(false)
+                .timeZone("UTC")
+                .preferredLanguage("EN")
+                .build();
+
+        User savedUser = userRepository.save(user);
+
+        // Send Kafka event
+//        authEventProducer.sendUserRegistrationEvent(
+//                savedUser.getId(),
+//                savedUser.getEmail(),
+//                savedUser.getPhoneNumber(),
+//                savedUser.getRole().name(),
+//                savedUser.getFullName()
+//        );
+
+        log.info("User created successfully - userId: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+
+        // Convert to DTO
+        return convertToUserDto(savedUser);
+    }
 }

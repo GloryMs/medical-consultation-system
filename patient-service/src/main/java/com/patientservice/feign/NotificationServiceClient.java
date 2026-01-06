@@ -21,4 +21,16 @@ public interface NotificationServiceClient {
 
     @PutMapping("/api/notifications/user/{userId}/read-all")
     ResponseEntity<ApiResponse<Void>> markAllAsRead( @PathVariable Long userId);
+
+    /**
+     * Send welcome email to newly created patient
+     * @param email Patient's email address
+     * @param fullName Patient's full name
+     * @param temporaryPassword Temporary password for first login
+     */
+    @PostMapping("/api/notifications/welcome-email")
+    ResponseEntity<ApiResponse<Void>> sendWelcomeEmail(
+            @RequestParam("email") String email,
+            @RequestParam("fullName") String fullName,
+            @RequestParam("temporaryPassword") String temporaryPassword);
 }

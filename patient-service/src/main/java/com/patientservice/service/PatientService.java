@@ -5,6 +5,7 @@ import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.*;
+import com.patientservice.feign.AuthServiceClient;
 import com.patientservice.feign.DoctorServiceClient;
 import com.patientservice.feign.PaymentServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
@@ -12,17 +13,17 @@ import com.patientservice.kafka.PatientEventProducer;
 import com.patientservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.sql.ast.tree.update.Assignment;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.commonlibrary.entity.CaseStatus.*;
@@ -45,6 +46,11 @@ public class PatientService {
     private final PatientEventProducer patientEventProducer;
     private final DocumentService documentService;
     private final DependentRepository dependentRepository;
+    private final AuthServiceClient authServiceClient;
+
+
+    @Value("${app.case.default.consultation-fee:200.00}")
+    private BigDecimal defaultConsultationFee;
 
     //@Override
     @Transactional
@@ -130,9 +136,15 @@ public class PatientService {
         Patient patient = patientRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
 
+        //Check if the cases submitted by Medical Supervisor:
+        boolean isSubmittedBySupervisor = patient.getIsSupervisorManaged();
+        boolean isSupervisorMatchId = Objects.equals(patient.getCreatedBySupervisorId(), dto.getSupervisorId());
+
         // Check subscription status
-        if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
-            throw new BusinessException("Active subscription required to submit cases", HttpStatus.FORBIDDEN);
+        if(!isSubmittedBySupervisor && !isSupervisorMatchId){
+            if (patient.getSubscriptionStatus() != SubscriptionStatus.ACTIVE) {
+                throw new BusinessException("Active subscription required to submit cases", HttpStatus.FORBIDDEN);
+            }
         }
 
         // NEW: Handle dependent if provided
@@ -167,12 +179,19 @@ public class PatientService {
                 .minDoctorsRequired(dto.getMinDoctorsRequired())
                 .maxDoctorsAllowed(dto.getMaxDoctorsAllowed())
                 .status(CaseStatus.SUBMITTED)
+                .consultationFee(defaultConsultationFee)
+                .feeSetAt(LocalDateTime.now())
                 .paymentStatus(PaymentStatus.PENDING)
                 .submittedAt(LocalDateTime.now())
                 .assignmentAttempts(0)
                 .rejectionCount(0)
                 .isDeleted(false)
                 .build();
+
+        if( isSubmittedBySupervisor && isSupervisorMatchId){
+            medicalCase.setIsSupervisorManaged(true);
+            medicalCase.setSubmittedBySupervisorId(dto.getSupervisorId());
+        }
 
         Case saved = caseRepository.save(medicalCase);
 
@@ -840,7 +859,16 @@ public class PatientService {
                 .orElse(null);
 
         if (assignment == null) {
-            throw new BusinessException("No match between Doctor and Provided Case", HttpStatus.NOT_FOUND);
+            //Check if the case created by Medical Supervisor:
+            //The call of getCustomPatientInformation by Supervisor Feign Client
+            log.info("Medical Supervisor id from feign client: {}", doctorId);
+            log.info("Medical Supervisor id from case {} entity: {}", caseId,
+                    medicalCase.getSubmittedBySupervisorId());
+            if(!Objects.equals(medicalCase.getSubmittedBySupervisorId(), doctorId)){
+                throw new BusinessException(
+                  "Can't get Patient custom info because the case didn't belong to the doctor or supervisor",
+                        HttpStatus.NOT_FOUND);
+            }
         }
 
         // Get the account owner (patient who submitted the case)
@@ -1953,5 +1981,93 @@ public class PatientService {
                     String.format("Cannot upload files to case with status: %s", medicalCase.getStatus()),
                     HttpStatus.BAD_REQUEST);
         }
+    }
+
+    @Transactional
+    public PatientProfileDto createPatientBySupervisor(CreatePatientProfileRequest request, Long supervisorId) {
+        log.info("Creating patient by supervisor: {}", supervisorId);
+
+        try{
+            // 1. Check if user already exists with this email
+            ApiResponse<User> userResponse = authServiceClient.getUserByEmail(request.getEmail()).getBody();
+            User existingUser = userResponse.getData();
+
+            if (existingUser != null) {
+                throw new BusinessException("User with this email already exists", HttpStatus.CONFLICT);
+            }
+
+            log.info("1- Patient user was not already existed so we will proceed adding the patient by supervisor: {}",
+                    supervisorId);
+            log.info("Creating account for patient: {}", request.getEmail());
+            // 2. Create user account via auth-service
+            CreateUserRequest userRequest = CreateUserRequest.builder()
+                    .email(request.getEmail())
+                    .fullName(request.getFullName())
+                    .phoneNumber(request.getPhoneNumber())
+                    .role("PATIENT")
+                    .password(generateTemporaryPassword()) // Generate random password
+                    .createdBySupervisor(true)
+                    .supervisorId(supervisorId)
+                    .build();
+
+            UserDto user = authServiceClient.createUser(userRequest).getBody().getData();
+            log.info("2- Patient account created with email: {}", request.getEmail());
+
+            // 3. Create patient profile
+            Patient patient = Patient.builder()
+                    .userId(user.getId())
+                    .fullName(request.getFullName())
+                    .email(request.getEmail())
+                    .phoneNumber(request.getPhoneNumber())
+                    .dateOfBirth(LocalDate.parse(request.getDateOfBirth()))
+                    .gender(Gender.valueOf( request.getGender() ))
+                    .address(request.getAddress())
+                    .city(request.getCity())
+                    .country(request.getCountry())
+                    //.state(request.getState())
+                    //.zipCode(request.getZipCode())
+                    .bloodGroup(request.getBloodType())
+                    .allergies(request.getAllergies())
+                    .chronicConditions(request.getChronicConditions())
+                    //.currentMedications(request.getCurrentMedications())
+                    .emergencyContactName(request.getEmergencyContactName())
+                    .emergencyContactPhone(request.getEmergencyContactPhone())
+                    //.emergencyContactRelationship(request.getEmergencyContactRelationship())
+                    .createdBySupervisorId(supervisorId)
+                    .isSupervisorManaged(true)
+                    .subscriptionStatus(SubscriptionStatus.PENDING) // Supervisor will handle subscription
+                    .accountLocked(false)
+                    .build();
+
+            patient = patientRepository.save(patient);
+            log.info("3- Patient Profile created with email: {}", request.getEmail());
+
+            // 4. Send welcome Notification with temporary password
+            patientEventProducer.sendCreatePatientBySupervisorNotification(supervisorId, patient.getId(),
+                    patient.getEmail(), userRequest.getPassword());
+            log.info("4- Welcome notification has been send for patient: {}", request.getEmail());
+
+            // 5. Publish Kafka event
+            //patientEventProducer.sendPatientCreatedEvent(patient.getId(), supervisorId);
+
+            log.info("5- Patient created by supervisor - patientId: {}", patient.getId());
+
+            return mapToDto(patient);
+        }catch (Exception e){
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public PatientProfileDto getPatientByEmail(String email) {
+        Patient patient = patientRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
+
+        return mapToDto(patient);
+    }
+
+    private String generateTemporaryPassword() {
+        // Generate secure random password
+        return UUID.randomUUID().toString().substring(0, 12);
     }
 }

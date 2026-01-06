@@ -32,6 +32,7 @@
 		<module>notification-service</module>
 		<module>integration-service</module>
 		<module>common-library</module>
+		<module>supervisor-service</module>
 	</modules>
 	<dependencies>
 <!--		<dependency>

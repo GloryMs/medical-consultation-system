@@ -226,6 +226,33 @@ services:
       retries: 3
       start_period: 40s
 
+  # Supervisor Service
+  supervisor-service:
+    build: ./supervisor-service
+    container_name: medical-supervisor-service
+    ports:
+      - "8089:8089"
+    depends_on:
+      - eureka-server
+      - postgres
+    volumes:
+      - /supervisor_upload:/uploads/supervisor:rw
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/medical_supervisor_db
+      SPRING_DATASOURCE_USERNAME: user1
+      SPRING_DATASOURCE_PASSWORD: user1
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - medical-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://172.16.1.122:8089/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   # Doctor Service
   doctor-service:
     build: ./doctor-service
