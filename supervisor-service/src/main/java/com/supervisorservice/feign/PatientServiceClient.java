@@ -82,15 +82,6 @@ public interface PatientServiceClient {
             @RequestBody UpdateCaseDto updatedCase);
 
     /**
-     * Update case status
-     */
-    @PutMapping("/api/patients/cases/{caseId}/status")
-    ApiResponse<Void> updateCaseStatus(
-            @PathVariable Long caseId,
-            @RequestParam String status,
-            @RequestParam Long doctorId);
-
-    /**
      * Delete case
      */
     @PutMapping("/api/patients/cases/{caseId}/delete")
@@ -142,5 +133,101 @@ public interface PatientServiceClient {
     @GetMapping("/api/patients/cases/{caseId}/custom-info")
     ResponseEntity<ApiResponse<CustomPatientDto>> getCustomPatientInfo( @PathVariable Long caseId,
                                                                         @RequestParam Long doctorId );
+
+    /**
+     * Get patient profile by ID
+     */
+    @GetMapping("/api/patients-internal/profile/{patientId}")
+    ResponseEntity<ApiResponse<PatientProfileDto>> getPatientById(
+            @PathVariable("patientId") Long patientId);
+
+    /**
+     * Get case by ID
+     */
+    @GetMapping("/api/patients-internal/cases/{caseId}")
+    ResponseEntity<ApiResponse<CaseDto>> getCaseById(
+            @PathVariable("caseId") Long caseId);
+
+    /**
+     * Get cases by patient ID
+     */
+    @GetMapping("/api/patients-internal/cases/patient/{patientId}")
+    ResponseEntity<ApiResponse<List<CaseDto>>> getCasesByPatientId(
+            @PathVariable("patientId") Long patientId);
+
+    /**
+     * Submit case for patient (by supervisor)
+     */
+    @PostMapping("/api/patients-internal/cases/supervisor/{supervisorId}/patient/{patientId}")
+    ResponseEntity<ApiResponse<CaseDto>> submitCaseBySupervisor(
+            @PathVariable("supervisorId") Long supervisorId,
+            @PathVariable("patientId") Long patientId,
+            @RequestBody CreateCaseDto caseDto);
+
+    /**
+     * Update case status
+     */
+    @PutMapping("/api/patients/cases/{caseId}/status")
+    ResponseEntity<ApiResponse<Void>> updateCaseStatus(
+            @PathVariable("caseId") Long caseId,
+            @RequestParam("status") String status,
+            @RequestParam("doctorId") Long doctorId);
+
+    /**
+     * Get reschedule requests for a case
+     */
+    @GetMapping("/api/patients/cases/{caseId}/reschedule-requests")
+    ResponseEntity<ApiResponse<List<RescheduleRequestResponseDto>>> getRescheduleRequestsByCaseId(
+            @PathVariable("caseId") Long caseId);
+
+    /**
+     * Get reschedule requests by patient
+     */
+    @GetMapping("/api/patients-internal/reschedule-requests/patient/{patientId}")
+    ResponseEntity<ApiResponse<List<RescheduleRequestResponseDto>>> getRescheduleRequestsByPatientId(
+            @PathVariable("patientId") Long patientId);
+
+    /**
+     * Create reschedule request (supervisor on behalf of patient)
+     */
+    @PostMapping("/api/patients-internal/reschedule-requests/supervisor")
+    ResponseEntity<ApiResponse<RescheduleRequestResponseDto>> createRescheduleRequestBySupervisor(
+            @RequestBody RescheduleRequestDto requestDto,
+            @RequestHeader("X-Supervisor-Id") Long supervisorId);
+
+    /**
+     * Accept appointment (move to payment pending)
+     */
+    @PostMapping("/api/patients/cases/{caseId}/accept-appointment")
+    ResponseEntity<ApiResponse<Void>> acceptAppointment(
+            @RequestHeader("X-User-Id") Long userId,
+            @PathVariable("caseId") Long caseId);
+
+    /**
+     * Accept appointment by supervisor on behalf of patient
+     */
+    @PostMapping("/api/patients-internal/cases/{caseId}/accept-appointment/supervisor")
+    ResponseEntity<ApiResponse<Void>> acceptAppointmentBySupervisor(
+            @PathVariable("caseId") Long caseId,
+            @RequestParam("patientId") Long patientId,
+            @RequestHeader("X-Supervisor-Id") Long supervisorId);
+
+    /**
+     * Update reschedule request status
+     */
+    @PutMapping("/api/patients/reschedule-request/{requestId}/update")
+    ResponseEntity<ApiResponse<Void>> updateRescheduleRequestStatus(
+            @PathVariable("requestId") Long requestId,
+            @RequestParam("status") String status);
+
+    /**
+     * Process consultation fee payment (internal)
+     */
+    @PostMapping("/api/patients-internal/cases/{caseId}/pay-consultation")
+    ResponseEntity<ApiResponse<Void>> payConsultationFeeBySupervisor(
+            @PathVariable("caseId") Long caseId,
+            @RequestParam("patientId") Long patientId,
+            @RequestBody ProcessPaymentDto paymentDto,
+            @RequestHeader("X-Supervisor-Id") Long supervisorId);
 
 }

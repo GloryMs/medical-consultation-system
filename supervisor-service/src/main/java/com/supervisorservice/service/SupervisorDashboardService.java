@@ -48,16 +48,21 @@ public class SupervisorDashboardService {
 
         // Get patient count
         long activePatientCount = assignmentRepository.countActiveAssignmentsBySupervisor(supervisor.getId());
+        log.info("Active Patients count: {}", activePatientCount);
 
         // Get patient IDs
         List<Long> patientIds = assignmentRepository.findPatientIdsBySupervisor(supervisor.getId());
+        log.info("List of patient IDs: {}", patientIds!=null ? patientIds : "Empty list");
 
         // Get case statistics from patient-service
         Long totalCases = 0L;
         Long activeCases = 0L;
         Long completedCases = 0L;
 
+        log.info("Trying to get supervisor dashboard statistics:");
+
         try {
+            assert patientIds != null;
             for (Long patientId : patientIds) {
                 List<CaseDto> cases = patientServiceClient.getAllCasesForAdmin(
                         null, null, null, patientId, null, null, null, null).getData();
@@ -72,19 +77,23 @@ public class SupervisorDashboardService {
                             .count();
                     activeCases += active;
 
+                    log.info("Active cases count: {}", activeCases);
+
                     long completed = cases.stream()
                             .filter(c -> c.getStatus() == CaseStatus.CLOSED)
                             .count();
                     completedCases += completed;
+                    log.info("Completed cases count: {}", completedCases);
                 }
             }
         } catch (Exception e) {
+            e.printStackTrace();
             log.error("Error fetching case statistics from patient-service: {}", e.getMessage());
         }
 
         // Get coupon statistics
         CouponSummaryDto couponSummary = couponService.getCouponSummary(userId);
-
+        log.info("Getting couponSummary DTO");
         // Get appointment statistics from doctor-service
         Integer totalAppointments = 0;
         Integer upcomingAppointments = 0;
@@ -96,7 +105,7 @@ public class SupervisorDashboardService {
             for (Long patientId : patientIds) {
                 try {
                     List<AppointmentDto> appointments = doctorServiceClient
-                            .getPatientAppointments(patientId).getData();
+                            .getPatientAppointments(patientId).getBody().getData();
                     if (appointments != null) {
                         allAppointments.addAll(appointments);
                     }
@@ -115,10 +124,13 @@ public class SupervisorDashboardService {
                                 a.getScheduledTime().isAfter(LocalDateTime.now()))
                         .count();
 
+                log.info("UpcomingAppointments cases count: {}", upcomingAppointments);
+
                 completedAppointments = (int) allAppointments.stream()
                         .filter(a -> a.getStatus() != null &&
                                 "COMPLETED".equals(a.getStatus().name()))
                         .count();
+                log.info("CompletedAppointments cases count: {}", completedAppointments);
             }
         } catch (Exception e) {
             log.error("Error fetching appointment statistics from doctor-service: {}", e.getMessage());
@@ -135,12 +147,14 @@ public class SupervisorDashboardService {
 
                 if (payments != null) {
                     totalPayments += payments.size();
+                    log.info("TotalPayments cases count: {}", totalPayments);
                     totalPaymentAmount = totalPaymentAmount.add(
                             payments.stream()
                                     .map(PaymentHistoryDto::getAmount)
                                     .filter(amount -> amount != null)
                                     .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)
                     );
+                    log.info("TotalPaymentAmount cases count: {}", totalPaymentAmount);
                 }
             }
         } catch (Exception e) {
@@ -148,6 +162,7 @@ public class SupervisorDashboardService {
         }
 
         // Build dashboard DTO
+        log.info("Now building supervisor dashboard DTO");
         return SupervisorDashboardDto.builder()
                 .supervisorId(supervisor.getId())
                 .supervisorName(supervisor.getFullName())

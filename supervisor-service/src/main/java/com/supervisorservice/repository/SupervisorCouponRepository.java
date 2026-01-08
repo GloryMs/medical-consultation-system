@@ -3,6 +3,7 @@ package com.supervisorservice.repository;
 import com.commonlibrary.entity.CouponStatus;
 import com.supervisorservice.entity.SupervisorCoupon;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -137,11 +138,146 @@ public interface SupervisorCouponRepository extends JpaRepository<SupervisorCoup
     /**
      * Get coupon statistics for a supervisor
      */
+//    @Query("SELECT " +
+//           "COUNT(CASE WHEN c.status = 'AVAILABLE' AND c.expiresAt > :now THEN 1 END) as available, " +
+//           "COUNT(CASE WHEN c.status = 'USED' THEN 1 END) as used, " +
+//           "COUNT(CASE WHEN c.status = 'EXPIRED' OR (c.status = 'AVAILABLE' AND c.expiresAt < :now) THEN 1 END) as expired, " +
+//           "COUNT(CASE WHEN c.status = 'CANCELLED' THEN 1 END) as cancelled " +
+//           "FROM SupervisorCoupon c WHERE c.supervisor.id = :supervisorId AND c.isDeleted = false")
+//    Object[] getCouponStatistics(@Param("supervisorId") Long supervisorId, @Param("now") LocalDateTime now);
+
     @Query("SELECT " +
-           "COUNT(CASE WHEN c.status = 'AVAILABLE' AND c.expiresAt > :now THEN 1 END) as available, " +
-           "COUNT(CASE WHEN c.status = 'USED' THEN 1 END) as used, " +
-           "COUNT(CASE WHEN c.status = 'EXPIRED' OR (c.status = 'AVAILABLE' AND c.expiresAt < :now) THEN 1 END) as expired, " +
-           "COUNT(CASE WHEN c.status = 'CANCELLED' THEN 1 END) as cancelled " +
-           "FROM SupervisorCoupon c WHERE c.supervisor.id = :supervisorId AND c.isDeleted = false")
-    Object[] getCouponStatistics(@Param("supervisorId") Long supervisorId, @Param("now") LocalDateTime now);
+            "COUNT(CASE WHEN c.status = 'AVAILABLE' AND c.expiresAt > :now THEN 1 END) as available, " +
+            "COUNT(CASE WHEN c.status = 'USED' THEN 1 END) as used, " +
+            "COUNT(CASE WHEN c.status = 'EXPIRED' OR (c.status = 'AVAILABLE' AND c.expiresAt < :now) THEN 1 END) as expired, " +
+            "COUNT(CASE WHEN c.status = 'CANCELLED' THEN 1 END) as cancelled " +
+            "FROM SupervisorCoupon c WHERE c.supervisor.id = :supervisorId AND c.isDeleted = false")
+    CouponStatistics getCouponStatistics(@Param("supervisorId") Long supervisorId, @Param("now") LocalDateTime now);
+
+    public interface CouponStatistics {
+        Long getAvailable();
+        Long getUsed();
+        Long getExpired();
+        Long getCancelled();
+    }
+
+    /**
+     * Find coupon by code and supervisor
+     */
+    Optional<SupervisorCoupon> findByCouponCodeAndSupervisorIdAndIsDeletedFalse(
+            String couponCode, Long supervisorId);
+
+    /**
+     * Find available coupon by code, supervisor, and patient
+     */
+    @Query("SELECT c FROM SupervisorCoupon c WHERE " +
+            "c.couponCode = :couponCode AND " +
+            "c.supervisor.id = :supervisorId AND " +
+            "(c.patientId = :patientId OR c.patientId IS NULL) AND " +
+            "c.status = :status AND " +
+            "c.isDeleted = false AND " +
+            "(c.expiresAt IS NULL OR c.expiresAt > CURRENT_TIMESTAMP)")
+    Optional<SupervisorCoupon> findAvailableCoupon(
+            @Param("couponCode") String couponCode,
+            @Param("supervisorId") Long supervisorId,
+            @Param("patientId") Long patientId,
+            @Param("status") CouponStatus status);
+
+    /**
+     * Find all coupons for a supervisor
+     */
+    List<SupervisorCoupon> findBySupervisorIdAndIsDeletedFalseOrderByCreatedAtDesc(Long supervisorId);
+
+    /**
+     * Find coupons by supervisor and status
+     */
+    List<SupervisorCoupon> findBySupervisorIdAndStatusAndIsDeletedFalseOrderByExpiresAtAsc(
+            Long supervisorId, CouponStatus status);
+
+    /**
+     * Find available coupons for a specific patient
+     */
+    @Query("SELECT c FROM SupervisorCoupon c WHERE " +
+            "c.supervisor.id = :supervisorId AND " +
+            "(c.patientId = :patientId OR c.patientId IS NULL) AND " +
+            "c.status = 'AVAILABLE' AND " +
+            "c.isDeleted = false AND " +
+            "(c.expiresAt IS NULL OR c.expiresAt > CURRENT_TIMESTAMP) " +
+            "ORDER BY c.expiresAt ASC NULLS LAST")
+    List<SupervisorCoupon> findAvailableCouponsForPatient(
+            @Param("supervisorId") Long supervisorId,
+            @Param("patientId") Long patientId);
+
+    /**
+     * Find all available coupons for supervisor
+     */
+    @Query("SELECT c FROM SupervisorCoupon c WHERE " +
+            "c.supervisor.id = :supervisorId AND " +
+            "c.status = 'AVAILABLE' AND " +
+            "c.isDeleted = false AND " +
+            "(c.expiresAt IS NULL OR c.expiresAt > CURRENT_TIMESTAMP) " +
+            "ORDER BY c.expiresAt ASC NULLS LAST")
+    List<SupervisorCoupon> findAllAvailableCoupons(@Param("supervisorId") Long supervisorId);
+
+    /**
+     * Find coupons expiring soon (within given days)
+     */
+    @Query("SELECT c FROM SupervisorCoupon c WHERE " +
+            "c.supervisor.id = :supervisorId AND " +
+            "c.status = 'AVAILABLE' AND " +
+            "c.isDeleted = false AND " +
+            "c.expiresAt IS NOT NULL AND " +
+            "c.expiresAt > CURRENT_TIMESTAMP AND " +
+            "c.expiresAt <= :expiryThreshold " +
+            "ORDER BY c.expiresAt ASC")
+    List<SupervisorCoupon> findCouponsExpiringSoon(
+            @Param("supervisorId") Long supervisorId,
+            @Param("expiryThreshold") LocalDateTime expiryThreshold);
+
+    /**
+     * Count coupons by supervisor and status
+     */
+    long countBySupervisorIdAndStatusAndIsDeletedFalse(Long supervisorId, CouponStatus status);
+
+    /**
+     * Count available coupons for supervisor
+     */
+    @Query("SELECT COUNT(c) FROM SupervisorCoupon c WHERE " +
+            "c.supervisor.id = :supervisorId AND " +
+            "c.status = 'AVAILABLE' AND " +
+            "c.isDeleted = false AND " +
+            "(c.expiresAt IS NULL OR c.expiresAt > CURRENT_TIMESTAMP)")
+    long countAvailableCoupons(@Param("supervisorId") Long supervisorId);
+
+    /**
+     * Get total value of available coupons
+     */
+    @Query("SELECT COALESCE(SUM(c.discountValue), 0) FROM SupervisorCoupon c WHERE " +
+            "c.supervisor.id = :supervisorId AND " +
+            "c.status = 'AVAILABLE' AND " +
+            "c.discountType = 'FIXED_AMOUNT' AND " +
+            "c.isDeleted = false AND " +
+            "(c.expiresAt IS NULL OR c.expiresAt > CURRENT_TIMESTAMP)")
+    java.math.BigDecimal getTotalAvailableValue(@Param("supervisorId") Long supervisorId);
+
+    /**
+     * Mark expired coupons
+     */
+    @Modifying
+    @Query("UPDATE SupervisorCoupon c SET c.status = 'EXPIRED' WHERE " +
+            "c.status = 'AVAILABLE' AND " +
+            "c.expiresAt IS NOT NULL AND " +
+            "c.expiresAt < CURRENT_TIMESTAMP")
+    int markExpiredCoupons();
+
+    /**
+     * Find coupons by batch ID
+     */
+    List<SupervisorCoupon> findByBatchIdAndIsDeletedFalse(Long batchId);
+
+    /**
+     * Find used coupons for case
+     */
+    Optional<SupervisorCoupon> findByUsedForCaseIdAndStatusAndIsDeletedFalse(
+            Long caseId, CouponStatus status);
 }

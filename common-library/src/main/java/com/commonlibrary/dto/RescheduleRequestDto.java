@@ -1,13 +1,15 @@
-package com.patientservice.dto;
+package com.commonlibrary.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
 
 @Data
+@Builder
 public class RescheduleRequestDto {
     /**
      * Reason for requesting reschedule
@@ -31,4 +33,7 @@ public class RescheduleRequestDto {
     private String additionalNotes;
 
     private Long appointmentId;
+    private Long caseId;
+    private Long patientId;
+
 }

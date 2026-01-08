@@ -24,7 +24,7 @@ public class RescheduleRequest extends BaseEntity {
     private Long appointmentId;
 
     @Column(nullable = false)
-    private String requestedBy; // PATIENT or DOCTOR
+    private String requestedBy; // PATIENT or Supervisor
 
     @Column(columnDefinition = "TEXT")
     private String reason;
@@ -35,4 +35,8 @@ public class RescheduleRequest extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RescheduleStatus status;
+
+    @Column(name = "requested_by_supervisor_id")
+    private Long requestedBySupervisorId;
+
 }

@@ -192,6 +192,9 @@ public class PatientService {
             medicalCase.setIsSupervisorManaged(true);
             medicalCase.setSubmittedBySupervisorId(dto.getSupervisorId());
         }
+        else{
+            medicalCase.setIsSupervisorManaged(false);
+        }
 
         Case saved = caseRepository.save(medicalCase);
 
@@ -575,7 +578,7 @@ public class PatientService {
      * Map Patient Entity to PatientProfileDto
      * Converts the Patient entity to a DTO for API responses
      */
-    private PatientProfileDto mapToDto(Patient patient) {
+    public PatientProfileDto mapToDto(Patient patient) {
         PatientProfileDto dto = new PatientProfileDto();
 
         // Basic Information

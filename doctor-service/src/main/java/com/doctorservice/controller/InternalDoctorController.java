@@ -1,12 +1,12 @@
 package com.doctorservice.controller;
 
-import com.commonlibrary.dto.ApiResponse;
-import com.commonlibrary.dto.DoctorCapacityDto;
-import com.commonlibrary.dto.DoctorDto;
+import com.commonlibrary.dto.*;
+import com.commonlibrary.entity.AppointmentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.DoctorDetailsDto;
-import com.commonlibrary.dto.PendingVerificationDto;
+import com.doctorservice.entity.Appointment;
 import com.doctorservice.entity.Doctor;
+import com.doctorservice.repository.AppointmentRepository;
 import com.doctorservice.repository.DoctorRepository;
 import com.doctorservice.service.DoctorService;
 import com.doctorservice.service.InternalDoctorService;
@@ -34,6 +34,7 @@ public class InternalDoctorController {
     private final InternalDoctorWorkloadController internalDoctorWorkloadController;
     private final DoctorRepository doctorRepository;
     private final DoctorService doctorService;
+    private final AppointmentRepository appointmentRepository;
     
     @GetMapping("/pending-verifications")
     public List<PendingVerificationDto> getPendingVerifications() {
@@ -350,6 +351,103 @@ public class InternalDoctorController {
         stats.put("joinedDate", doctor.getCreatedAt());
 
         return ResponseEntity.ok(ApiResponse.success(stats, "Statistics retrieved"));
+    }
+
+    /////////
+
+
+
+    /**
+     * Get appointment by ID (internal use)
+     */
+    @GetMapping("/appointments/{appointmentId}")
+    public ResponseEntity<ApiResponse<AppointmentDto>> getAppointmentById(
+            @PathVariable Long appointmentId) {
+
+        log.info("Internal: Getting appointment by ID: {}", appointmentId);
+
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new BusinessException("Appointment not found", HttpStatus.NOT_FOUND));
+
+        AppointmentDto dto = doctorService.convertToAppointmentDto(appointment);
+        return ResponseEntity.ok(ApiResponse.success(dto));
+    }
+
+    /**
+     * Get appointments by case ID (internal use)
+     */
+    @GetMapping("/appointments/case/{caseId}")
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAppointmentsByCaseId(
+            @PathVariable Long caseId) {
+
+        log.info("Internal: Getting appointments for case ID: {}", caseId);
+
+        List<Appointment> appointments = appointmentRepository.findByCaseId(caseId);
+
+        List<AppointmentDto> dtos = appointments.stream()
+                .map(doctorService::convertToAppointmentDto)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(dtos));
+    }
+
+    /**
+     * Get patient appointments by status (internal use)
+     */
+    @GetMapping("/appointments/patient/{patientId}/status/{status}")
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointmentsByStatus(
+            @PathVariable Long patientId,
+            @PathVariable AppointmentStatus status) {
+
+        log.info("Internal: Getting appointments for patient {} with status {}", patientId, status);
+
+        List<Appointment> appointments = appointmentRepository.findByPatientIdAndStatus(patientId, status);
+
+        List<AppointmentDto> dtos = appointments.stream()
+                .map(doctorService::convertToAppointmentDto)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(dtos));
+    }
+
+    /**
+     * Get all appointments for multiple patients (batch operation)
+     */
+    @PostMapping("/appointments/patients/batch")
+    public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAppointmentsForPatients(
+            @RequestBody List<Long> patientIds) {
+
+        log.info("Internal: Getting appointments for {} patients", patientIds.size());
+
+        List<Appointment> allAppointments = patientIds.stream()
+                .flatMap(patientId -> appointmentRepository.findByPatientId(patientId).stream())
+                .collect(Collectors.toList());
+
+        List<AppointmentDto> dtos = allAppointments.stream()
+                .map(doctorService::convertToAppointmentDto)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(dtos));
+    }
+
+    /**
+     * Count appointments by patient and status (internal use)
+     */
+    @GetMapping("/appointments/patient/{patientId}/count")
+    public ResponseEntity<ApiResponse<Long>> countPatientAppointments(
+            @PathVariable Long patientId,
+            @RequestParam(required = false) AppointmentStatus status) {
+
+        log.info("Internal: Counting appointments for patient {} with status {}", patientId, status);
+
+        long count;
+        if (status != null) {
+            count = appointmentRepository.countByPatientIdAndStatus(patientId, status);
+        } else {
+            count = appointmentRepository.countByPatientId(patientId);
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(count));
     }
 
 }

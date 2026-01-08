@@ -15,6 +15,10 @@ import java.util.Optional;
 
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
+
+    List<Appointment> findByPatientIdAndStatus(Long patientId, AppointmentStatus status);
+    long countByPatientId(Long patientId);
+    long countByPatientIdAndStatus(Long patientId, AppointmentStatus status);
     List<Appointment> findByDoctorId(Long doctorId);
     List<Appointment> findByDoctorIdAndStatus(Long doctorId, AppointmentStatus status);
     List<Appointment> findByDoctorIdAndScheduledTimeBetween(Long doctorId, LocalDateTime start, LocalDateTime end);
@@ -198,6 +202,25 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("searchStart") LocalDateTime searchStart,
             @Param("searchEnd") LocalDateTime searchEnd,
             @Param("excludeId") Long excludeId
+    );
+
+    /**
+     * Find appointments by patient ID ordered by scheduled time
+     */
+    List<Appointment> findByPatientIdOrderByScheduledTimeDesc(Long patientId);
+
+    /**
+     * Find upcoming appointments for multiple patients
+     */
+    @Query("SELECT a FROM Appointment a WHERE " +
+            "a.patientId IN :patientIds AND " +
+            "a.scheduledTime >= :fromTime AND " +
+            "a.status IN :statuses " +
+            "ORDER BY a.scheduledTime ASC")
+    List<Appointment> findUpcomingAppointmentsForPatients(
+            @Param("patientIds") List<Long> patientIds,
+            @Param("fromTime") LocalDateTime fromTime,
+            @Param("statuses") List<AppointmentStatus> statuses
     );
 
 }

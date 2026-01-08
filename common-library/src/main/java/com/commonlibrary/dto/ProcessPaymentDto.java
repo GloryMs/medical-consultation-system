@@ -2,11 +2,13 @@ package com.commonlibrary.dto;
 
 import com.commonlibrary.entity.PaymentType;
 import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
 
 @Data
+@Builder
 public class ProcessPaymentDto {
     @NotNull
     private Long patientId;
@@ -23,4 +25,8 @@ public class ProcessPaymentDto {
 
     @NotNull
     private String paymentMethod;
+
+    private String couponCode;
+    private String stripePaymentIntentId;
+    private String notes;
 }
