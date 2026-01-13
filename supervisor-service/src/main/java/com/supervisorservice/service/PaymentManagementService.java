@@ -41,7 +41,7 @@ import static com.commonlibrary.entity.CaseStatus.IN_PROGRESS;
 public class PaymentManagementService {
 
     private final SupervisorValidationService validationService;
-    private final CouponService couponService;
+    //private final CouponService couponService;
     private final PaymentServiceClient paymentServiceClient;
     private final PatientServiceClient patientServiceClient;
     private final DoctorServiceClient doctorServiceClient;
@@ -141,11 +141,12 @@ public class PaymentManagementService {
         }
 
         // Validate coupon
-        CouponValidationResponseDto validation = couponService.validateCoupon(
-                dto.getCouponCode(),
-                dto.getPatientId(),
-                supervisor.getId(),
-                consultationFee);
+        CouponValidationResponseDto validation = new CouponValidationResponseDto();
+//                couponService.validateCoupon(
+//                dto.getCouponCode(),
+//                dto.getPatientId(),
+//                supervisor.getId(),
+//                consultationFee);
 
         if (!validation.isValid()) {
             throw new BusinessException(validation.getMessage(), HttpStatus.BAD_REQUEST);
@@ -160,12 +161,13 @@ public class PaymentManagementService {
         }
 
         // Redeem coupon
-        CouponRedemptionDto redemption = couponService.redeemCoupon(
-                dto.getCouponCode(),
-                dto.getCaseId(),
-                dto.getPatientId(),
-                supervisor.getId(),
-                consultationFee);
+        CouponRedemptionDto redemption = new CouponRedemptionDto();
+//                couponService.redeemCoupon(
+//                dto.getCouponCode(),
+//                dto.getCaseId(),
+//                dto.getPatientId(),
+//                supervisor.getId(),
+//                consultationFee);
 
         // Update local payment record
         localPayment.setStatus(SupervisorPaymentStatus.COMPLETED);
@@ -498,11 +500,12 @@ public class PaymentManagementService {
             throw new BusinessException("Consultation fee not set for case", HttpStatus.BAD_REQUEST);
         }
 
-        return couponService.validateCoupon(
-                couponCode,
-                patientId,
-                supervisor.getId(),
-                caseDto.getConsultationFee());
+        return null;
+//        return couponService.validateCoupon(
+//                couponCode,
+//                patientId,
+//                supervisor.getId(),
+//                caseDto.getConsultationFee());
     }
 
     /**

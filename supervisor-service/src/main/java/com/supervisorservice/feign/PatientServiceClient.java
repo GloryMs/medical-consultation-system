@@ -230,4 +230,39 @@ public interface PatientServiceClient {
             @RequestBody ProcessPaymentDto paymentDto,
             @RequestHeader("X-Supervisor-Id") Long supervisorId);
 
+    /// //////////////////////
+
+    /**
+     * Get cases for patient
+     */
+    @GetMapping("/cases/patient/{patientId}")
+    ResponseEntity<ApiResponse<Object>> getCasesForPatient(
+            @PathVariable("patientId") Long patientId);
+
+    /**
+     * Update case payment status
+     */
+    @PutMapping("/cases/{caseId}/payment-status")
+    ResponseEntity<ApiResponse<Object>> updateCasePaymentStatus(
+            @PathVariable("caseId") Long caseId,
+            @RequestParam("status") String status);
+
+    /**
+     * Update case status
+     */
+    @PutMapping("/cases/{caseId}/status")
+    ResponseEntity<ApiResponse<Object>> updateCaseStatus(
+            @PathVariable("caseId") Long caseId,
+            @RequestParam("status") String status);
+
+    /**
+     * Create a case for patient (submitted by supervisor)
+     */
+    @PostMapping("/cases/patient/{patientId}")
+    ResponseEntity<ApiResponse<Object>> createCaseForPatient(
+            @PathVariable("patientId") Long patientId,
+            @RequestBody Object caseDto,
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-Supervisor-Id") Long supervisorId);
+
 }

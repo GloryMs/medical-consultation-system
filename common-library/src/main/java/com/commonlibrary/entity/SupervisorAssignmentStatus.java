@@ -19,5 +19,7 @@ public enum SupervisorAssignmentStatus {
      */
     TERMINATED,
 
-    REMOVED
+    REMOVED,
+    AVAILABLE,
+    ASSIGNED
 }

@@ -280,4 +280,39 @@ public interface SupervisorCouponRepository extends JpaRepository<SupervisorCoup
      */
     Optional<SupervisorCoupon> findByUsedForCaseIdAndStatusAndIsDeletedFalse(
             Long caseId, CouponStatus status);
+
+    /**
+     * Count total coupons (not deleted)
+     */
+    @Query("SELECT COUNT(c) FROM SupervisorCoupon c WHERE c.isDeleted = false")
+    Long countTotalCoupons();
+
+    /**
+     * Count coupons by status (globally)
+     */
+    long countByStatusAndIsDeletedFalse(CouponStatus status);
+
+    /**
+     * Get coupon status breakdown
+     */
+    @Query("SELECT c.status, COUNT(c) FROM SupervisorCoupon c " +
+            "WHERE c.isDeleted = false GROUP BY c.status")
+    List<Object[]> getCouponStatusStatistics();
+
+    /**
+     * Count coupons expiring soon (globally, within 7 days)
+     */
+    @Query("SELECT COUNT(c) FROM SupervisorCoupon c WHERE " +
+            "c.status = 'AVAILABLE' AND c.isDeleted = false AND " +
+            "c.expiresAt IS NOT NULL AND c.expiresAt > CURRENT_TIMESTAMP AND " +
+            "c.expiresAt <= :threshold")
+    Long countCouponsExpiringSoon(@Param("threshold") LocalDateTime threshold);
+
+    /**
+     * Get total available coupon value (globally)
+     */
+    @Query("SELECT COALESCE(SUM(c.discountValue), 0) FROM SupervisorCoupon c WHERE " +
+            "c.status = 'AVAILABLE' AND c.discountType = 'FIXED_AMOUNT' AND " +
+            "c.isDeleted = false AND (c.expiresAt IS NULL OR c.expiresAt > CURRENT_TIMESTAMP)")
+    java.math.BigDecimal getGlobalTotalAvailableValue();
 }

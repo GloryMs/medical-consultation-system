@@ -120,4 +120,47 @@ public interface SupervisorPaymentRepository extends JpaRepository<SupervisorPay
     @Query("SELECT p FROM SupervisorPayment p WHERE " +
             "p.status = 'PENDING' AND p.createdAt < :threshold")
     List<SupervisorPayment> findStalePendingPayments(@Param("threshold") LocalDateTime threshold);
+
+    /**
+     * Count total payments (all statuses)
+     */
+    long count();
+
+    /**
+     * Count payments by status (globally)
+     */
+    long countByStatus(SupervisorPaymentStatus status);
+
+    /**
+     * Get payment method breakdown
+     */
+    @Query("SELECT p.paymentMethod, COUNT(p) FROM SupervisorPayment p " +
+            "WHERE p.status = 'COMPLETED' GROUP BY p.paymentMethod")
+    List<Object[]> getPaymentMethodStatistics();
+
+    /**
+     * Get total amount paid across all supervisors
+     */
+    @Query("SELECT COALESCE(SUM(p.finalAmount), 0) FROM SupervisorPayment p WHERE p.status = 'COMPLETED'")
+    BigDecimal getGlobalTotalAmountPaid();
+
+    /**
+     * Get total discount amount across all supervisors
+     */
+    @Query("SELECT COALESCE(SUM(p.discountAmount), 0) FROM SupervisorPayment p " +
+            "WHERE p.status = 'COMPLETED' AND p.paymentMethod = 'COUPON'")
+    BigDecimal getGlobalTotalDiscountAmount();
+
+    /**
+     * Count recent payments (within last N days)
+     */
+    @Query("SELECT COUNT(p) FROM SupervisorPayment p WHERE " +
+            "p.status = 'COMPLETED' AND p.processedAt >= :since")
+    Long countRecentPayments(@Param("since") LocalDateTime since);
+
+    /**
+     * Get average payment amount
+     */
+    @Query("SELECT AVG(p.finalAmount) FROM SupervisorPayment p WHERE p.status = 'COMPLETED'")
+    BigDecimal getAveragePaymentAmount();
 }

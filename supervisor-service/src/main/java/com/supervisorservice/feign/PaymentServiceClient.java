@@ -9,6 +9,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -87,4 +88,50 @@ public interface PaymentServiceClient {
     ResponseEntity<ApiResponse<PaymentDto>> requestRefund(
             @PathVariable Long paymentId,
             @RequestParam(required = false) String reason);
+
+    /// ///////////////////
+
+    /**
+     * Create a Stripe payment intent
+     */
+    @PostMapping("/create-intent")
+    ResponseEntity<ApiResponse<Object>> createPaymentIntent(
+            @RequestParam("caseId") Long caseId,
+            @RequestParam("patientId") Long patientId,
+            @RequestParam("doctorId") Long doctorId,
+            @RequestParam("amount") BigDecimal amount,
+            @RequestParam("currency") String currency,
+            @RequestHeader("X-User-Id") Long userId);
+
+    /**
+     * Process a payment
+     */
+    @PostMapping("/process")
+    ResponseEntity<ApiResponse<Object>> processPayment(
+            @RequestParam("caseId") Long caseId,
+            @RequestParam("patientId") Long patientId,
+            @RequestParam("doctorId") Long doctorId,
+            @RequestParam("paymentMethod") String paymentMethod,
+            @RequestParam("amount") BigDecimal amount,
+            @RequestParam("currency") String currency,
+            @RequestParam(value = "stripePaymentIntentId", required = false) String stripePaymentIntentId,
+            @RequestParam(value = "paypalOrderId", required = false) String paypalOrderId,
+            @RequestHeader("X-User-Id") Long userId);
+
+    /**
+     * Confirm a payment
+     */
+    @PostMapping("/confirm/{paymentId}")
+    ResponseEntity<ApiResponse<Object>> confirmPayment(
+            @PathVariable("paymentId") Long paymentId,
+            @RequestHeader("X-User-Id") Long userId);
+
+
+
+    /**
+     * Get payments for a case
+     */
+    @GetMapping("/case/{caseId}")
+    ResponseEntity<ApiResponse<Object>> getPaymentsForCase(
+            @PathVariable("caseId") Long caseId);
 }

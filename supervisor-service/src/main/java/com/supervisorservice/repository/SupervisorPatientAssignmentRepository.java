@@ -242,4 +242,39 @@ public interface SupervisorPatientAssignmentRepository extends JpaRepository<Sup
     @Query("SELECT a.supervisor.id FROM SupervisorPatientAssignment a " +
             "WHERE a.patientId = :patientId AND a.assignmentStatus = 'ACTIVE' AND a.isDeleted = false")
     Optional<Long> findSupervisorIdByPatientId(@Param("patientId") Long patientId);
+
+    /**
+     * Count total assignments (all statuses, not deleted)
+     */
+    @Query("SELECT COUNT(a) FROM SupervisorPatientAssignment a WHERE a.isDeleted = false")
+    Long countTotalAssignments();
+
+    /**
+     * Count active assignments across all supervisors
+     */
+    @Query("SELECT COUNT(a) FROM SupervisorPatientAssignment a " +
+            "WHERE a.assignmentStatus = 'ACTIVE' AND a.isDeleted = false")
+    Long countAllActiveAssignments();
+
+    /**
+     * Count inactive assignments across all supervisors
+     */
+    @Query("SELECT COUNT(a) FROM SupervisorPatientAssignment a " +
+            "WHERE a.assignmentStatus != 'ACTIVE' AND a.isDeleted = false")
+    Long countInactiveAssignments();
+
+    /**
+     * Count unique patients being managed by supervisors
+     */
+    @Query("SELECT COUNT(DISTINCT a.patientId) FROM SupervisorPatientAssignment a " +
+            "WHERE a.assignmentStatus = 'ACTIVE' AND a.isDeleted = false")
+    Long countUniquePatientsManaged();
+
+    /**
+     * Count recent assignments (within last N days)
+     */
+    @Query("SELECT COUNT(a) FROM SupervisorPatientAssignment a " +
+            "WHERE a.assignmentStatus = 'ACTIVE' AND a.isDeleted = false " +
+            "AND a.assignedAt >= :since")
+    Long countRecentAssignments(@Param("since") java.time.LocalDateTime since);
 }

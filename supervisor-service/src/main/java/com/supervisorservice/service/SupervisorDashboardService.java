@@ -32,7 +32,7 @@ public class SupervisorDashboardService {
 
     private final SupervisorValidationService validationService;
     private final SupervisorPatientAssignmentRepository assignmentRepository;
-    private final CouponService couponService;
+    //private final CouponService couponService;
     private final PatientServiceClient patientServiceClient;
     private final DoctorServiceClient doctorServiceClient;
     private final PaymentServiceClient paymentServiceClient;
@@ -92,8 +92,8 @@ public class SupervisorDashboardService {
         }
 
         // Get coupon statistics
-        CouponSummaryDto couponSummary = couponService.getCouponSummary(userId);
-        log.info("Getting couponSummary DTO");
+//        CouponSummaryDto couponSummary = couponService.getCouponSummary(userId);
+//        log.info("Getting couponSummary DTO");
         // Get appointment statistics from doctor-service
         Integer totalAppointments = 0;
         Integer upcomingAppointments = 0;
@@ -175,10 +175,10 @@ public class SupervisorDashboardService {
                 .totalAppointments(totalAppointments)
                 .upcomingAppointments(upcomingAppointments)
                 .completedAppointments(completedAppointments)
-                .totalCouponsIssued(couponSummary.getTotalCoupons())
-                .availableCoupons(couponSummary.getAvailableCoupons())
-                .usedCoupons(couponSummary.getUsedCoupons())
-                .totalCouponValue(couponSummary.getTotalAvailableValue())
+                //.totalCouponsIssued(couponSummary.getTotalCoupons())
+                //.availableCoupons(couponSummary.getAvailableCoupons())
+                //.usedCoupons(couponSummary.getUsedCoupons())
+                //.totalCouponValue(couponSummary.getTotalAvailableValue())
                 .totalPaymentsProcessed(totalPayments)
                 .lastActivityAt(LocalDateTime.now())
                 .build();

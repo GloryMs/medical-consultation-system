@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -107,4 +108,36 @@ public interface MedicalSupervisorRepository extends JpaRepository<MedicalSuperv
     @Query("SELECT s.verificationStatus, COUNT(s) FROM MedicalSupervisor s " +
            "WHERE s.isDeleted = false GROUP BY s.verificationStatus")
     List<Object[]> getVerificationStatusStatistics();
+
+    /**
+     * Count total supervisors (not deleted)
+     */
+    @Query("SELECT COUNT(s) FROM MedicalSupervisor s WHERE s.isDeleted = false")
+    Long countTotalSupervisors();
+
+    /**
+     * Count supervisors by verification status
+     */
+    Long countByVerificationStatusAndIsDeletedFalse(SupervisorVerificationStatus status);
+
+    /**
+     * Get total patient capacity across all supervisors
+     */
+    @Query("SELECT COALESCE(SUM(s.maxPatientsLimit), 0) FROM MedicalSupervisor s " +
+           "WHERE s.verificationStatus = 'VERIFIED' AND s.isAvailable = true AND s.isDeleted = false")
+    Long getTotalPatientCapacity();
+
+    /**
+     * Count recent registrations (within last N days)
+     */
+    @Query("SELECT COUNT(s) FROM MedicalSupervisor s WHERE s.isDeleted = false " +
+           "AND s.createdAt >= :since")
+    Long countRecentRegistrations(@Param("since") LocalDateTime since);
+
+    /**
+     * Count recent verifications (within last N days)
+     */
+    @Query("SELECT COUNT(s) FROM MedicalSupervisor s WHERE s.isDeleted = false " +
+           "AND s.verificationStatus = 'VERIFIED' AND s.verifiedAt >= :since")
+    Long countRecentVerifications(@Param("since") LocalDateTime since);
 }

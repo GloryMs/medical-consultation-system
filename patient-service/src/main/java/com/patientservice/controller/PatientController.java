@@ -5,7 +5,7 @@ import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.patientservice.dto.*;
 import com.patientservice.entity.Case;
-import com.patientservice.feign.ComplaintServiceClient;
+import com.patientservice.feign.AdminServiceClient;
 import com.patientservice.feign.NotificationServiceClient;
 import com.patientservice.repository.CaseAssignmentRepository;
 import com.patientservice.service.DocumentService;
@@ -33,7 +33,7 @@ public class PatientController {
     private final PatientService patientService;
     private final ReportService reportService;
     private final CaseAssignmentRepository assignmentRepository;
-    private final ComplaintServiceClient complaintServiceClient;
+    private final AdminServiceClient adminServiceClient;
     private final NotificationServiceClient notificationServiceClient;
     private final DocumentService documentService;
     private final CreateCaseDtoBuilder dtoBuilder;
@@ -169,7 +169,7 @@ public class PatientController {
     public ResponseEntity<ApiResponse<Void>> submitComplaint(
             @Valid @RequestBody ComplaintDto dto) {
         boolean success = false;
-        success = complaintServiceClient.submitComplaint(dto).getBody().isSuccess();
+        success = adminServiceClient.submitComplaint(dto).getBody().isSuccess();
         if( success){
             return ResponseEntity.ok(ApiResponse.success(null, "Complaint submitted"));
         }
@@ -180,7 +180,7 @@ public class PatientController {
     @GetMapping("/complaints")
     public ResponseEntity<ApiResponse<List<ComplaintDto>>> getMyComplaints(
             @RequestHeader("X-User-Id") Long userId) {
-        List<ComplaintDto> complaints = complaintServiceClient.getPatientComplaintsById(userId).getBody().getData();
+        List<ComplaintDto> complaints = adminServiceClient.getPatientComplaintsById(userId).getBody().getData();
         return ResponseEntity.ok(ApiResponse.success(complaints));
     }
 
