@@ -8,8 +8,8 @@ import com.commonlibrary.entity.PaymentMethod;
 import com.commonlibrary.entity.PaymentStatus;
 import com.commonlibrary.entity.PaymentType;
 import com.commonlibrary.exception.BusinessException;
-import com.paymentservice.dto.CouponPaymentRequestDto;
-import com.paymentservice.dto.CouponPaymentResponseDto;
+import com.commonlibrary.dto.coupon.CouponPaymentRequestDto;
+import com.commonlibrary.dto.coupon.CouponPaymentResponseDto;
 import com.paymentservice.entity.Payment;
 import com.paymentservice.feign.AdminCouponClient;
 import com.paymentservice.kafka.PaymentEventProducer;
@@ -23,8 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -129,7 +127,7 @@ public class CouponPaymentService {
         // Calculate amounts
         BigDecimal discountAmount = validationResponse.getDiscountAmount();
         BigDecimal remainingAmount = consultationFee.subtract(discountAmount);
-        
+
         // If there's a remaining amount, additional payment would be needed
         // For now, we only support full coverage or full discount
         if (remainingAmount.compareTo(BigDecimal.ZERO) > 0) {
@@ -147,6 +145,7 @@ public class CouponPaymentService {
                 .patientId(request.getPatientId())
                 .doctorId(request.getDoctorId())
                 .caseId(request.getCaseId())
+                .supervisorId(request.getSupervisorId())
                 .appointmentId(request.getAppointmentId())
                 .paymentType(PaymentType.CONSULTATION)
                 .amount(consultationFee)
@@ -231,16 +230,18 @@ public class CouponPaymentService {
             BigDecimal remainingAmount) {
         
         try {
+            log.info("com.paymentservice.service - CouponPaymentService: redeemedByUserId = {}",
+                    request.getRedeemedByUserId());
             MarkCouponUsedRequest usedRequest = MarkCouponUsedRequest.builder()
                     .couponCode(couponCode)
                     .caseId(request.getCaseId())
                     .patientId(request.getPatientId())
                     .paymentId(payment.getId())
+                    .redeemedByUserId(request.getRedeemedByUserId())
                     //.originalAmount(payment.getAmount())
                     .discountApplied(discountAmount)
                     .amountCharged(remainingAmount)
                     .usedAt(LocalDateTime.now())
-                    .redeemedByUserId(request.getRedeemedByUserId())
                     .build();
 
             ResponseEntity<ApiResponse<MarkCouponUsedResponse>> response = 

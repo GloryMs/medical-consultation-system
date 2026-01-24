@@ -20,7 +20,7 @@ import java.util.Map;
 public class PaymentEventProducer {
 
     // Topic names
-    private static final String PAYMENT_COMPLETED_TOPIC = "payment-completed";
+    private static final String PAYMENT_COMPLETED_TOPIC = "payment-completed-topic";
     private static final String PAYMENT_FAILED_TOPIC = "payment-failed";
     private static final String PAYMENT_CANCELLED_TOPIC = "payment-cancelled";
     private static final String REFUND_PROCESSED_TOPIC = "refund-processed";
@@ -57,7 +57,7 @@ public class PaymentEventProducer {
         paymentEvent.put("transactionId", transactionId);
         paymentEvent.put("timestamp", System.currentTimeMillis());
 
-        kafkaTemplate.send("payment-completed-topic", paymentEvent);
+        kafkaTemplate.send(PAYMENT_COMPLETED_TOPIC, paymentEvent);
         log.info("Payment event sent for case: {}", caseId);
     }
 

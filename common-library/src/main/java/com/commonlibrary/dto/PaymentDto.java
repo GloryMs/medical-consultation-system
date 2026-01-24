@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PaymentDto {
+    private Long paymentId;
     private Long patientId;
     private Long doctorId;
     private Long caseId;

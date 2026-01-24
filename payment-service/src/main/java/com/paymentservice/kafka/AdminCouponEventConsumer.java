@@ -35,19 +35,14 @@ public class AdminCouponEventConsumer {
             groupId = "payment-service-coupon-group"
     )
     @Transactional
-    public void handleCouponUsed(Map<String, Object> event) {
+    public void handleCouponUsed(CouponUsedEvent event) {
         try {
             log.info("Received coupon used event: {}", event);
 
-            Long paymentId = event.get("paymentId") != null 
-                    ? Long.valueOf(event.get("paymentId").toString()) 
-                    : null;
-            String couponCode = event.get("couponCode") != null 
-                    ? event.get("couponCode").toString() 
-                    : null;
-            Long caseId = event.get("caseId") != null 
-                    ? Long.valueOf(event.get("caseId").toString()) 
-                    : null;
+            Long paymentId = event.getPaymentId();
+            Long caseId = event.getCaseId();
+            String couponCode = event.getCouponCode();
+
 
             if (paymentId != null) {
                 // Update payment with coupon usage confirmation

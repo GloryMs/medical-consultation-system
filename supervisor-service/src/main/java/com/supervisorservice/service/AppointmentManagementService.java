@@ -10,7 +10,6 @@ import com.supervisorservice.entity.MedicalSupervisor;
 import com.supervisorservice.entity.SupervisorPatientAssignment;
 import com.supervisorservice.feign.DoctorServiceClient;
 import com.supervisorservice.feign.PatientServiceClient;
-import com.supervisorservice.kafka.SupervisorKafkaConsumer;
 import com.supervisorservice.kafka.SupervisorKafkaProducer;
 import com.supervisorservice.repository.MedicalSupervisorRepository;
 import com.supervisorservice.repository.SupervisorPatientAssignmentRepository;
@@ -176,15 +175,15 @@ public class AppointmentManagementService {
 
     /**
      * Accept appointment on behalf of patient
-     * @param userId Supervisor's user ID
+     * @param supervisorId Supervisor's ID
      * @param dto Accept appointment request
      */
     @Transactional
-    public void acceptAppointment(Long userId, AcceptAppointmentDto dto) {
-        log.info("Accepting appointment for case {} patient {} by supervisor userId: {}", 
-                dto.getCaseId(), dto.getPatientId(), userId);
+    public void acceptAppointment(Long supervisorId, AcceptAppointmentDto dto) {
+        log.info("Accepting appointment for case {} patient {} by supervisor supervisorId: {}",
+                dto.getCaseId(), dto.getPatientId(), supervisorId);
 
-        MedicalSupervisor supervisor = getSupervisorByUserId(userId);
+        MedicalSupervisor supervisor = getSupervisorById(supervisorId);
         validationService.validateSupervisorVerified(supervisor);
         validatePatientAssignment(supervisor.getId(), dto.getPatientId());
 
@@ -400,8 +399,13 @@ public class AppointmentManagementService {
 
     // ==================== Private Helper Methods ====================
 
-    private MedicalSupervisor getSupervisorByUserId(Long userId) {
-        return supervisorRepository.findByUserId(userId)
+    private MedicalSupervisor getSupervisorByUserId(Long supervisorId) {
+        return supervisorRepository.findByUserId(supervisorId)
+                .orElseThrow(() -> new BusinessException("Supervisor not found", HttpStatus.NOT_FOUND));
+    }
+
+    private MedicalSupervisor getSupervisorById(Long supervisorId) {
+        return supervisorRepository.findById(supervisorId)
                 .orElseThrow(() -> new BusinessException("Supervisor not found", HttpStatus.NOT_FOUND));
     }
 

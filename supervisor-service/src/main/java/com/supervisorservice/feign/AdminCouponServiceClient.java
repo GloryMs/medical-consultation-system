@@ -22,14 +22,14 @@ public interface AdminCouponServiceClient {
      * Validate a coupon for redemption.
      * Called before processing payment.
      */
-    @PostMapping("/validate")
+    @PostMapping("/api/internal/coupons/validate")
     ResponseEntity<ApiResponse<CouponValidationResponse>> validateCoupon(
             @RequestBody CouponValidationRequest request);
 
     /**
      * Mark a coupon as used after successful payment.
      */
-    @PostMapping("/{couponCode}/mark-used")
+    @PostMapping("/api/internal/coupons/{couponCode}/mark-used")
     ResponseEntity<ApiResponse<MarkCouponUsedResponse>> markCouponAsUsed(
             @PathVariable("couponCode") String couponCode,
             @RequestBody MarkCouponUsedRequest request);
@@ -39,14 +39,14 @@ public interface AdminCouponServiceClient {
     /**
      * Get coupon by code.
      */
-    @GetMapping("/code/{couponCode}")
+    @GetMapping("/api/internal/coupons/code/{couponCode}")
     ResponseEntity<ApiResponse<AdminCouponDto>> getCouponByCode(
             @PathVariable("couponCode") String couponCode);
 
     /**
      * Get available coupons for a beneficiary.
      */
-    @GetMapping("/beneficiary/{type}/{beneficiaryId}/available")
+    @GetMapping("/api/internal/coupons/beneficiary/{type}/{beneficiaryId}/available")
     ResponseEntity<ApiResponse<List<AdminCouponDto>>> getAvailableCouponsForBeneficiary(
             @PathVariable("type") BeneficiaryType type,
             @PathVariable("beneficiaryId") Long beneficiaryId);
@@ -54,7 +54,7 @@ public interface AdminCouponServiceClient {
     /**
      * Get all coupons for a beneficiary.
      */
-    @GetMapping("/beneficiary/{type}/{beneficiaryId}")
+    @GetMapping("/api/internal/coupons/beneficiary/{type}/{beneficiaryId}")
     ResponseEntity<ApiResponse<List<AdminCouponDto>>> getCouponsForBeneficiary(
             @PathVariable("type") BeneficiaryType type,
             @PathVariable("beneficiaryId") Long beneficiaryId);
@@ -64,7 +64,7 @@ public interface AdminCouponServiceClient {
     /**
      * Get coupon summary for a beneficiary.
      */
-    @GetMapping("/summary/beneficiary/{type}/{beneficiaryId}")
+    @GetMapping("/api/internal/coupons/summary/beneficiary/{type}/{beneficiaryId}")
     ResponseEntity<ApiResponse<CouponSummaryDto>> getCouponSummaryForBeneficiary(
             @PathVariable("type") BeneficiaryType type,
             @PathVariable("beneficiaryId") Long beneficiaryId);
@@ -72,7 +72,7 @@ public interface AdminCouponServiceClient {
     /**
      * Get expiring coupons for a beneficiary.
      */
-    @GetMapping("/beneficiary/{type}/{beneficiaryId}/expiring")
+    @GetMapping("/api/internal/coupons/beneficiary/{type}/{beneficiaryId}/expiring")
     ResponseEntity<ApiResponse<List<AdminCouponDto>>> getExpiringCouponsForBeneficiary(
             @PathVariable("type") BeneficiaryType type,
             @PathVariable("beneficiaryId") Long beneficiaryId,
@@ -83,6 +83,6 @@ public interface AdminCouponServiceClient {
     /**
      * Health check for coupon service.
      */
-    @GetMapping("/health")
+    @GetMapping("/api/internal/coupons/health")
     ResponseEntity<ApiResponse<String>> healthCheck();
 }

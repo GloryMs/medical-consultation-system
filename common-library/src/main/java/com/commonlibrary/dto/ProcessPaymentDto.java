@@ -17,6 +17,10 @@ public class ProcessPaymentDto {
 
     private Long caseId;
 
+    private Long supervisorId;
+
+    private Long appointmentId;
+
     @NotNull
     private PaymentType paymentType;
 

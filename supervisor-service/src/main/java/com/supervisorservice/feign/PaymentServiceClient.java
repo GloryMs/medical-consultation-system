@@ -4,6 +4,8 @@ import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.PaymentDto;
 import com.commonlibrary.dto.PaymentHistoryDto;
 import com.commonlibrary.dto.ProcessPaymentDto;
+import com.commonlibrary.dto.coupon.CouponPaymentRequestDto;
+import com.commonlibrary.dto.coupon.CouponPaymentResponseDto;
 import jakarta.validation.Valid;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
@@ -29,16 +31,16 @@ public interface PaymentServiceClient {
     /**
      * Process a payment
      */
-    @PostMapping("/process")
-    ResponseEntity<ApiResponse<PaymentDto>> processPayment(
+    @PostMapping("/api/payments/process")
+    ResponseEntity<ApiResponse<PaymentDto>> processPaymentSimulation(
             @Valid @RequestBody ProcessPaymentDto dto);
 
     /**
      * Process payment on behalf of patient (supervisor initiated)
      */
-    @PostMapping("/process/supervisor")
-    ResponseEntity<ApiResponse<PaymentDto>> processPaymentBySupervisor(
-            @Valid @RequestBody ProcessPaymentDto dto,
+    @PostMapping("/api/payments-internal/coupon/process")
+    ResponseEntity<ApiResponse<CouponPaymentResponseDto>> processPaymentBySupervisor(
+            @Valid @RequestBody CouponPaymentRequestDto request,
             @RequestHeader("X-Supervisor-Id") Long supervisorId);
 
     /**

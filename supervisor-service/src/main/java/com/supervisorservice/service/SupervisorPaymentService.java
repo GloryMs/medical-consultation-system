@@ -2,18 +2,21 @@ package com.supervisorservice.service;
 
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.CaseDto;
+import com.commonlibrary.dto.PaymentDto;
+import com.commonlibrary.dto.ProcessPaymentDto;
 import com.commonlibrary.dto.coupon.*;
-import com.commonlibrary.entity.BeneficiaryType;
-import com.commonlibrary.entity.SupervisorAssignmentStatus;
-import com.commonlibrary.entity.SupervisorCouponStatus;
+import com.commonlibrary.entity.*;
 import com.commonlibrary.exception.BusinessException;
+import com.supervisorservice.dto.AcceptAppointmentDto;
 import com.supervisorservice.dto.PayConsultationFeeRequest;
 import com.supervisorservice.dto.PaymentResponseDto;
+import com.supervisorservice.dto.SupervisorPayConsultationDto;
 import com.supervisorservice.entity.MedicalSupervisor;
 import com.supervisorservice.entity.SupervisorCouponAllocation;
 import com.supervisorservice.feign.AdminCouponServiceClient;
 import com.supervisorservice.feign.PatientServiceClient;
 import com.supervisorservice.feign.PaymentServiceClient;
+import com.supervisorservice.kafka.SupervisorKafkaProducer;
 import com.supervisorservice.repository.MedicalSupervisorRepository;
 import com.supervisorservice.repository.SupervisorCouponAllocationRepository;
 import com.supervisorservice.repository.SupervisorPatientAssignmentRepository;
@@ -26,6 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
+
+import static com.commonlibrary.entity.CaseStatus.IN_PROGRESS;
 
 /**
  * Service for processing supervisor payments including coupon redemption.
@@ -43,6 +49,8 @@ public class SupervisorPaymentService {
     private final AdminCouponServiceClient adminCouponClient;
     private final PaymentServiceClient paymentServiceClient;
     private final PatientServiceClient patientServiceClient;
+    private final SupervisorKafkaProducer eventProducer;
+    private final AppointmentManagementService appointmentManagementService;
 
     /**
      * Process consultation fee payment
@@ -74,6 +82,7 @@ public class SupervisorPaymentService {
                     HttpStatus.BAD_REQUEST);
         };
     }
+
 
     /**
      * Create Stripe payment intent
@@ -135,13 +144,15 @@ public class SupervisorPaymentService {
 
         String couponCode = request.getCouponCode().toUpperCase().trim();
 
-        // Find local allocation
+        //1-  Find local allocation
+        log.info("1- Find local allocation");
         SupervisorCouponAllocation allocation = allocationRepository
                 .findByCouponCodeAndSupervisorId(couponCode, supervisor.getId())
                 .orElseThrow(() -> new BusinessException(
                         "Coupon not found in your allocations", HttpStatus.NOT_FOUND));
 
-        // Validate coupon is assigned to this patient
+        //2-  Validate coupon is assigned to this patient
+        log.info("2-  Validate coupon is assigned to this patient wihing supervisor service");
         if (allocation.getAssignedPatientId() == null) {
             throw new BusinessException("Coupon is not assigned to any patient", HttpStatus.BAD_REQUEST);
         }
@@ -150,7 +161,8 @@ public class SupervisorPaymentService {
             throw new BusinessException("Coupon is assigned to a different patient", HttpStatus.BAD_REQUEST);
         }
 
-        // Validate coupon status
+        //3-  Validate coupon status
+        log.info("3-  Validate coupon status in supervisor repository");
         if (allocation.getStatus() != SupervisorCouponStatus.ASSIGNED) {
             throw new BusinessException(
                     "Coupon is not available. Status: " + allocation.getStatus(), 
@@ -161,54 +173,80 @@ public class SupervisorPaymentService {
             throw new BusinessException("Coupon has expired", HttpStatus.BAD_REQUEST);
         }
 
-        // Validate with admin-service
-        CouponValidationResponse validationResponse = validateWithAdminService(
-                supervisor, couponCode, request.getPatientId(), request.getCaseId(), consultationFee);
+//        //4- Validate with admin-service
+//        log.info("4- Validate with admin-service");
+//        CouponValidationResponse validationResponse = validateWithAdminService(
+//                supervisor, couponCode, request.getPatientId(), request.getCaseId(), consultationFee);
+//
+//        if (!validationResponse.getValid()) {
+//            throw new BusinessException(
+//                    "Coupon validation failed: " + validationResponse.getMessage(),
+//                    HttpStatus.BAD_REQUEST);
+//        }
 
-        if (!validationResponse.getValid()) {
+//        //5- Calculate amounts
+//        log.info("5- Calculate amounts");
+//        BigDecimal discountAmount = validationResponse.getDiscountAmount() != null
+//                ? validationResponse.getDiscountAmount()
+//                : allocation.calculateDiscount(consultationFee);
+//        BigDecimal remainingAmount = consultationFee.subtract(discountAmount);
+
+
+        //4- Call payment-service to process COUPON payment
+        log.info("4- Call payment-service to process COUPON payment");
+        SupervisorPayConsultationDto consultationDto = SupervisorPayConsultationDto.builder()
+                .appointmentId(request.getAppointmentId())
+                .caseId(request.getCaseId())
+                .patientId(request.getPatientId())
+                .doctorId(request.getDoctorId())
+                .paymentMethod(PaymentMethod.COUPON)
+                .couponCode(couponCode)
+                .amount(request.getAmount())
+                .build();
+        PaymentDto paymentDto =  notifyPaymentService(consultationDto, supervisor.getId(), PaymentMethod.COUPON);
+        if( paymentDto == null ){
             throw new BusinessException(
-                    "Coupon validation failed: " + validationResponse.getMessage(), 
-                    HttpStatus.BAD_REQUEST);
+                    "Failed to call payment service: ", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        // Calculate amounts
-        BigDecimal discountAmount = validationResponse.getDiscountAmount() != null 
-                ? validationResponse.getDiscountAmount() 
-                : allocation.calculateDiscount(consultationFee);
-        BigDecimal remainingAmount = consultationFee.subtract(discountAmount);
+        //5- Update appointment status to CONFIRMED and Case Status to IN_PROGRESS/Case's payment status to COMPLETED
+        log.info("5- Update appointment status and Case Status");
+        confirmAppointmentAndCase( consultationDto, supervisor.getId() );
 
-        // Mark coupon as used in admin-service
-        MarkCouponUsedResponse usedResponse = markCouponAsUsedInAdminService(
-                couponCode, supervisor, request, discountAmount, remainingAmount);
 
-        if (!usedResponse.getSuccess()) {
-            throw new BusinessException(
-                    "Failed to mark coupon as used: " + usedResponse.getMessage(), 
-                    HttpStatus.BAD_REQUEST);
-        }
+//        //8- Mark coupon as used in admin-service
+//        log.info("8- Mark coupon as used in admin-service");
+//        MarkCouponUsedResponse usedResponse = markCouponAsUsedInAdminService(
+//                couponCode, supervisor, request, discountAmount, remainingAmount);
+//
+//        if (!usedResponse.getSuccess()) {
+//            throw new BusinessException(
+//                    "Failed to mark coupon as used: " + usedResponse.getMessage(),
+//                    HttpStatus.BAD_REQUEST);
+//        }
 
-        // Update local allocation
+        //6- Update local allocation
+        log.info("6- Update local allocation in supervisor repository");
         allocation.setStatus(SupervisorCouponStatus.USED);
         allocation.setUsedAt(LocalDateTime.now());
         allocation.setUsedForCaseId(request.getCaseId());
-        allocation.setUsedForPaymentId(usedResponse.getPaymentId());
+        allocation.setUsedForPaymentId(paymentDto.getPaymentId());
         allocation.setLastSyncedAt(LocalDateTime.now());
         allocationRepository.save(allocation);
 
-        // Update case payment status
-        updateCasePaymentStatus(request.getCaseId(), "PAID");
 
         log.info("Coupon {} redeemed successfully for case {}", couponCode, request.getCaseId());
 
         return PaymentResponseDto.builder()
-                .paymentId(usedResponse.getPaymentId())
+                .paymentId(paymentDto.getPaymentId())
                 .caseId(request.getCaseId())
                 .patientId(request.getPatientId())
                 .supervisorId(supervisor.getId())
                 .paymentSource("COUPON")
                 .amount(consultationFee)
-                .discountAmount(discountAmount)
-                .finalAmount(remainingAmount)
+                //TODO you have to update both discountAmount, and finalAmount
+                .discountAmount(paymentDto.getAmount())
+                .finalAmount(paymentDto.getAmount())
                 .currency(allocation.getCurrency())
                 .status("COMPLETED")
                 .couponId(allocation.getAdminCouponId())
@@ -267,6 +305,7 @@ public class SupervisorPaymentService {
                     .discountApplied(discountAmount)
                     .amountCharged(remainingAmount)
                     .usedAt(LocalDateTime.now())
+                    //.paymentId()
                     .redeemedByUserId(supervisor.getUserId())
                     .build();
 
@@ -296,21 +335,24 @@ public class SupervisorPaymentService {
         log.info("Processing Stripe payment for case {}", request.getCaseId());
 
         try {
-            // Call payment-service to process Stripe payment
-            ResponseEntity<ApiResponse<Object>> response = paymentServiceClient.processPayment(
-                    request.getCaseId(),
-                    request.getPatientId(),
-                    request.getDoctorId(),
-                    "STRIPE",
-                    consultationFee,
-                    "USD",
-                    request.getStripePaymentIntentId(),
-                    null,
-                    supervisor.getUserId());
 
-            if (response.getBody() != null && response.getBody().isSuccess()) {
-                // Update case payment status
-                updateCasePaymentStatus(request.getCaseId(), "PAID");
+            // Call payment-service to process STRIPE payment
+            SupervisorPayConsultationDto consultationDto = SupervisorPayConsultationDto.builder()
+                    .appointmentId(request.getAppointmentId())
+                    .caseId(request.getCaseId())
+                    .patientId(request.getPatientId())
+                    .doctorId(request.getDoctorId())
+                    .paymentMethod(PaymentMethod.valueOf(request.getPaymentMethod()))
+                    .paymentIntentId(Objects.equals(request.getPaymentMethod(),
+                            PaymentMethod.STRIPE.toString()) ? request.getStripePaymentIntentId() : "")
+                    //.paymentMethodId(request.getPaymentMethod(), PaymentMethod.STRIPE.toString()) ? request.get)
+                    .amount(request.getAmount())
+                    .build();
+            PaymentDto paymentDto =  notifyPaymentService(consultationDto, supervisor.getId(), PaymentMethod.STRIPE);
+            if( paymentDto != null ){
+                //Update appointment status to be CONFIRMED
+                confirmAppointmentAndCase( consultationDto, supervisor.getId() );
+
 
                 return PaymentResponseDto.builder()
                         .caseId(request.getCaseId())
@@ -324,10 +366,12 @@ public class SupervisorPaymentService {
                         .timestamp(LocalDateTime.now())
                         .message("Payment processed via Stripe")
                         .build();
-            } else {
+            }
+             else {
                 throw new BusinessException("Stripe payment failed", HttpStatus.BAD_REQUEST);
             }
         } catch (BusinessException e) {
+            e.printStackTrace();
             throw e;
         } catch (Exception e) {
             log.error("Stripe payment error: {}", e.getMessage(), e);
@@ -347,20 +391,21 @@ public class SupervisorPaymentService {
 
         try {
             // Call payment-service to process PayPal payment
-            ResponseEntity<ApiResponse<Object>> response = paymentServiceClient.processPayment(
-                    request.getCaseId(),
-                    request.getPatientId(),
-                    request.getDoctorId(),
-                    "PAYPAL",
-                    consultationFee,
-                    "USD",
-                    null,
-                    request.getPaypalOrderId(),
-                    supervisor.getUserId());
+            SupervisorPayConsultationDto consultationDto = SupervisorPayConsultationDto.builder()
+                    .appointmentId(request.getAppointmentId())
+                    .caseId(request.getCaseId())
+                    .patientId(request.getPatientId())
+                    .doctorId(request.getDoctorId())
+                    .paymentMethod(PaymentMethod.valueOf(request.getPaymentMethod()))
+                    .paypalOrderId(Objects.equals(request.getPaymentMethod(),PaymentMethod.PAYPAL.toString()) ?
+                                                                            request.getPaypalOrderId() : "")
+                    .amount(request.getAmount())
+                    .build();
+            PaymentDto paymentDto =  notifyPaymentService(consultationDto, supervisor.getId(), PaymentMethod.PAYPAL);
 
-            if (response.getBody() != null && response.getBody().isSuccess()) {
-                // Update case payment status
-                updateCasePaymentStatus(request.getCaseId(), "PAID");
+            if (paymentDto != null ) {
+                //Update appointment status to be CONFIRMED
+                confirmAppointmentAndCase( consultationDto, supervisor.getId() );
 
                 return PaymentResponseDto.builder()
                         .caseId(request.getCaseId())
@@ -440,5 +485,213 @@ public class SupervisorPaymentService {
             log.error("Failed to update case payment status: {}", e.getMessage());
             // Don't fail the payment - case status update is secondary
         }
+    }
+
+    /**
+     * Confirm appointment and update case after successful payment
+     */
+    private void confirmAppointmentAndCase(SupervisorPayConsultationDto dto, Long supervisorId) {
+        log.info("Confirming appointment and case for case {} by supervisor {}",
+                dto.getCaseId(), supervisorId);
+        try{
+
+            try{
+                //Accept Appointment:
+                AcceptAppointmentDto acceptAppointmentDto = new AcceptAppointmentDto();
+                acceptAppointmentDto.setCaseId(dto.getCaseId());
+                acceptAppointmentDto.setPatientId(dto.getPatientId());
+                acceptAppointmentDto.setNotes(dto.getNotes());
+                appointmentManagementService.acceptAppointment(supervisorId, acceptAppointmentDto);
+
+            } catch (Exception e) {
+                log.error("Failed to accept appointment {} for case status for case {}: {}",
+                        dto.getAppointmentId() ,dto.getCaseId(), e.getMessage());
+                throw new BusinessException("Failed to accept appointment for the case " + e.getMessage(),
+                        HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+
+            try{
+                //Update Case's status and PaymentStatus
+                patientServiceClient.updateCaseStatus(dto.getCaseId(), IN_PROGRESS.name(), dto.getDoctorId());
+
+            } catch (Exception e) {
+                log.error("Failed to update case {} status, for appointment {}: {}",
+                        dto.getCaseId() ,dto.getAppointmentId(), e.getMessage());
+                throw new BusinessException("Failed to update case status after confirming the appointment " +
+                        e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            //Send Kafka Event
+            eventProducer.sendScheduleConfirmationEvent( dto.getCaseId(), dto.getPatientId(), dto.getDoctorId());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+        }
+
+//        // Update case payment status via patient-service
+//        try {
+//            patientServiceClient.acceptAppointmentBySupervisor(
+//                    dto.getCaseId(),
+//                    dto.getPatientId(),
+//                    supervisorId);
+//        } catch (Exception e) {
+//            log.error("Failed to update case status for case {}: {}", dto.getCaseId(), e.getMessage());
+//            throw new BusinessException("Failed to confirm case: " + e.getMessage(),
+//                    HttpStatus.INTERNAL_SERVER_ERROR);
+//        }
+//
+//        // Confirm appointment with doctor-service if appointment ID provided
+//        if (dto.getAppointmentId() != null) {
+//            try {
+//                doctorServiceClient.confirmAppointment(
+//                        dto.getCaseId(),
+//                        dto.getPatientId(),
+//                        dto.getDoctorId());
+//            } catch (Exception e) {
+//                log.warn("Failed to confirm appointment {} with doctor service: {}",
+//                        dto.getAppointmentId(), e.getMessage());
+//                // Don't fail the payment - appointment confirmation can be retried
+//            }
+//        }
+    }
+
+    /**
+     * Send payment request to payment service
+     */
+    private PaymentDto notifyPaymentService(SupervisorPayConsultationDto dto, Long supervisorId,
+                                      PaymentMethod paymentMethod) {
+        log.info("Supervisor-Service: notifyPaymentService(), supervisorId= {}", supervisorId);
+
+        ProcessPaymentDto paymentDto = null;
+        CouponPaymentRequestDto couponPaymentRequestDto = null;
+        PaymentDto paymentResponse = new PaymentDto();
+
+        // Call payment service
+        // Build payment request for payment-service
+        switch (paymentMethod) {
+            case COUPON:
+            {
+                couponPaymentRequestDto = CouponPaymentRequestDto.builder()
+                        .couponCode(dto.getCouponCode())
+                        .appointmentId(dto.getAppointmentId())
+                        .caseId(dto.getCaseId())
+                        .patientId(dto.getPatientId())
+                        .doctorId(dto.getDoctorId())
+                        .supervisorId(supervisorId)
+                        .redeemedByUserId(supervisorId)
+                        .consultationFee(dto.getAmount())
+                        .beneficiaryType(BeneficiaryType.MEDICAL_SUPERVISOR)
+                        .beneficiaryId(supervisorId)
+                        .build();
+
+                ApiResponse<CouponPaymentResponseDto> paymentDtoResponse;
+                try {
+                    paymentDtoResponse = paymentServiceClient
+                            .processPaymentBySupervisor(couponPaymentRequestDto, supervisorId)
+                            .getBody();
+                } catch (Exception e) {
+                    log.error("{} payment -  Failed to call payment service for case {}: {}",paymentMethod.name(), dto.getCaseId(),
+                            e.getMessage());
+                    throw new BusinessException("Payment service unavailable: " + e.getMessage(),
+                            HttpStatus.SERVICE_UNAVAILABLE);
+                }
+
+                if (paymentDtoResponse == null || !paymentDtoResponse.isSuccess()) {
+                    String errorMsg = paymentDtoResponse != null ? paymentDtoResponse.getMessage() : "Payment service error";
+                    throw new BusinessException(errorMsg, HttpStatus.PAYMENT_REQUIRED);
+                }
+                CouponPaymentResponseDto couponPaymentResponseDto = paymentDtoResponse.getData();
+
+                if(couponPaymentResponseDto != null){
+                    paymentResponse.setPaymentId(couponPaymentResponseDto.getPaymentId());
+                    paymentResponse.setPaymentType(PaymentType.CONSULTATION);
+                    paymentResponse.setPaymentMethod(paymentMethod);
+                    paymentResponse.setAmount(couponPaymentResponseDto.getFinalAmount());
+                    paymentResponse.setCurrency("USD");
+                    paymentResponse.setCaseId(couponPaymentResponseDto.getCaseId());
+                    paymentResponse.setPatientId(couponPaymentResponseDto.getPatientId());
+                    paymentResponse.setDoctorId(couponPaymentResponseDto.getDoctorId());
+                    paymentResponse.setAppointmentId(dto.getAppointmentId());
+                    paymentResponse.setStatus( PaymentStatus.valueOf( couponPaymentResponseDto.getStatus()));
+                    paymentResponse.setTransactionId(couponPaymentResponseDto.getTransactionId());
+
+                    log.info("Payment info details: {}", paymentResponse.toString());
+                }
+                else{
+                    throw new BusinessException("Error in payment response", HttpStatus.INTERNAL_SERVER_ERROR);
+                }
+
+
+
+            }
+            case PAYPAL:
+            {
+                paymentDto = ProcessPaymentDto.builder()
+                        .patientId(dto.getPatientId())
+                        .doctorId(dto.getDoctorId())
+                        .caseId(dto.getCaseId())
+                        .appointmentId(dto.getAppointmentId())
+                        .supervisorId(supervisorId)
+                        .paymentType(PaymentType.CONSULTATION)
+                        .amount(dto.getAmount())
+                        .paymentMethod("PAYPAL")
+                        //.paypalOrderId(dto.getPaypalOrderId())
+                        .build();
+
+                ApiResponse<PaymentDto> paymentDtoResponse = null;
+                try {
+                    paymentDtoResponse = paymentServiceClient
+                            .processPaymentSimulation(paymentDto)
+                            .getBody();
+                } catch (Exception e) {
+                    log.error("{} payment -  Failed to call payment service for case {}: {}",paymentMethod.name(), dto.getCaseId(),
+                            e.getMessage());
+                    throw new BusinessException("Payment service unavailable: " + e.getMessage(),
+                            HttpStatus.SERVICE_UNAVAILABLE);
+                }
+
+                if (paymentDtoResponse == null || !paymentDtoResponse.isSuccess()) {
+                    String errorMsg = paymentDtoResponse != null ? paymentDtoResponse.getMessage() : "Payment service error";
+                    throw new BusinessException(errorMsg, HttpStatus.PAYMENT_REQUIRED);
+                }
+                paymentResponse = paymentDtoResponse.getData();
+            }
+            case STRIPE:
+            {
+                paymentDto = ProcessPaymentDto.builder()
+                        .patientId(dto.getPatientId())
+                        .doctorId(dto.getDoctorId())
+                        .caseId(dto.getCaseId())
+                        .appointmentId(dto.getAppointmentId())
+                        .supervisorId(supervisorId)
+                        .paymentType(PaymentType.CONSULTATION)
+                        .amount(dto.getAmount())
+                        .paymentMethod("STRIPE")
+                        //.paymentMethodId(dto.getPaymentMethodId())
+                        //.paymentIntentId(dto.getPaymentIntentId())
+                        .build();
+
+                ApiResponse<PaymentDto> paymentDtoResponse = null;
+                try {
+                    paymentDtoResponse = paymentServiceClient
+                            .processPaymentSimulation(paymentDto)
+                            .getBody();
+                } catch (Exception e) {
+                    log.error("{} payment -  Failed to call payment service for case {}: {}",paymentMethod.name(), dto.getCaseId(),
+                            e.getMessage());
+                    throw new BusinessException("Payment service unavailable: " + e.getMessage(),
+                            HttpStatus.SERVICE_UNAVAILABLE);
+                }
+
+                if (paymentDtoResponse == null || !paymentDtoResponse.isSuccess()) {
+                    String errorMsg = paymentDtoResponse != null ? paymentDtoResponse.getMessage() : "Payment service error";
+                    throw new BusinessException(errorMsg, HttpStatus.PAYMENT_REQUIRED);
+                }
+                paymentResponse = paymentDtoResponse.getData();
+            }
+            break;
+        }
+
+        return paymentResponse;
     }
 }

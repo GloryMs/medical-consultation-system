@@ -33,12 +33,16 @@ import java.util.Map;
 @AllArgsConstructor
 public class Payment extends BaseEntity {
 
-    @Column(nullable = false)
+
     private Long patientId;
 
+    @Column(nullable = false)
     private Long doctorId;
 
+    @Column(nullable = false)
     private Long caseId;
+
+    private Long supervisorId;
 
     private Long appointmentId;
 

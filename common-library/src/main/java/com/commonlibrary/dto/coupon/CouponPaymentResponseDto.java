@@ -1,4 +1,4 @@
-package com.paymentservice.dto;
+package com.commonlibrary.dto.coupon;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

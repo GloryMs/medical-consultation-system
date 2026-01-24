@@ -2,6 +2,9 @@ package com.supervisorservice.service;
 
 import com.commonlibrary.dto.*;
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.coupon.CouponPaymentRequestDto;
+import com.commonlibrary.dto.coupon.CouponPaymentResponseDto;
+import com.commonlibrary.entity.BeneficiaryType;
 import com.commonlibrary.entity.CaseStatus;
 import com.commonlibrary.entity.PaymentStatus;
 import com.commonlibrary.entity.PaymentType;
@@ -182,20 +185,31 @@ public class PaymentManagementService {
 
         // Call payment service
         // Build payment request for payment-service
-        ProcessPaymentDto paymentDto = ProcessPaymentDto.builder()
+        CouponPaymentRequestDto couponPaymentRequestDto = CouponPaymentRequestDto.builder()
+                .couponCode(dto.getCouponCode())
+                .appointmentId(dto.getAppointmentId())
+                .caseId(dto.getCaseId())
                 .patientId(dto.getPatientId())
                 .doctorId(dto.getDoctorId())
-                .caseId(dto.getCaseId())
-                .paymentType(PaymentType.CONSULTATION)
-                .amount(consultationFee)
-                .paymentMethod("COUPON")
-                //.paymentMethodId(dto.getPaymentMethodId())
-                //.paymentIntentId(dto.getPaymentIntentId())
+                .consultationFee(consultationFee)
+                .beneficiaryType(BeneficiaryType.MEDICAL_SUPERVISOR)
+                .beneficiaryId(supervisor.getId())
                 .build();
-        ApiResponse<PaymentDto> response;
+
+//        ProcessPaymentDto paymentDto = ProcessPaymentDto.builder()
+//                .patientId(dto.getPatientId())
+//                .doctorId(dto.getDoctorId())
+//                .caseId(dto.getCaseId())
+//                .paymentType(PaymentType.CONSULTATION)
+//                .amount(consultationFee)
+//                .paymentMethod("COUPON")
+//                //.paymentMethodId(dto.getPaymentMethodId())
+//                //.paymentIntentId(dto.getPaymentIntentId())
+//                .build();
+        ApiResponse<CouponPaymentResponseDto> response;
         try {
             response = paymentServiceClient
-                    .processPaymentBySupervisor(paymentDto, supervisor.getId())
+                    .processPaymentBySupervisor(couponPaymentRequestDto, supervisor.getId())
                     .getBody();
         } catch (Exception e) {
             log.error("Failed to call payment service for case {}: {}", dto.getCaseId(), e.getMessage());
@@ -262,6 +276,8 @@ public class PaymentManagementService {
                 .patientId(dto.getPatientId())
                 .doctorId(dto.getDoctorId())
                 .caseId(dto.getCaseId())
+                .appointmentId(dto.getAppointmentId())
+                .supervisorId(supervisor.getId())
                 .paymentType(PaymentType.CONSULTATION)
                 .amount(consultationFee)
                 .paymentMethod("STRIPE")
@@ -273,7 +289,7 @@ public class PaymentManagementService {
         ApiResponse<PaymentDto> response;
         try {
             response = paymentServiceClient
-                    .processPaymentBySupervisor(paymentDto, supervisor.getId())
+                    .processPaymentSimulation(paymentDto)
                     .getBody();
         } catch (Exception e) {
             log.error("Failed to call payment service for case {}: {}", dto.getCaseId(), e.getMessage());
@@ -361,6 +377,8 @@ public class PaymentManagementService {
                 .patientId(dto.getPatientId())
                 .doctorId(dto.getDoctorId())
                 .caseId(dto.getCaseId())
+                .appointmentId(dto.getAppointmentId())
+                .supervisorId(supervisor.getId())
                 .paymentType(PaymentType.CONSULTATION)
                 .amount(consultationFee)
                 .paymentMethod("PAYPAL")
@@ -371,7 +389,7 @@ public class PaymentManagementService {
         ApiResponse<PaymentDto> response;
         try {
             response = paymentServiceClient
-                    .processPaymentBySupervisor(paymentDto, supervisor.getId())
+                    .processPaymentSimulation(paymentDto)
                     .getBody();
         } catch (Exception e) {
             log.error("Failed to call payment service for case {}: {}", dto.getCaseId(), e.getMessage());

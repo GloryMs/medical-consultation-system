@@ -4,8 +4,8 @@ import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.coupon.AdminCouponDto;
 import com.commonlibrary.dto.coupon.CouponValidationResponse;
 import com.commonlibrary.entity.BeneficiaryType;
-import com.paymentservice.dto.CouponPaymentRequestDto;
-import com.paymentservice.dto.CouponPaymentResponseDto;
+import com.commonlibrary.dto.coupon.CouponPaymentRequestDto;
+import com.commonlibrary.dto.coupon.CouponPaymentResponseDto;
 import com.paymentservice.service.CouponPaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,13 +61,15 @@ public class CouponPaymentController {
                description = "Process a payment using a coupon")
     public ResponseEntity<ApiResponse<CouponPaymentResponseDto>> processCouponPayment(
             @Valid @RequestBody CouponPaymentRequestDto request,
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-Supervisor-Id") Long supervisorId) {
 
         log.info("Processing coupon payment for case {} with coupon {} by user {}",
-                request.getCaseId(), request.getCouponCode(), userId);
+                request.getCaseId(), request.getCouponCode(), supervisorId);
 
         // Set the redeemer user ID
-        request.setRedeemedByUserId(userId);
+        log.info("supervisorId by RequestBody: {}", request.getSupervisorId());
+        log.info("supervisorId by RequestHeader: {}", supervisorId);
+        request.setRedeemedByUserId(supervisorId);
 
         CouponPaymentResponseDto response = couponPaymentService.processCouponPayment(request);
 

@@ -1,4 +1,4 @@
-package com.paymentservice.dto;
+package com.commonlibrary.dto.coupon;
 
 import com.commonlibrary.entity.BeneficiaryType;
 import jakarta.validation.constraints.NotBlank;
@@ -31,6 +31,8 @@ public class CouponPaymentRequestDto {
     private Long doctorId;
 
     private Long appointmentId;
+
+    private Long supervisorId;
 
     /**
      * Beneficiary type - who owns the coupon (MEDICAL_SUPERVISOR or PATIENT)
