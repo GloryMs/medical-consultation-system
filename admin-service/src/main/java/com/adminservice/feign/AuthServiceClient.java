@@ -29,7 +29,7 @@ public interface AuthServiceClient {
                                                            @RequestParam(required = false) UserStatus status);
 
     @GetMapping("/api/auth/stats")
-    ResponseEntity<ApiResponse<UserStasDto>> getUsersStats();
+    ResponseEntity<ApiResponse<UserStatsDto>> getUsersStats();
 
     /**
      * Get user by ID

@@ -38,8 +38,8 @@ public class CaseAnalyticsService {
         log.info("Calculating case analytics from {} to {}", startDateStr, endDateStr);
         
         try {
-            // Parse dates or use defaults (last 90 days)
-            LocalDateTime startDate = parseDate(startDateStr, LocalDateTime.now().minusDays(90));
+            // Parse dates or use defaults (last 360 days)
+            LocalDateTime startDate = parseDate(startDateStr, LocalDateTime.now().minusYears(1));
             LocalDateTime endDate = parseDate(endDateStr, LocalDateTime.now());
             
             // Fetch data

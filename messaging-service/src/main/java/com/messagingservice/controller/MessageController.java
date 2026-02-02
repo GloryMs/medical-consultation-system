@@ -37,11 +37,12 @@ public class MessageController {
     public ResponseEntity<ApiResponse<List<MessageDto>>> getConversationMessages(
             @PathVariable Long conversationId,
             @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
         List<MessageDto> messages = messageService.getConversationMessages(
-                conversationId, userId, page, size
+                conversationId, userId, userRole, page, size
         );
         return ResponseEntity.ok(ApiResponse.success(messages));
     }
@@ -49,18 +50,20 @@ public class MessageController {
     @PutMapping("/{messageId}/read")
     public ResponseEntity<ApiResponse<Void>> markMessageAsRead(
             @PathVariable Long messageId,
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole) {
 
-        messageService.markMessageAsRead(messageId, userId);
+        messageService.markMessageAsRead(messageId, userId, userRole);
         return ResponseEntity.ok(ApiResponse.success(null, "Message marked as read"));
     }
 
     @PutMapping("/conversations/{conversationId}/mark-read")
     public ResponseEntity<ApiResponse<Void>> markConversationAsRead(
             @PathVariable Long conversationId,
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole) {
 
-        messageService.markConversationAsRead(conversationId, userId);
+        messageService.markConversationAsRead(conversationId, userId, userRole);
         return ResponseEntity.ok(ApiResponse.success(null, "Conversation marked as read"));
     }
 
@@ -77,18 +80,20 @@ public class MessageController {
     public ResponseEntity<ApiResponse<List<MessageDto>>> searchMessages(
             @RequestParam Long conversationId,
             @RequestParam String query,
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole) {
 
-        List<MessageDto> messages = messageService.searchMessages(conversationId, query, userId);
+        List<MessageDto> messages = messageService.searchMessages(conversationId, query, userId, userRole);
         return ResponseEntity.ok(ApiResponse.success(messages));
     }
 
     @DeleteMapping("/{messageId}")
     public ResponseEntity<ApiResponse<Void>> deleteMessage(
             @PathVariable Long messageId,
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole) {
 
-        messageService.deleteMessage(messageId, userId);
+        messageService.deleteMessage(messageId, userId, userRole);
         return ResponseEntity.ok(ApiResponse.success(null, "Message deleted"));
     }
 
@@ -143,18 +148,20 @@ public class MessageController {
     public ResponseEntity<ApiResponse<Void>> updateConversationStatus(
             @PathVariable Long conversationId,
             @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole,
             @RequestParam ConversationStatus status) {
 
-        conversationService.updateConversationStatus(conversationId, userId, status);
+        conversationService.updateConversationStatus(conversationId, userId, status, userRole);
         return ResponseEntity.ok(ApiResponse.success(null, "Conversation status updated"));
     }
 
     @PostMapping("/conversations/{conversationId}/archive")
     public ResponseEntity<ApiResponse<Void>> archiveConversation(
             @PathVariable Long conversationId,
-            @RequestHeader("X-User-Id") Long userId) {
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-User-Role") UserRole userRole) {
 
-        conversationService.archiveConversation(conversationId, userId);
+        conversationService.archiveConversation(conversationId, userId, userRole);
         return ResponseEntity.ok(ApiResponse.success(null, "Conversation archived"));
     }
 

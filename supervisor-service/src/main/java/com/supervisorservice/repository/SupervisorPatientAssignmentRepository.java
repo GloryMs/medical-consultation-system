@@ -104,6 +104,14 @@ public interface SupervisorPatientAssignmentRepository extends JpaRepository<Sup
            "WHERE a.supervisor.id = :supervisorId AND a.assignmentStatus = 'ACTIVE' " +
            "AND a.isDeleted = false")
     List<Long> findPatientIdsBySupervisor(@Param("supervisorId") Long supervisorId);
+
+    /**
+     * Find all patients (user Ids) assigned to a supervisor
+     */
+    @Query("SELECT DISTINCT a.patientUserId FROM SupervisorPatientAssignment a " +
+            "WHERE a.supervisor.id = :supervisorId AND a.assignmentStatus = 'ACTIVE' " +
+            "AND a.isDeleted = false")
+    List<Long> findPatientUserIdsBySupervisor(@Param("supervisorId") Long supervisorId);
     
     /**
      * Find assignments by status

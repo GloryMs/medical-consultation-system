@@ -9,12 +9,9 @@ import com.adminservice.repository.SystemConfigRepository;
 import com.adminservice.repository.StaticContentRepository;
 import com.adminservice.repository.UserRepository;
 import com.commonlibrary.dto.PendingVerificationDto;
-import com.commonlibrary.entity.ComplaintPriority;
-import com.commonlibrary.entity.ComplaintStatus;
 import com.commonlibrary.dto.DoctorDto;
 import com.commonlibrary.dto.*;
 import com.commonlibrary.exception.BusinessException;
-import com.commonlibrary.kafka.NotificationProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -25,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
@@ -58,8 +54,8 @@ public class AdminService {
                 .build();
     }
 
-    public UserStasDto getUserStats(){
-        UserStasDto statsDto = new UserStasDto();
+    public UserStatsDto getUserStats(){
+        UserStatsDto statsDto = new UserStatsDto();
         try{
             statsDto = authServiceClient.getUsersStats().getBody().getData();
         } catch (Exception e) {

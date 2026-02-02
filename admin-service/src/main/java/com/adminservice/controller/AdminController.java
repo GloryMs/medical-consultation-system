@@ -6,7 +6,6 @@ import com.adminservice.entity.SystemConfig;
 import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
 import com.adminservice.feign.PaymentServiceClient;
-import com.adminservice.service.AdminCaseService;
 import com.adminservice.service.AdminService;
 import com.adminservice.service.ComplaintService;
 import com.commonlibrary.dto.*;
@@ -21,7 +20,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,8 +41,8 @@ public class AdminController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<ApiResponse<UserStasDto>> getStats() {
-        UserStasDto stats = adminService.getUserStats();
+    public ResponseEntity<ApiResponse<UserStatsDto>> getStats() {
+        UserStatsDto stats = adminService.getUserStats();
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
 

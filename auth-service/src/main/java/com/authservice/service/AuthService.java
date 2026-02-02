@@ -10,7 +10,7 @@ import com.authservice.util.JwtUtil;
 import com.commonlibrary.dto.EmailNotificationDto;
 import com.commonlibrary.dto.SmsNotificationDto;
 import com.commonlibrary.dto.UserDto;
-import com.commonlibrary.dto.UserStasDto;
+import com.commonlibrary.dto.UserStatsDto;
 import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.entity.UserStatus;
 import com.commonlibrary.exception.BusinessException;
@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Optional;
 
 import com.authservice.entity.PasswordResetCode;
-import org.springframework.ui.ModelMap;
 
 
 @Service
@@ -333,18 +332,25 @@ public class AuthService {
         return userDto;
     }
 
-    public UserStasDto getUsersStats(){
-        UserStasDto userStasDto = new UserStasDto();
+    public UserStatsDto getUsersStats(){
+        UserStatsDto userStasDto = new UserStatsDto();
         List<UserRole> allRoles = new ArrayList<>();
         allRoles.add(UserRole.ADMIN);
         allRoles.add(UserRole.PATIENT);
         allRoles.add(UserRole.DOCTOR);
+        allRoles.add(UserRole.MEDICAL_SUPERVISOR);
         userStasDto.setTotalUsers(userRepository.countByRoleIn(allRoles));
         userStasDto.setActiveUsers(userRepository.countByStatus(UserStatus.ACTIVE));
         userStasDto.setPatients(userRepository.countByStatus(UserStatus.PENDING_VERIFICATION));
         userStasDto.setDoctors(userRepository.countByRole(UserRole.DOCTOR));
         userStasDto.setPatients(userRepository.countByRole(UserRole.PATIENT));
         userStasDto.setAdmins(userRepository.countByRole(UserRole.ADMIN));
+        userStasDto.setSupervisors(userRepository.countByRole(UserRole.MEDICAL_SUPERVISOR));
+        userStasDto.setPendingDoctorUsers(userRepository.countByRoleAndStatus(UserRole.DOCTOR,
+                UserStatus.PENDING_VERIFICATION));
+        userStasDto.setPendingSupervisorUsers(userRepository.countByRoleAndStatus(UserRole.MEDICAL_SUPERVISOR,
+                UserStatus.PENDING_VERIFICATION));
+
         return userStasDto;
     }
 

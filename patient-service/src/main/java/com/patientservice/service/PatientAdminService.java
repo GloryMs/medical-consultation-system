@@ -126,6 +126,8 @@ public class PatientAdminService {
                 if (c2.getSubmittedAt() == null) return -1;
                 return c2.getSubmittedAt().compareTo(c1.getSubmittedAt());
             });
+
+            log.info("# of Cases returned to admin: {}", cases.size());
             
             return cases.stream()
                     .map(this::convertToCaseDto)

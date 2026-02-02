@@ -1,9 +1,11 @@
 package com.messagingservice.service;
 
+import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.exception.BusinessException;
 import com.messagingservice.dto.*;
 import com.messagingservice.entity.*;
+import com.messagingservice.feign.SupervisorServiceClient;
 import com.messagingservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,10 +14,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,13 +31,15 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final MessageAttachmentRepository attachmentRepository;
+    private final SupervisorServiceClient supervisorServiceClient;
+
 
     @Transactional
     public MessageDto sendMessage(Long senderId, UserRole senderRole, SendMessageDto dto) {
         log.info("Sending message from user {} (role: {}) to user {} for case {}",
                 senderId, senderRole, dto.getReceiverId(), dto.getCaseId());
 
-        // Get or create conversation - THIS IS THE KEY FIX
+        // Get or create conversation
         Conversation conversation = getOrCreateConversation(
                 dto.getCaseId(),
                 senderId,
@@ -43,7 +49,41 @@ public class MessageService {
                 dto.getDoctorName()
         );
 
-        UserRole receiverRole = senderRole == UserRole.PATIENT ? UserRole.DOCTOR : UserRole.PATIENT;
+        // Authorization check for MEDICAL_SUPERVISOR
+        if (senderRole == UserRole.MEDICAL_SUPERVISOR) {
+            List<Long> assignedPatientIds = getAssignedPatientIds(senderId);
+            if (!assignedPatientIds.contains(conversation.getPatientId())) {
+                throw new BusinessException(
+                        "Access denied: Supervisor not assigned to this patient",
+                        HttpStatus.FORBIDDEN
+                );
+            }
+        }
+
+        // Determine receiver role
+        UserRole receiverRole;
+        if (senderRole == UserRole.PATIENT || senderRole == UserRole.MEDICAL_SUPERVISOR) {
+            receiverRole = UserRole.DOCTOR;
+        } else {
+            receiverRole = UserRole.PATIENT;
+        }
+
+        // Determine sender and receiver names
+        String senderName;
+        String receiverName;
+
+        if (senderRole == UserRole.PATIENT) {
+            senderName = conversation.getPatientName();
+            receiverName = conversation.getDoctorName();
+        } else if (senderRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Supervisor uses their own name/identifier
+            senderName = dto.getPatientName() != null ? dto.getPatientName() : "Medical Supervisor";
+            receiverName = conversation.getDoctorName();
+        } else {
+            // DOCTOR role
+            senderName = conversation.getDoctorName();
+            receiverName = conversation.getPatientName();
+        }
 
         Message message = Message.builder()
                 .conversationId(conversation.getId())
@@ -57,8 +97,8 @@ public class MessageService {
                 .status(MessageStatus.SENT)
                 .isRead(false)
                 .replyToMessageId(dto.getReplyToMessageId())
-                .senderName(senderRole == UserRole.PATIENT ? conversation.getPatientName() : conversation.getDoctorName())
-                .receiverName(receiverRole == UserRole.PATIENT ? conversation.getPatientName() : conversation.getDoctorName())
+                .senderName(senderName)
+                .receiverName(receiverName)
                 .build();
 
         message = messageRepository.save(message);
@@ -72,12 +112,21 @@ public class MessageService {
         return mapToMessageDto(message);
     }
 
-    public List<MessageDto> getConversationMessages(Long conversationId, Long userId, int page, int size) {
+    public List<MessageDto> getConversationMessages(Long conversationId, Long userId, UserRole userRole, int page, int size) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BusinessException("Conversation not found", HttpStatus.NOT_FOUND));
 
-        if (!conversation.getPatientId().equals(userId) && !conversation.getDoctorId().equals(userId)) {
-            throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+        if (userRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Check if supervisor has access to this patient
+            List<Long> assignedPatientIds = getAssignedPatientIds(userId);
+            if (!assignedPatientIds.contains(conversation.getPatientId())) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
+        } else {
+            // For PATIENT and DOCTOR roles
+            if (!conversation.getPatientId().equals(userId) && !conversation.getDoctorId().equals(userId)) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
         }
 
         Pageable pageable = PageRequest.of(page, size);
@@ -90,84 +139,188 @@ public class MessageService {
     }
 
     @Transactional
-    public void markMessageAsRead(Long messageId, Long userId) {
+    public void markMessageAsRead(Long messageId, Long userId, UserRole userRole) {
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new BusinessException("Message not found", HttpStatus.NOT_FOUND));
 
-        if (!message.getReceiverId().equals(userId)) {
-            throw new BusinessException("Not authorized", HttpStatus.FORBIDDEN);
-        }
+        // Authorization check
+        if (userRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Supervisor can mark messages as read on behalf of their assigned patients
+            Conversation conversation = conversationRepository.findById(message.getConversationId())
+                    .orElseThrow(() -> new BusinessException("Conversation not found", HttpStatus.NOT_FOUND));
 
-        if (!message.getIsRead()) {
-            message.setIsRead(true);
-            message.setReadAt(LocalDateTime.now());
-            message.setStatus(MessageStatus.READ);
-            messageRepository.save(message);
+            List<Long> assignedPatientIds = getAssignedPatientIds(userId);
+            if (!assignedPatientIds.contains(conversation.getPatientId())) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
 
-            updateConversationUnreadCount(message.getConversationId(), userId);
+            // Verify the message is for the patient (supervisor acts on behalf of patient)
+            if (!message.getReceiverId().equals(conversation.getPatientId())) {
+                throw new BusinessException("Can only mark patient's messages as read", HttpStatus.FORBIDDEN);
+            }
+
+            // Mark as read on behalf of patient
+            if (!message.getIsRead()) {
+                message.setIsRead(true);
+                message.setReadAt(LocalDateTime.now());
+                message.setStatus(MessageStatus.READ);
+                messageRepository.save(message);
+
+                updateConversationUnreadCount(message.getConversationId(), conversation.getPatientId());
+            }
+        } else {
+            // For PATIENT and DOCTOR roles
+            if (!message.getReceiverId().equals(userId)) {
+                throw new BusinessException("Not authorized", HttpStatus.FORBIDDEN);
+            }
+
+            if (!message.getIsRead()) {
+                message.setIsRead(true);
+                message.setReadAt(LocalDateTime.now());
+                message.setStatus(MessageStatus.READ);
+                messageRepository.save(message);
+
+                updateConversationUnreadCount(message.getConversationId(), userId);
+            }
         }
     }
 
     @Transactional
-    public void markConversationAsRead(Long conversationId, Long userId) {
+    public void markConversationAsRead(Long conversationId, Long userId, UserRole userRole) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BusinessException("Conversation not found", HttpStatus.NOT_FOUND));
 
-        if (!conversation.getPatientId().equals(userId) && !conversation.getDoctorId().equals(userId)) {
-            throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
-        }
+        // Authorization check
+        if (userRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Verify supervisor has access to this patient
+            List<Long> assignedPatientIds = getAssignedPatientIds(userId);
+            if (!assignedPatientIds.contains(conversation.getPatientId())) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
 
-        messageRepository.markConversationMessagesAsRead(
-                conversationId,
-                userId,
-                LocalDateTime.now(),
-                MessageStatus.READ
-        );
+            // Mark patient's messages as read (supervisor acts on behalf of patient)
+            messageRepository.markConversationMessagesAsRead(
+                    conversationId,
+                    conversation.getPatientId(),
+                    LocalDateTime.now(),
+                    MessageStatus.READ
+            );
 
-        if (conversation.getPatientId().equals(userId)) {
             conversation.setUnreadCountPatient(0);
+            conversationRepository.save(conversation);
+
         } else {
-            conversation.setUnreadCountDoctor(0);
+            // For PATIENT and DOCTOR roles
+            if (!conversation.getPatientId().equals(userId) && !conversation.getDoctorId().equals(userId)) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
+
+            messageRepository.markConversationMessagesAsRead(
+                    conversationId,
+                    userId,
+                    LocalDateTime.now(),
+                    MessageStatus.READ
+            );
+
+            if (conversation.getPatientId().equals(userId)) {
+                conversation.setUnreadCountPatient(0);
+            } else {
+                conversation.setUnreadCountDoctor(0);
+            }
+            conversationRepository.save(conversation);
         }
-        conversationRepository.save(conversation);
     }
 
     public UnreadCountDto getUnreadCount(Long userId, UserRole userRole) {
-        Long totalUnread = messageRepository.countByReceiverIdAndIsReadFalseAndIsDeletedFalse(userId);
+        Long totalUnread;
+        List<Conversation> conversations;
 
-        List<Conversation> conversations = userRole == UserRole.PATIENT
-                ? conversationRepository.findByPatientIdAndIsDeletedFalseOrderByLastMessageAtDesc(
-                userId, PageRequest.of(0, 100)).getContent()
-                : conversationRepository.findByDoctorIdAndIsDeletedFalseOrderByLastMessageAtDesc(
-                userId, PageRequest.of(0, 100)).getContent();
+        if (userRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Fetch assigned patient IDs
+            List<Long> patientIds = getAssignedPatientIds(userId);
 
-        List<ConversationUnreadDto> conversationUnreads = conversations.stream()
-                .map(conv -> {
-                    Integer unreadCount = userRole == UserRole.PATIENT
-                            ? conv.getUnreadCountPatient()
-                            : conv.getUnreadCountDoctor();
+            if (patientIds.isEmpty()) {
+                return UnreadCountDto.builder()
+                        .totalUnread(0L)
+                        .conversationUnreads(Collections.emptyList())
+                        .build();
+            }
 
-                    return ConversationUnreadDto.builder()
+            // Count unread messages for all assigned patients
+            totalUnread = patientIds.stream()
+                    .mapToLong(patientId ->
+                            messageRepository.countByReceiverIdAndIsReadFalseAndIsDeletedFalse(patientId))
+                    .sum();
+
+            // Get conversations for all assigned patients
+            conversations = conversationRepository
+                    .findByPatientIdInAndIsDeletedFalseOrderByLastMessageAtDesc(
+                            patientIds, PageRequest.of(0, 100))
+                    .getContent();
+
+            // Map unread counts from patient perspective
+            List<ConversationUnreadDto> conversationUnreads = conversations.stream()
+                    .map(conv -> ConversationUnreadDto.builder()
                             .conversationId(conv.getId())
                             .caseId(conv.getCaseId())
-                            .unreadCount(unreadCount)
-                            .build();
-                })
-                .filter(dto -> dto.getUnreadCount() > 0)
-                .collect(Collectors.toList());
+                            .unreadCount(conv.getUnreadCountPatient())
+                            .build())
+                    .filter(dto -> dto.getUnreadCount() > 0)
+                    .collect(Collectors.toList());
 
-        return UnreadCountDto.builder()
-                .totalUnread(totalUnread)
-                .conversationUnreads(conversationUnreads)
-                .build();
+            return UnreadCountDto.builder()
+                    .totalUnread(totalUnread)
+                    .conversationUnreads(conversationUnreads)
+                    .build();
+
+        } else {
+            // For PATIENT and DOCTOR roles
+            totalUnread = messageRepository.countByReceiverIdAndIsReadFalseAndIsDeletedFalse(userId);
+
+            conversations = userRole == UserRole.PATIENT
+                    ? conversationRepository.findByPatientIdAndIsDeletedFalseOrderByLastMessageAtDesc(
+                    userId, PageRequest.of(0, 100)).getContent()
+                    : conversationRepository.findByDoctorIdAndIsDeletedFalseOrderByLastMessageAtDesc(
+                    userId, PageRequest.of(0, 100)).getContent();
+
+            List<ConversationUnreadDto> conversationUnreads = conversations.stream()
+                    .map(conv -> {
+                        Integer unreadCount = userRole == UserRole.PATIENT
+                                ? conv.getUnreadCountPatient()
+                                : conv.getUnreadCountDoctor();
+
+                        return ConversationUnreadDto.builder()
+                                .conversationId(conv.getId())
+                                .caseId(conv.getCaseId())
+                                .unreadCount(unreadCount)
+                                .build();
+                    })
+                    .filter(dto -> dto.getUnreadCount() > 0)
+                    .collect(Collectors.toList());
+
+            return UnreadCountDto.builder()
+                    .totalUnread(totalUnread)
+                    .conversationUnreads(conversationUnreads)
+                    .build();
+        }
     }
 
-    public List<MessageDto> searchMessages(Long conversationId, String query, Long userId) {
+    public List<MessageDto> searchMessages(Long conversationId, String query, Long userId, UserRole userRole) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BusinessException("Conversation not found", HttpStatus.NOT_FOUND));
 
-        if (!conversation.getPatientId().equals(userId) && !conversation.getDoctorId().equals(userId)) {
-            throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+        // Authorization check
+        if (userRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Verify supervisor has access to this patient
+            List<Long> assignedPatientIds = getAssignedPatientIds(userId);
+            if (!assignedPatientIds.contains(conversation.getPatientId())) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
+        } else {
+            // For PATIENT and DOCTOR roles
+            if (!conversation.getPatientId().equals(userId) && !conversation.getDoctorId().equals(userId)) {
+                throw new BusinessException("Access denied", HttpStatus.FORBIDDEN);
+            }
         }
 
         List<Message> messages = messageRepository.searchInConversation(conversationId, query);
@@ -178,12 +331,21 @@ public class MessageService {
     }
 
     @Transactional
-    public void deleteMessage(Long messageId, Long userId) {
+    public void deleteMessage(Long messageId, Long userId, UserRole userRole) {
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new BusinessException("Message not found", HttpStatus.NOT_FOUND));
 
-        if (!message.getSenderId().equals(userId)) {
-            throw new BusinessException("Can only delete own messages", HttpStatus.FORBIDDEN);
+        // Authorization check
+        if (userRole == UserRole.MEDICAL_SUPERVISOR) {
+            // Supervisor can only delete messages they personally sent
+            if (!message.getSenderId().equals(userId) || message.getSenderRole() != UserRole.MEDICAL_SUPERVISOR) {
+                throw new BusinessException("Can only delete own messages", HttpStatus.FORBIDDEN);
+            }
+        } else {
+            // For PATIENT and DOCTOR roles
+            if (!message.getSenderId().equals(userId)) {
+                throw new BusinessException("Can only delete own messages", HttpStatus.FORBIDDEN);
+            }
         }
 
         message.setIsDeleted(true);
@@ -241,7 +403,8 @@ public class MessageService {
                         : message.getContent()
         );
 
-        if (senderRole == UserRole.PATIENT) {
+        // MEDICAL_SUPERVISOR acts on behalf of patient, so increment doctor's unread count
+        if (senderRole == UserRole.PATIENT || senderRole == UserRole.MEDICAL_SUPERVISOR) {
             conversation.setUnreadCountDoctor(conversation.getUnreadCountDoctor() + 1);
         } else {
             conversation.setUnreadCountPatient(conversation.getUnreadCountPatient() + 1);
@@ -285,5 +448,29 @@ public class MessageService {
                 .collect(Collectors.toList()));
 
         return dto;
+    }
+
+    private List<Long> getAssignedPatientIds(Long supervisorId) {
+        try {
+            log.debug("Fetching assigned patient IDs for supervisor: {}", supervisorId);
+            ResponseEntity<ApiResponse<List<Long>>> response =
+                    supervisorServiceClient.getAssignedPatientIds(supervisorId);
+
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                List<Long> patientIds = response.getBody().getData();
+                log.debug("Found {} assigned patients for supervisor {}", patientIds.size(), supervisorId);
+                return patientIds;
+            }
+
+            log.warn("No patient IDs returned for supervisor {}", supervisorId);
+            return Collections.emptyList();
+
+        } catch (Exception e) {
+            log.error("Error fetching assigned patient IDs for supervisor {}: {}", supervisorId, e.getMessage());
+            throw new BusinessException(
+                    "Unable to fetch assigned patients. Please try again later.",
+                    HttpStatus.SERVICE_UNAVAILABLE
+            );
+        }
     }
 }

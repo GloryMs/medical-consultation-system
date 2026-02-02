@@ -148,6 +148,7 @@ public interface SupervisorCouponAllocationRepository extends JpaRepository<Supe
      * Count coupons by supervisor and status
      */
     long countBySupervisorIdAndStatus(Long supervisorId, SupervisorCouponStatus status);
+    long countBySupervisorId(Long supervisorId);
 
     /**
      * Count available coupons for supervisor

@@ -1,6 +1,7 @@
 package com.supervisorservice.feign;
 
 import com.commonlibrary.dto.ApiResponse;
+import com.commonlibrary.dto.ComplaintDto;
 import com.commonlibrary.dto.coupon.*;
 import com.commonlibrary.entity.BeneficiaryType;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -14,7 +15,7 @@ import java.util.List;
  * Used by supervisor-service to validate coupons and get coupon information.
  */
 @FeignClient(name = "admin-service")
-public interface AdminCouponServiceClient {
+public interface AdminServiceClient {
 
     // ==================== Validation ====================
 
@@ -85,4 +86,13 @@ public interface AdminCouponServiceClient {
      */
     @GetMapping("/api/internal/coupons/health")
     ResponseEntity<ApiResponse<String>> healthCheck();
+
+    // ==================== Complaints endpoints ====================
+
+    @GetMapping("/api/admin/complaints/{patientId}")
+    ResponseEntity<ApiResponse<List<ComplaintDto>>> getSupervisorComplaints(
+            @PathVariable Long patientId);
+
+    @PostMapping("/api/admin/complaints")
+    ResponseEntity<ApiResponse<Void>> submitComplaint(@RequestBody ComplaintDto complaintDto);
 }

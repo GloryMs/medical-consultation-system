@@ -7,11 +7,13 @@ import lombok.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserStasDto {
+public class UserStatsDto {
     Long totalUsers;
     Long activeUsers;
-    Long pendingUsers;
+    Long pendingDoctorUsers;
+    Long pendingSupervisorUsers;
     Long doctors;
     Long patients;
     Long admins;
+    Long supervisors;
 }

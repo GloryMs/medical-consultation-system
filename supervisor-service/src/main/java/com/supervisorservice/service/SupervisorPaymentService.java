@@ -3,6 +3,7 @@ package com.supervisorservice.service;
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.CaseDto;
 import com.commonlibrary.dto.PaymentDto;
+import com.commonlibrary.dto.PaymentHistoryDto;
 import com.commonlibrary.dto.ProcessPaymentDto;
 import com.commonlibrary.dto.coupon.*;
 import com.commonlibrary.entity.*;
@@ -13,7 +14,7 @@ import com.supervisorservice.dto.PaymentResponseDto;
 import com.supervisorservice.dto.SupervisorPayConsultationDto;
 import com.supervisorservice.entity.MedicalSupervisor;
 import com.supervisorservice.entity.SupervisorCouponAllocation;
-import com.supervisorservice.feign.AdminCouponServiceClient;
+import com.supervisorservice.feign.AdminServiceClient;
 import com.supervisorservice.feign.PatientServiceClient;
 import com.supervisorservice.feign.PaymentServiceClient;
 import com.supervisorservice.kafka.SupervisorKafkaProducer;
@@ -29,7 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static com.commonlibrary.entity.CaseStatus.IN_PROGRESS;
 
@@ -46,11 +50,12 @@ public class SupervisorPaymentService {
     private final MedicalSupervisorRepository supervisorRepository;
     private final SupervisorPatientAssignmentRepository assignmentRepository;
     private final SupervisorCouponAllocationRepository allocationRepository;
-    private final AdminCouponServiceClient adminCouponClient;
+    private final AdminServiceClient adminCouponClient;
     private final PaymentServiceClient paymentServiceClient;
     private final PatientServiceClient patientServiceClient;
     private final SupervisorKafkaProducer eventProducer;
     private final AppointmentManagementService appointmentManagementService;
+    private final PatientManagementService patientManagementService;
 
     /**
      * Process consultation fee payment
@@ -693,5 +698,84 @@ public class SupervisorPaymentService {
         }
 
         return paymentResponse;
+    }
+
+    // ==================== Payment History ====================
+
+    /**
+     * Get payment history for supervisor
+     * Returns payment history for all assigned patients or specific patient
+     * Supports COUPON, STRIPE, PAYPAL payment methods
+     *
+     * @param userId Supervisor user ID
+     * @param patientId Optional patient ID filter (if null, returns for all assigned patients)
+     * @return List of payment history records
+     */
+    public List<PaymentHistoryDto> getPaymentHistory(Long userId, Long patientId) {
+        log.info("Fetching payment history for supervisor userId: {}, patientId filter: {}",
+                userId, patientId);
+
+        // Get supervisor
+        MedicalSupervisor supervisor = getSupervisorByUserId(userId);
+
+        // Get assigned patient IDs
+        List<Long> assignedPatientIds;
+        if (patientId != null) {
+            // Validate that specified patient is assigned to this supervisor
+            validatePatientAssignment(supervisor.getId(), patientId);
+            assignedPatientIds = List.of(patientId);
+            log.info("Fetching payment history for specific patient: {}", patientId);
+        } else {
+            // Get all assigned patients
+            assignedPatientIds = patientManagementService.getAssignedPatientIds(userId);
+            log.info("Fetching payment history for {} assigned patients", assignedPatientIds.size());
+        }
+
+        // Handle empty case
+        if (assignedPatientIds.isEmpty()) {
+            log.info("No assigned patients found for supervisor {}", userId);
+            return new ArrayList<>();
+        }
+
+        // Fetch payment history for each patient and aggregate
+        List<PaymentHistoryDto> aggregatedHistory = new ArrayList<>();
+
+        for (Long patientIdIter : assignedPatientIds) {
+            try {
+                log.debug("Fetching payment history for patient: {}", patientIdIter);
+
+                ApiResponse<List<PaymentHistoryDto>> response =
+                        paymentServiceClient.getPatientPaymentHistory(patientIdIter);
+
+                if (response != null && response.getData() != null && !response.getData().isEmpty()) {
+                    List<PaymentHistoryDto> patientHistory = response.getData();
+                    aggregatedHistory.addAll(patientHistory);
+                    log.debug("Added {} payment records for patient {}",
+                            patientHistory.size(), patientIdIter);
+                } else {
+                    log.debug("No payment history found for patient {}", patientIdIter);
+                }
+
+            } catch (Exception e) {
+                log.error("Failed to fetch payment history for patient {}: {}",
+                        patientIdIter, e.getMessage());
+                // Continue with other patients - don't fail entire request
+            }
+        }
+
+        // Sort by processed date (most recent first)
+        List<PaymentHistoryDto> sortedHistory = aggregatedHistory.stream()
+                .sorted((h1, h2) -> {
+                    if (h1.getProcessedAt() == null && h2.getProcessedAt() == null) return 0;
+                    if (h1.getProcessedAt() == null) return 1;
+                    if (h2.getProcessedAt() == null) return -1;
+                    return h2.getProcessedAt().compareTo(h1.getProcessedAt());
+                })
+                .collect(Collectors.toList());
+
+        log.info("Successfully fetched {} total payment records for supervisor {}",
+                sortedHistory.size(), userId);
+
+        return sortedHistory;
     }
 }

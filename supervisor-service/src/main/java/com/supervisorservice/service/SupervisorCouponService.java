@@ -10,8 +10,7 @@ import com.commonlibrary.entity.SupervisorCouponStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.supervisorservice.entity.MedicalSupervisor;
 import com.supervisorservice.entity.SupervisorCouponAllocation;
-import com.supervisorservice.entity.SupervisorPatientAssignment;
-import com.supervisorservice.feign.AdminCouponServiceClient;
+import com.supervisorservice.feign.AdminServiceClient;
 import com.supervisorservice.feign.PatientServiceClient;
 import com.supervisorservice.kafka.SupervisorCouponEventProducer;
 import com.supervisorservice.mapper.SupervisorCouponAllocationMapper;
@@ -44,7 +43,7 @@ public class SupervisorCouponService {
     private final SupervisorCouponAllocationRepository allocationRepository;
     private final MedicalSupervisorRepository supervisorRepository;
     private final SupervisorPatientAssignmentRepository assignmentRepository;
-    private final AdminCouponServiceClient adminCouponClient;
+    private final AdminServiceClient adminCouponClient;
     private final PatientServiceClient patientServiceClient;
     private final SupervisorCouponAllocationMapper allocationMapper;
     private final SupervisorCouponEventProducer eventProducer;
@@ -355,7 +354,7 @@ public class SupervisorCouponService {
         MedicalSupervisor supervisor = getSupervisorByUserId(supervisorUserId);
         LocalDateTime now = LocalDateTime.now();
 
-        long total = allocationRepository.countBySupervisorIdAndStatus(supervisor.getId(), null);
+        long total = allocationRepository.countBySupervisorId(supervisor.getId());
         long available = allocationRepository.countBySupervisorIdAndStatus(supervisor.getId(), SupervisorCouponStatus.AVAILABLE);
         long assigned = allocationRepository.countBySupervisorIdAndStatus(supervisor.getId(), SupervisorCouponStatus.ASSIGNED);
         long used = allocationRepository.countBySupervisorIdAndStatus(supervisor.getId(), SupervisorCouponStatus.USED);
@@ -371,7 +370,9 @@ public class SupervisorCouponService {
                 .totalCoupons((int) total)
                 .createdCoupons(0) // Not applicable for supervisor
                 .distributedCoupons((int) (available + assigned))
+                .availableCoupons((int) available)
                 .usedCoupons((int) used)
+                .assignedCoupons((int) assigned)
                 .expiredCoupons((int) expired)
                 .cancelledCoupons((int) cancelled)
                 .expiringSoonCoupons(expiringSoon.size())

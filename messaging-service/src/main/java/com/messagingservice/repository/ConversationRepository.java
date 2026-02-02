@@ -52,4 +52,35 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     Long countByDoctorIdAndStatusAndIsDeletedFalse(
         Long doctorId, ConversationStatus status
     );
+
+    // ============================================
+    // Supervisor-specific queries
+    // ============================================
+
+    /**
+     * Find conversations by list of patient IDs (for supervisors)
+     */
+    Page<Conversation> findByPatientIdInAndIsDeletedFalseOrderByLastMessageAtDesc(
+        List<Long> patientIds, Pageable pageable
+    );
+
+    /**
+     * Find conversations by list of patient IDs with status filter (for supervisors)
+     */
+    List<Conversation> findByPatientIdInAndStatusAndIsDeletedFalseOrderByLastMessageAtDesc(
+        List<Long> patientIds, ConversationStatus status
+    );
+
+    /**
+     * Search conversations by patient IDs (for supervisors)
+     */
+    @Query("SELECT c FROM Conversation c WHERE " +
+           "c.patientId IN :patientIds " +
+           "AND c.isDeleted = false " +
+           "AND (LOWER(c.title) LIKE LOWER(CONCAT('%', :query, '%')) " +
+           "OR LOWER(c.lastMessagePreview) LIKE LOWER(CONCAT('%', :query, '%')))")
+    List<Conversation> searchConversationsByPatientIds(
+        @Param("patientIds") List<Long> patientIds,
+        @Param("query") String query
+    );
 }

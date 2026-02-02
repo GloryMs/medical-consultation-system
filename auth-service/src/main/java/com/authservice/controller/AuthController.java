@@ -4,7 +4,7 @@ import com.authservice.dto.*;
 import com.authservice.service.AuthService;
 import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.UserDto;
-import com.commonlibrary.dto.UserStasDto;
+import com.commonlibrary.dto.UserStatsDto;
 import com.commonlibrary.entity.User;
 import com.commonlibrary.entity.UserRole;
 import com.commonlibrary.entity.UserStatus;
@@ -54,8 +54,8 @@ public class AuthController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<ApiResponse<UserStasDto>> getUserStats(){
-        UserStasDto userStasDto = authService.getUsersStats();
+    public ResponseEntity<ApiResponse<UserStatsDto>> getUserStats(){
+        UserStatsDto userStasDto = authService.getUsersStats();
         return ResponseEntity.ok(ApiResponse.success(userStasDto, "User stats successful"));
     }
 

@@ -51,7 +51,16 @@ public class CouponSummaryDto {
      * Number of coupons expiring soon (within 30 days)
      */
     private Integer expiringSoonCoupons;
-    
+
+    /**
+     * Number of assigned coupons
+     */
+    private Integer assignedCoupons;
+
+    /**
+     * Number of available coupons
+     */
+    private Integer availableCoupons;
     /**
      * Total value of all available coupons
      */
