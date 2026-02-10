@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -166,6 +167,21 @@ public class Doctor extends BaseEntity {
     @Column(name = "certification", length = 255)
     private Set<String> certifications = new HashSet<>();
 
+    // ===== DOCUMENT TRACKING FIELDS =====
+    @Column(name = "documents_submitted", nullable = false)
+    private Boolean documentsSubmitted = false;
+
+    @Column(name = "documents_submitted_at")
+    private LocalDateTime documentsSubmittedAt;
+
+    @Column(name = "profile_completion_percentage")
+    private Integer profileCompletionPercentage = 0;
+
+    // ===== DOCUMENTS RELATIONSHIP =====
+    @OneToMany(mappedBy = "doctor", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @JsonManagedReference
+    private List<DoctorDocument> documents = new ArrayList<>();
+
     // ===== BUSINESS LOGIC METHODS =====
 
     /**
@@ -288,5 +304,67 @@ public class Doctor extends BaseEntity {
      */
     public boolean hasUrgentCapacity() {
         return emergencyMode || workloadPercentage < 80.0;
+    }
+
+    /**
+     * Helper method to check if doctor has all required documents
+     */
+    public boolean hasAllRequiredDocuments() {
+        if (documents == null || documents.isEmpty()) {
+            return false;
+        }
+
+        boolean hasLicense = documents.stream()
+                .anyMatch(d -> d.getDocumentType() == DoctorDocument.DocumentType.LICENSE);
+        boolean hasCertificate = documents.stream()
+                .anyMatch(d -> d.getDocumentType() == DoctorDocument.DocumentType.CERTIFICATE);
+
+        return hasLicense && hasCertificate;
+    }
+
+    /**
+     * Helper method to check if all documents are verified by admin
+     */
+    public boolean areAllDocumentsVerified() {
+        if (documents == null || documents.isEmpty()) {
+            return false;
+        }
+
+        return documents.stream()
+                .filter(d -> d.getDocumentType() == DoctorDocument.DocumentType.LICENSE ||
+                        d.getDocumentType() == DoctorDocument.DocumentType.CERTIFICATE)
+                .allMatch(DoctorDocument::getVerifiedByAdmin);
+    }
+
+    /**
+     * Calculate profile completion percentage
+     */
+    public int calculateProfileCompletion() {
+        int completion = 0;
+
+        // Basic info (20%)
+        if (fullName != null && !fullName.isEmpty()) completion += 5;
+        if (licenseNumber != null && !licenseNumber.isEmpty()) completion += 5;
+        if (email != null && !email.isEmpty()) completion += 5;
+        if (phoneNumber != null && !phoneNumber.isEmpty()) completion += 5;
+
+        // Specialization (20%)
+        if (primarySpecialization != null && !primarySpecialization.isEmpty()) completion += 10;
+        if (subSpecializations != null && !subSpecializations.isEmpty()) completion += 10;
+
+        // Professional info (20%)
+        if (yearsOfExperience != null && yearsOfExperience > 0) completion += 10;
+        if (professionalSummary != null && !professionalSummary.isEmpty()) completion += 10;
+
+        // Pricing (10%)
+        if (hourlyRate != null || caseRate != null) completion += 10;
+
+        // Documents (30%)
+        if (hasAllRequiredDocuments()) {
+            completion += 20;
+            if (areAllDocumentsVerified()) completion += 10;
+        }
+
+        return Math.min(completion, 100);
     }
 }

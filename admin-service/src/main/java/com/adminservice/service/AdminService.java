@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,7 +34,6 @@ public class AdminService {
     private final PatientServiceClient patientServiceClient;
     private final PaymentServiceClient paymentServiceClient;
     private final AuthServiceClient authServiceClient;
-    private final ComplaintRepository complaintRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final StaticContentRepository staticContentRepository;
     private final UserRepository userRepository;
@@ -173,7 +173,7 @@ public class AdminService {
      * @return Complete doctor verification details
      * @throws BusinessException if doctor not found or service unavailable
      */
-    public DoctorVerificationDetailsDto getDoctorVerificationDetails(Long doctorId) {
+    public DoctorVerificationDetailsDto getDoctorVerificationDetails_Old(Long doctorId) {
         try {
             log.info("Fetching verification details for doctor ID: {}", doctorId);
 
@@ -183,6 +183,79 @@ public class AdminService {
 
             if (response.getBody() != null && response.getBody().getData() != null) {
                 DoctorVerificationDetailsDto details = response.getBody().getData();
+                log.info("Successfully retrieved verification details for doctor: {}", details.getFullName());
+                return details;
+            } else {
+                log.error("No data returned from doctor-service for doctor ID: {}", doctorId);
+                throw new BusinessException("Doctor verification details not found", HttpStatus.NOT_FOUND);
+            }
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error fetching doctor verification details for ID {}: {}", doctorId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to retrieve doctor verification details: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    /**
+     * Get Doctor Verification Details (UPDATED VERSION)
+     * Now includes document information
+     */
+    public DoctorVerificationDetailsDto getDoctorVerificationDetails(Long doctorId) {
+        try {
+            log.info("Fetching verification details for doctor ID: {}", doctorId);
+
+            // Call doctor-service via Feign client to get basic details
+            ResponseEntity<ApiResponse<DoctorVerificationDetailsDto>> response =
+                    doctorServiceClient.getDoctorVerificationDetails(doctorId);
+
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                DoctorVerificationDetailsDto details = response.getBody().getData();
+
+                // Fetch documents for this doctor
+                try {
+                    ResponseEntity<ApiResponse<DoctorServiceClient.DoctorDocumentListDto>> documentsResponse =
+                            doctorServiceClient.getDoctorDocuments(doctorId);
+
+                    if (documentsResponse.getBody() != null && documentsResponse.getBody().getData() != null) {
+                        DoctorServiceClient.DoctorDocumentListDto documentList = documentsResponse.getBody().getData();
+
+                        // Convert to nested DTOs for verification details
+                        List<DoctorVerificationDetailsDto.DoctorDocumentDto> documents =
+                                documentList.getDocuments().stream()
+                                        .map(doc -> DoctorVerificationDetailsDto.DoctorDocumentDto.builder()
+                                                .id(doc.getId())
+                                                .documentType(doc.getDocumentType())
+                                                .fileName(doc.getFileName())
+                                                .fileSizeKB(doc.getFileSizeKB())
+                                                .mimeType(doc.getMimeType())
+                                                .uploadedAt(doc.getUploadedAt())
+                                                .verifiedByAdmin(doc.getVerifiedByAdmin())
+                                                .verifiedAt(doc.getVerifiedAt())
+                                                .verificationNotes(doc.getVerificationNotes())
+                                                .downloadUrl(doc.getDownloadUrl())
+                                                .viewUrl(doc.getViewUrl())
+                                                .build())
+                                        .collect(Collectors.toList());
+
+                        details.setDocuments(documents);
+                        details.setHasAllRequiredDocuments(documentList.getHasAllRequiredDocuments());
+                        details.setAllDocumentsVerified(documentList.getAllDocumentsVerified());
+
+                        log.info("Loaded {} documents for doctor {}", documents.size(), doctorId);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch documents for doctor {}: {}", doctorId, e.getMessage());
+                    // Continue without documents rather than failing completely
+                    details.setDocuments(new ArrayList<>());
+                    details.setHasAllRequiredDocuments(false);
+                    details.setAllDocumentsVerified(false);
+                }
+
                 log.info("Successfully retrieved verification details for doctor: {}", details.getFullName());
                 return details;
             } else {

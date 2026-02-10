@@ -3,12 +3,17 @@ package com.adminservice.feign;
 import com.adminservice.dto.DoctorDetailsDto;
 import com.commonlibrary.dto.*;
 import com.commonlibrary.entity.VerificationStatus;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -106,5 +111,97 @@ public interface DoctorServiceClient {
      */
     @GetMapping("/api/doctors-internal/profile/{doctorId}")
     ResponseEntity<ApiResponse<?>> getDoctorProfile(@PathVariable Long doctorId);
+
+    /**
+     * Get documents for a specific doctor
+     * GET /api/doctors-internal/{doctorId}/documents
+     */
+    @GetMapping("/api/doctors-internal/{doctorId}/documents")
+    ResponseEntity<ApiResponse<DoctorDocumentListDto>> getDoctorDocuments(
+            @PathVariable("doctorId") Long doctorId);
+
+    /**
+     * Get document content for viewing
+     * GET /api/doctors-internal/documents/{documentId}/content
+     */
+    @GetMapping("/api/doctors-internal/documents/{documentId}/content")
+    ResponseEntity<byte[]> getDocumentContent(
+            @PathVariable("documentId") Long documentId);
+
+    /**
+     * Download document
+     * GET /api/doctors-internal/documents/{documentId}/download
+     */
+    @GetMapping("/api/doctors-internal/documents/{documentId}/download")
+    ResponseEntity<byte[]> downloadDocument(
+            @PathVariable("documentId") Long documentId);
+
+    /**
+     * Verify a document
+     * PUT /api/doctors-internal/documents/{documentId}/verify
+     */
+    @PutMapping("/api/doctors-internal/documents/{documentId}/verify")
+    ResponseEntity<ApiResponse<Void>> verifyDocument(
+            @PathVariable("documentId") Long documentId,
+            @RequestBody DocumentVerificationDto request);
+
+// ============= DTOs to add to admin-service (create new files or add to existing DTO package) =============
+
+    /**
+     * DTO for document list response
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public class DoctorDocumentListDto {
+        private Long doctorId;
+        private List<DoctorDocumentDto> documents;
+        private Boolean hasAllRequiredDocuments;
+        private Boolean allDocumentsVerified;
+        private Boolean readyForVerification;
+        private Integer totalDocuments;
+        private Integer verifiedDocuments;
+    }
+
+    /**
+     * DTO for single document
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public class DoctorDocumentDto {
+        private Long id;
+        private Long doctorId;
+        private String documentType;
+        private String fileName;
+        private String fileUrl;
+        private Double fileSizeKB;
+        private String mimeType;
+        private Boolean isEncrypted;
+        private Boolean isCompressed;
+        private String description;
+        private LocalDateTime uploadedAt;
+        private Boolean verifiedByAdmin;
+        private LocalDateTime verifiedAt;
+        private Long verifiedBy;
+        private String verificationNotes;
+        private String downloadUrl;
+        private String viewUrl;
+    }
+
+    /**
+     * DTO for document verification request
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public class DocumentVerificationDto {
+        private Boolean verified;
+        private String verificationNotes;
+        private Long verifiedBy; // Admin user ID
+    }
 
 }

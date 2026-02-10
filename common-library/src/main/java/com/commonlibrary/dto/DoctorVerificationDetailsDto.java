@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Set;
+import java.util.List;
 
 /**
  * DTO for Doctor Verification Details
@@ -72,4 +73,33 @@ public class DoctorVerificationDetailsDto {
     // Additional verification info
     private String verificationNotes;
     private String rejectionReason;
+
+    // Add these fields to the class
+    private List<DoctorDocumentDto> documents;
+    private Boolean hasAllRequiredDocuments;
+    private Boolean allDocumentsVerified;
+    private Boolean documentsSubmitted;
+    private LocalDateTime documentsSubmittedAt;
+    private Integer profileCompletionPercentage;
+
+    /**
+     * Nested DTO for document information in verification details
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DoctorDocumentDto {
+        private Long id;
+        private String documentType;
+        private String fileName;
+        private Double fileSizeKB;
+        private String mimeType;
+        private LocalDateTime uploadedAt;
+        private Boolean verifiedByAdmin;
+        private LocalDateTime verifiedAt;
+        private String verificationNotes;
+        private String downloadUrl;
+        private String viewUrl;
+    }
 }

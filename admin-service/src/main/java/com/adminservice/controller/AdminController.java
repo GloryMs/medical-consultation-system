@@ -5,6 +5,7 @@ import com.adminservice.entity.Complaint;
 import com.adminservice.entity.SystemConfig;
 import com.adminservice.feign.AuthServiceClient;
 import com.adminservice.feign.CommonConfigClient;
+import com.adminservice.feign.DoctorServiceClient;
 import com.adminservice.feign.PaymentServiceClient;
 import com.adminservice.service.AdminService;
 import com.adminservice.service.ComplaintService;
@@ -12,8 +13,10 @@ import com.commonlibrary.dto.*;
 import com.commonlibrary.dto.PendingVerificationDto;
 import com.commonlibrary.dto.UserDto;
 import com.commonlibrary.entity.*;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +29,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
+@Slf4j
 public class AdminController {
 
     private final AdminService adminService;
@@ -33,6 +37,7 @@ public class AdminController {
     private final AuthServiceClient authServiceClient;
     private final ComplaintService complaintService;
     private final PaymentServiceClient paymentServiceClient;
+    private final DoctorServiceClient doctorServiceClient;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardDto>> getDashboard() {
@@ -483,5 +488,161 @@ public class AdminController {
     public ResponseEntity<ApiResponse<UserDto>> getUserById(@PathVariable Long userId) {
         UserDto user = adminService.getUserById(userId);
         return ResponseEntity.ok(ApiResponse.success(user));
+    }
+
+
+    /**
+     * Get documents for a specific doctor
+     * GET /api/admin/doctors/{doctorId}/documents
+     */
+    @GetMapping("/doctors/{doctorId}/documents")
+    @Operation(summary = "Get doctor documents", description = "Retrieve all documents uploaded by a doctor")
+    public ResponseEntity<ApiResponse<DoctorServiceClient.DoctorDocumentListDto>> getDoctorDocuments(
+            @PathVariable Long doctorId) {
+
+        log.info("Admin request: Get documents for doctor {}", doctorId);
+
+        try {
+            ResponseEntity<ApiResponse<DoctorServiceClient.DoctorDocumentListDto>> response =
+                    doctorServiceClient.getDoctorDocuments(doctorId);
+
+            return ResponseEntity.ok(response.getBody());
+
+        } catch (Exception e) {
+            log.error("Failed to get documents for doctor {}: {}", doctorId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to retrieve documents: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+
+    /**
+     * View document content
+     * GET /api/admin/doctors/{doctorId}/documents/{documentId}/content
+     */
+    @GetMapping("/doctors/{doctorId}/documents/{documentId}/content")
+    @Operation(summary = "View document", description = "View document content inline")
+    public ResponseEntity<byte[]> viewDocument(
+            @PathVariable Long doctorId,
+            @PathVariable Long documentId) {
+
+        log.info("Admin request: View document {} for doctor {}", documentId, doctorId);
+
+        try {
+            ResponseEntity<byte[]> response = doctorServiceClient.getDocumentContent(documentId);
+            return response;
+
+        } catch (Exception e) {
+            log.error("Failed to view document {}: {}", documentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Download document
+     * GET /api/admin/doctors/{doctorId}/documents/{documentId}/download
+     */
+    @GetMapping("/doctors/{doctorId}/documents/{documentId}/download")
+    @Operation(summary = "Download document", description = "Download document file")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable Long doctorId,
+            @PathVariable Long documentId) {
+
+        log.info("Admin request: Download document {} for doctor {}", documentId, doctorId);
+
+        try {
+            ResponseEntity<byte[]> response = doctorServiceClient.downloadDocument(documentId);
+            return response;
+
+        } catch (Exception e) {
+            log.error("Failed to download document {}: {}", documentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Verify a document
+     * PUT /api/admin/doctors/documents/{documentId}/verify
+     */
+    @PutMapping("/doctors/documents/{documentId}/verify")
+    @Operation(summary = "Verify document", description = "Verify or reject a doctor's document")
+    public ResponseEntity<ApiResponse<Void>> verifyDocument(
+            @RequestHeader("X-User-Id") Long adminUserId,
+            @PathVariable Long documentId,
+            @RequestBody DoctorServiceClient.DocumentVerificationDto verificationDto) {
+
+        log.info("Admin {} verifying document {} - Verified: {}",
+                adminUserId, documentId, verificationDto.getVerified());
+
+        try {
+            // Set the admin user ID who is verifying
+            verificationDto.setVerifiedBy(adminUserId);
+
+            // Call doctor-service to update verification status
+            ResponseEntity<ApiResponse<Void>> response =
+                    doctorServiceClient.verifyDocument(documentId, verificationDto);
+
+            String message = verificationDto.getVerified()
+                    ? "Document verified successfully"
+                    : "Document verification rejected";
+
+            return ResponseEntity.ok(ApiResponse.success(null, message));
+
+        } catch (Exception e) {
+            log.error("Failed to verify document {}: {}", documentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to verify document: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+
+    /**
+     * Bulk verify all documents for a doctor
+     * POST /api/admin/doctors/{doctorId}/documents/verify-all
+     */
+    @PostMapping("/doctors/{doctorId}/documents/verify-all")
+    @Operation(summary = "Verify all documents", description = "Verify all documents for a doctor at once")
+    public ResponseEntity<ApiResponse<String>> verifyAllDocuments(
+            @RequestHeader("X-User-Id") Long adminUserId,
+            @PathVariable Long doctorId,
+            @RequestBody DoctorServiceClient.DocumentVerificationDto verificationDto) {
+
+        log.info("Admin {} verifying all documents for doctor {}", adminUserId, doctorId);
+
+        try {
+            // Get all documents for this doctor
+            ResponseEntity<ApiResponse<DoctorServiceClient.DoctorDocumentListDto>> documentsResponse =
+                    doctorServiceClient.getDoctorDocuments(doctorId);
+
+            if (documentsResponse.getBody() != null && documentsResponse.getBody().getData() != null) {
+                DoctorServiceClient.DoctorDocumentListDto documentList = documentsResponse.getBody().getData();
+
+                int verifiedCount = 0;
+                for (DoctorServiceClient.DoctorDocumentDto doc : documentList.getDocuments()) {
+                    if (!doc.getVerifiedByAdmin()) {
+                        DoctorServiceClient.DocumentVerificationDto dto = DoctorServiceClient.DocumentVerificationDto.builder()
+                                .verified(verificationDto.getVerified())
+                                .verificationNotes(verificationDto.getVerificationNotes())
+                                .verifiedBy(adminUserId)
+                                .build();
+
+                        doctorServiceClient.verifyDocument(doc.getId(), dto);
+                        verifiedCount++;
+                    }
+                }
+
+                String message = String.format("Successfully verified %d documents", verifiedCount);
+                return ResponseEntity.ok(ApiResponse.success(message, message));
+            } else {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("No documents found for doctor", HttpStatus.NOT_FOUND));
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to verify all documents for doctor {}: {}", doctorId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to verify documents: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR));
+        }
     }
 }

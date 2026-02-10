@@ -4,16 +4,23 @@ import com.commonlibrary.dto.*;
 import com.commonlibrary.entity.AppointmentStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.DoctorDetailsDto;
+import com.doctorservice.dto.DoctorDocumentDto;
+import com.doctorservice.dto.DoctorDocumentListDto;
+import com.doctorservice.dto.DocumentVerificationDto;
 import com.doctorservice.entity.Appointment;
 import com.doctorservice.entity.Doctor;
 import com.doctorservice.repository.AppointmentRepository;
+import com.doctorservice.repository.DoctorDocumentRepository;
 import com.doctorservice.repository.DoctorRepository;
+import com.doctorservice.service.DoctorDocumentService;
 import com.doctorservice.service.DoctorService;
 import com.doctorservice.service.InternalDoctorService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,6 +42,7 @@ public class InternalDoctorController {
     private final DoctorRepository doctorRepository;
     private final DoctorService doctorService;
     private final AppointmentRepository appointmentRepository;
+    private final DoctorDocumentService doctorDocumentService;
     
     @GetMapping("/pending-verifications")
     public List<PendingVerificationDto> getPendingVerifications() {
@@ -448,6 +456,88 @@ public class InternalDoctorController {
         }
 
         return ResponseEntity.ok(ApiResponse.success(count));
+    }
+
+    /**
+     * Get documents for a specific doctor (admin access)
+     * GET /api/doctors-internal/{doctorId}/documents
+     */
+    @GetMapping("/{doctorId}/documents")
+    @Operation(summary = "Get doctor documents (Admin)", description = "Admin endpoint to retrieve all documents for a doctor")
+    public ResponseEntity<ApiResponse<DoctorDocumentListDto>> getDoctorDocuments(
+            @PathVariable Long doctorId) {
+
+        log.info("Admin request: Get documents for doctor {}", doctorId);
+
+        DoctorDocumentListDto documents = doctorDocumentService.getDocumentsByDoctorId(doctorId);
+
+        return ResponseEntity.ok(ApiResponse.success(documents));
+    }
+
+    /**
+     * Get document content (admin access)
+     * GET /api/doctors-internal/documents/{documentId}/content
+     */
+    @GetMapping("/documents/{documentId}/content")
+    @Operation(summary = "Get document content (Admin)", description = "Admin endpoint to retrieve document file content")
+    public ResponseEntity<byte[]> getDocumentContent(
+            @PathVariable Long documentId) {
+
+        log.info("Admin request: Get content for document {}", documentId);
+
+        DoctorDocumentDto document = doctorDocumentService.getDocumentById(documentId);
+        byte[] content = doctorDocumentService.getDocumentContent(documentId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(document.getMimeType()));
+        headers.setContentDispositionFormData("inline", document.getFileName());
+        headers.setContentLength(content.length);
+
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
+    /**
+     * Download document (admin access)
+     * GET /api/doctors-internal/documents/{documentId}/download
+     */
+    @GetMapping("/documents/{documentId}/download")
+    @Operation(summary = "Download document (Admin)", description = "Admin endpoint to download document file")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable Long documentId) {
+
+        log.info("Admin request: Download document {}", documentId);
+
+        DoctorDocumentDto document = doctorDocumentService.getDocumentById(documentId);
+        byte[] content = doctorDocumentService.getDocumentContent(documentId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(document.getMimeType()));
+        headers.setContentDispositionFormData("attachment", document.getFileName());
+        headers.setContentLength(content.length);
+
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
+    /**
+     * Verify a document (admin only)
+     * PUT /api/doctors-internal/documents/{documentId}/verify
+     */
+    @PutMapping("/documents/{documentId}/verify")
+    @Operation(summary = "Verify document (Admin)", description = "Admin endpoint to verify or reject a document")
+    public ResponseEntity<ApiResponse<Void>> verifyDocument(
+            @PathVariable Long documentId,
+            @RequestBody DocumentVerificationDto verificationDto) {
+
+        log.info("Admin request: Verify document {} - Verified: {}, By: {}",
+                documentId, verificationDto.getVerified(), verificationDto.getVerifiedBy());
+
+        doctorDocumentService.verifyDocument(documentId, verificationDto);
+
+        String message = verificationDto.getVerified()
+                ? "Document verified successfully"
+                : "Document verification rejected";
+
+        return ResponseEntity.ok(ApiResponse.success(null, message));
     }
 
 }

@@ -76,4 +76,6 @@ public class DoctorProfileDto {
     private String address;
     private String city;
     private String country;
+
+    private Integer profileCompletionPercentage = 0;
 }
