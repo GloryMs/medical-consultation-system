@@ -4,13 +4,13 @@ import com.adminservice.dto.*;
 import com.adminservice.entity.*;
 import com.adminservice.feign.*;
 import com.adminservice.kafka.AdminEventProducer;
-import com.adminservice.repository.ComplaintRepository;
 import com.adminservice.repository.SystemConfigRepository;
 import com.adminservice.repository.StaticContentRepository;
 import com.adminservice.repository.UserRepository;
 import com.commonlibrary.dto.PendingVerificationDto;
 import com.commonlibrary.dto.DoctorDto;
 import com.commonlibrary.dto.*;
+import com.commonlibrary.entity.UserType;
 import com.commonlibrary.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -309,7 +309,7 @@ public class AdminService {
                 .orElseThrow(() -> new BusinessException("Admin user not found", HttpStatus.NOT_FOUND));
         List<NotificationDto> dtos = new ArrayList<>();
         try{
-            dtos = notificationServiceClient.getUserNotifications(adminUser.getId()).getBody().getData();
+            dtos = notificationServiceClient.getUserNotifications(adminUser.getUserId(), UserType.ADMIN).getData();
         } catch (Exception e) {
             log.error(e.getMessage());
         }
@@ -578,9 +578,9 @@ public class AdminService {
         return 99.95; // 99.95%
     }
 
-    public void notifyAdminOfNewDoctor(Long userId, String email) {
+    public void notifyAdminOfNewDoctorOrSupervisor(Long doctorUserId, String role, String email) {
         try{
-            adminEventProducer.sendDoctorRegistrationNotification(userId, email, 0L);
+            adminEventProducer.sendDoctorOrSupervisorRegistrationNotification(doctorUserId, role, email, 1L);
             log.info("New doctor registration requires admin review: {}", email);
         } catch (Exception e) {
             log.error("Failed to send notification about new doctor registration", e);
@@ -890,5 +890,84 @@ public class AdminService {
 
         adminEventProducer.sendDoctorStatusChangeNotification( result.getDoctorId(), result.getDoctorEmail(),
                 result.getFullName(), result.getStatus(), reason, approved);
+    }
+
+    /**
+     * Verify a single document (UPDATED with notifications)
+     * Called from AdminController
+     */
+    public void verifyDoctorDocument(Long documentId,
+                                     DoctorServiceClient.DocumentVerificationDto verificationDto,
+                                     Long adminUserId) {
+        try {
+            log.info("Admin {} verifying document {}", adminUserId, documentId);
+
+            // First get document details to extract doctor info (for notification)
+            // We need to call doctor-service to get doctor details
+            // This is a simplified version - you may need to add a new endpoint to get doctor by document
+
+            // Set the admin user ID who is verifying
+            verificationDto.setVerifiedBy(adminUserId);
+
+            // Call doctor-service to update verification status
+            ResponseEntity<ApiResponse<Void>> response =
+                    doctorServiceClient.verifyDocument(documentId, verificationDto);
+
+            log.info("Document {} verification completed by admin {}", documentId, adminUserId);
+
+            // Note: The notification to doctor is sent from doctor-service when document is verified
+            // This maintains separation of concerns
+
+        } catch (Exception e) {
+            log.error("Failed to verify document {}: {}", documentId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to verify document: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    /**
+     * Verify all documents for a doctor (UPDATED with notifications)
+     */
+    public void verifyAllDoctorDocuments(Long doctorId, DoctorServiceClient.DocumentVerificationDto verificationDto, Long adminUserId) {
+        try {
+            log.info("Admin {} verifying all documents for doctor {}", adminUserId, doctorId);
+
+            // Get all documents for this doctor
+            ResponseEntity<ApiResponse<DoctorServiceClient.DoctorDocumentListDto>> documentsResponse =
+                    doctorServiceClient.getDoctorDocuments(doctorId);
+
+            if (documentsResponse.getBody() != null && documentsResponse.getBody().getData() != null) {
+                DoctorServiceClient.DoctorDocumentListDto documentList = documentsResponse.getBody().getData();
+
+                int verifiedCount = 0;
+                for (DoctorServiceClient.DoctorDocumentDto doc : documentList.getDocuments()) {
+                    if (!doc.getVerifiedByAdmin()) {
+                        DoctorServiceClient.DocumentVerificationDto dto = DoctorServiceClient.DocumentVerificationDto.builder()
+                                .verified(verificationDto.getVerified())
+                                .verificationNotes(verificationDto.getVerificationNotes())
+                                .verifiedBy(adminUserId)
+                                .build();
+
+                        doctorServiceClient.verifyDocument(doc.getId(), dto);
+                        verifiedCount++;
+                    }
+                }
+
+                log.info("Admin {} verified {} documents for doctor {}", adminUserId, verifiedCount, doctorId);
+            }
+
+            // Note: Individual document notifications are sent from doctor-service
+            // The "all documents verified" notification is also sent from doctor-service
+            // when the last required document is verified
+
+        } catch (Exception e) {
+            log.error("Failed to verify all documents for doctor {}: {}", doctorId, e.getMessage(), e);
+            throw new BusinessException(
+                    "Failed to verify documents: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }

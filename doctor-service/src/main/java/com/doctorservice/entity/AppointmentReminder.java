@@ -53,7 +53,7 @@ public class AppointmentReminder extends BaseEntity {
     private Boolean inAppNotificationSent = false;
 
     public enum RecipientType {
-        DOCTOR, PATIENT
+        DOCTOR, PATIENT, SUPERVISOR
     }
 
 }

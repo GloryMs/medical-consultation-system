@@ -1111,7 +1111,10 @@ public class PatientService {
 
         Long doctorId = -1L;
         try{
-            doctorId = medicalCase.getAssignments().get(0).getDoctorId();
+            //Must check the active assignment
+            //doctorId = medicalCase.getAssignments().get(0).getDoctorId();
+            doctorId = medicalCase.getAssignments().stream().filter(P->
+                    P.getStatus().equals(AssignmentStatus.ACCEPTED)).findFirst().get().getDoctorId();
             // 🔥 NEW: Send Kafka event instead of direct notification
             patientEventProducer.sendRescheduleRequestEvent(
                     caseId, patient.getId(), doctorId, dto.getReason());
@@ -1227,7 +1230,9 @@ public class PatientService {
         try {
             // Get doctor ID from case assignments
             if (medicalCase.getAssignments() != null && !medicalCase.getAssignments().isEmpty()) {
-                doctorId = medicalCase.getAssignments().get(0).getDoctorId();
+                //doctorId = medicalCase.getAssignments().get(0).getDoctorId();
+                doctorId = medicalCase.getAssignments().stream().filter(A->
+                        A.getStatus().equals(AssignmentStatus.ACCEPTED)).findFirst().get().getDoctorId();
                 log.debug("Doctor ID extracted from case assignment: {}", doctorId);
 
                 // Send Kafka event to notify doctor
@@ -1670,7 +1675,7 @@ public class PatientService {
                 .orElseThrow(() -> new BusinessException("Patient not found", HttpStatus.NOT_FOUND));
         List<NotificationDto> dtos = new ArrayList<>();
         try{
-            dtos = notificationServiceClient.getUserNotifications(patient.getId()).getBody().getData();
+            dtos = notificationServiceClient.getUserNotifications(patient.getUserId(), UserType.PATIENT).getData();
         } catch (Exception e) {
             log.error(e.getMessage());
         }

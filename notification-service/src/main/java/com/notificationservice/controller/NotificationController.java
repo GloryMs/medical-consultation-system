@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.commonlibrary.entity.UserType;
 
 import java.util.List;
 
@@ -27,32 +28,71 @@ public class NotificationController {
                 .body(ApiResponse.success(notification, "Notification created"));
     }
 
+//    @GetMapping("/user/{userId}")
+//    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(
+//            @PathVariable Long userId) {
+//        List<NotificationDto> notifications = notificationService.getUserNotifications(userId);
+//        return ResponseEntity.ok(ApiResponse.success(notifications));
+//    }
+
+//    @GetMapping("/user/{userId}/unread")
+//    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUnreadNotifications(
+//            @PathVariable Long userId) {
+//        List<NotificationDto> notifications = notificationService.getUnreadNotifications(userId);
+//        return ResponseEntity.ok(ApiResponse.success(notifications));
+//    }
+//
+//    @PutMapping("/{notificationId}/{userId}/read")
+//    public ResponseEntity<ApiResponse<Void>> markAsRead(
+//            @PathVariable Long notificationId,
+//            @PathVariable Long userId) {
+//        notificationService.markAsRead(notificationId, userId);
+//        return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
+//    }
+//
+//    @PutMapping("/user/{userId}/read-all")
+//    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
+//            @PathVariable Long userId) {
+//        notificationService.markAllAsRead(userId);
+//        return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
+//    }
+
+    // NEW ENDPOINT - With UserType
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(
-            @PathVariable Long userId) {
-        List<NotificationDto> notifications = notificationService.getUserNotifications(userId);
+            @PathVariable Long userId,
+            @RequestParam UserType userType) {
+        List<NotificationDto> notifications = notificationService
+                .getUserNotifications(userId, userType);
         return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 
+    // NEW ENDPOINT - With UserType
     @GetMapping("/user/{userId}/unread")
     public ResponseEntity<ApiResponse<List<NotificationDto>>> getUnreadNotifications(
-            @PathVariable Long userId) {
-        List<NotificationDto> notifications = notificationService.getUnreadNotifications(userId);
+            @PathVariable Long userId,
+            @RequestParam UserType userType) {
+        List<NotificationDto> notifications = notificationService
+                .getUnreadNotifications(userId, userType);
         return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 
-    @PutMapping("/{notificationId}/{userId}/read")
+    // NEW ENDPOINT - With UserType
+    @PutMapping("/{notificationId}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @PathVariable Long notificationId,
-            @PathVariable Long userId) {
-        notificationService.markAsRead(notificationId, userId);
+            @RequestParam Long userId,
+            @RequestParam UserType userType) {
+        notificationService.markAsRead(notificationId, userId, userType);
         return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
     }
 
+    // NEW ENDPOINT - With UserType
     @PutMapping("/user/{userId}/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(
-            @PathVariable Long userId) {
-        notificationService.markAllAsRead(userId);
+            @PathVariable Long userId,
+            @RequestParam UserType userType) {
+        notificationService.markAllAsRead(userId, userType);
         return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
 }

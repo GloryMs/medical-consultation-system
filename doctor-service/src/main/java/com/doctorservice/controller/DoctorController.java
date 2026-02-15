@@ -4,6 +4,7 @@ import com.commonlibrary.dto.*;
 import com.commonlibrary.dto.CaseDto;
 import com.commonlibrary.entity.AssignmentStatus;
 import com.commonlibrary.entity.CaseStatus;
+import com.commonlibrary.entity.UserType;
 import com.commonlibrary.entity.VerificationStatus;
 import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
@@ -17,6 +18,7 @@ import com.doctorservice.service.DoctorService;
 import com.doctorservice.service.InternalDoctorService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springdoc.core.converters.models.Pageable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -38,6 +40,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/doctors")
 @RequiredArgsConstructor
+@Slf4j
 public class DoctorController {
 
     private final DoctorService doctorService;
@@ -786,25 +789,107 @@ public class DoctorController {
         return ResponseEntity.ok(ApiResponse.success(doctorPerformance));
     }
 
-    @GetMapping ("/notifications/{userId}")
-    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long userId){
-        List<NotificationDto> notificationsDto = new ArrayList<>();
-        notificationsDto = doctorService.getMyNotificationsByUserId(userId);
-        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+//    @GetMapping ("/notifications/{userId}")
+//    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long userId){
+//        List<NotificationDto> notificationsDto = new ArrayList<>();
+//        notificationsDto = doctorService.getMyNotificationsByUserId(userId);
+//        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+//    }
+//
+//    @PutMapping("/notifications/{notificationId}/{userId}/read")
+//    public ResponseEntity<ApiResponse<Void>> markAsRead(
+//            @PathVariable Long notificationId,
+//            @PathVariable Long userId){
+//        notificationServiceClient.markAsRead(notificationId, userId);
+//        return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
+//    }
+//
+//    @PutMapping("/notifications/{userId}/read-all")
+//    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
+//            @PathVariable  Long userId) {
+//        notificationServiceClient.markAllAsRead(userId);
+//        return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
+//    }
+
+
+
+    // ==================== NOTIFICATION ENDPOINTS ====================
+
+    /**
+     * Get all notifications for a doctor
+     * Frontend calls: /api/doctors/{userId}/notifications
+     */
+    @GetMapping("/{userId}/notifications")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getDoctorNotifications(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        // Security check: ensure user can only access their own notifications
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized access to notifications", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Fetching notifications for doctor userId: {}", userId);
+        List<NotificationDto> notifications = notificationServiceClient.getUserNotifications(userId, UserType.DOCTOR).getData();
+        return ResponseEntity.ok(ApiResponse.success(notifications));
     }
 
-    @PutMapping("/notifications/{notificationId}/{userId}/read")
-    public ResponseEntity<ApiResponse<Void>> markAsRead(
+    /**
+     * Get unread notifications for a doctor
+     * Frontend calls: /api/doctors/{userId}/notifications/unread
+     */
+    @GetMapping("/{userId}/notifications/unread")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUnreadNotifications(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized access",HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Fetching unread notifications for doctor userId: {}", userId);
+        List<NotificationDto> notifications = notificationServiceClient.getUnreadNotifications(userId, UserType.DOCTOR).getData();
+        return ResponseEntity.ok(ApiResponse.success(notifications));
+    }
+
+    /**
+     * Mark a specific notification as read
+     * Frontend calls: PUT /api/doctors/notifications/{notificationId}/read
+     */
+    @PutMapping("/notifications/{notificationId}/read")
+    public ResponseEntity<ApiResponse<Void>> markNotificationAsRead(
             @PathVariable Long notificationId,
-            @PathVariable Long userId){
-        notificationServiceClient.markAsRead(notificationId, userId);
-        return ResponseEntity.ok(ApiResponse.success(null, "Marked as read"));
+            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Marking notification {} as read for doctor userId: {}", notificationId, userId);
+        notificationServiceClient.markAsRead(notificationId, userId, UserType.DOCTOR);
+        return ResponseEntity.ok(ApiResponse.success(null, "Notification marked as read"));
     }
 
-    @PutMapping("/notifications/{userId}/read-all")
-    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
-            @PathVariable  Long userId) {
-        notificationServiceClient.markAllAsRead(userId);
+    /**
+     * Mark all notifications as read for a doctor
+     * Frontend calls: PUT /api/doctors/{userId}/notifications/read-all
+     */
+    @PutMapping("/{userId}/notifications/read-all")
+    public ResponseEntity<ApiResponse<Void>> markAllNotificationsAsRead(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Marking all notifications as read for patient userId: {}", userId);
+        notificationServiceClient.markAllAsRead(userId, UserType.DOCTOR);
         return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
 

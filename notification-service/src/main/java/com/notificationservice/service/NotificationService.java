@@ -10,7 +10,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.commonlibrary.entity.UserType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -25,9 +25,26 @@ public class NotificationService {
 
     @Transactional
     public Notification createNotification(NotificationDto dto) {
+
+        // Validate that new fields are provided
+        if (dto.getReceiverUserId() == null || dto.getReceiverType() == null) {
+            log.error("Missing receiverUserId or receiverType in notification: {}", dto.getTitle());
+            throw new IllegalArgumentException("receiverUserId and receiverType are required");
+        }
+
+        if (dto.getSenderUserId() == null || dto.getSenderType() == null) {
+            log.warn("Missing senderUserId or senderType, using SYSTEM default");
+            dto.setSenderUserId(0L);
+            dto.setSenderType(UserType.SYSTEM);
+        }
+
         Notification notification = Notification.builder()
-                .senderId(dto.getSenderId())
-                .receiverId(dto.getReceiverId())
+                .senderUserId(dto.getSenderUserId())
+                .receiverUserId(dto.getReceiverUserId())
+                .senderType(dto.getSenderType())
+                .receiverType(dto.getReceiverType())
+                //.senderId(dto.getSenderId())
+                //.receiverId(dto.getReceiverId())
                 .type(dto.getType())
                 .title(dto.getTitle())
                 .message(dto.getMessage())
@@ -65,6 +82,24 @@ public class NotificationService {
         }
     }
 
+    // NEW METHOD - With userId and UserType
+    public List<NotificationDto> getUserNotifications(Long userId, UserType userType) {
+        return notificationRepository
+                .findByReceiverUserIdAndReceiverTypeOrderByCreatedAtDesc(userId, userType)
+                .stream()
+                .map(this::convertToNotificationDto)
+                .collect(Collectors.toList());
+    }
+
+    // NEW METHOD - With userId and UserType
+    public List<NotificationDto> getUnreadNotifications(Long userId, UserType userType) {
+        return notificationRepository
+                .findByReceiverUserIdAndReceiverTypeAndIsReadFalseOrderByCreatedAtDesc(userId, userType)
+                .stream()
+                .map(this::convertToNotificationDto)
+                .collect(Collectors.toList());
+    }
+
     public List<NotificationDto> getUserNotifications(Long userId) {
         return notificationRepository.findByReceiverIdOrderByCreatedAtDesc(userId).stream().
                 map(this::convertToNotificationDto).collect(Collectors.toList());
@@ -83,11 +118,13 @@ public class NotificationService {
     }
 
     @Transactional
-    public void markAsRead(Long notificationId, Long userId) {
+    public void markAsRead(Long notificationId, Long userId, UserType userType) {
         Notification notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new RuntimeException("Notification not found"));
 
-        if (!notification.getReceiverId().equals(userId)) {
+        // Verify ownership with both userId and userType
+        if (!notification.getReceiverUserId().equals(userId) ||
+                !notification.getReceiverType().equals(userType)) {
             throw new RuntimeException("Unauthorized access to notification");
         }
 
@@ -96,6 +133,36 @@ public class NotificationService {
         notificationRepository.save(notification);
     }
 
+    @Transactional
+    public void markAllAsRead(Long userId, UserType userType) {
+        List<Notification> unreadNotifications = notificationRepository
+                .findByReceiverUserIdAndReceiverTypeAndIsReadFalseOrderByCreatedAtDesc(userId, userType);
+
+        unreadNotifications.forEach(notification -> {
+            notification.setIsRead(true);
+            notification.setReadAt(LocalDateTime.now());
+        });
+
+        notificationRepository.saveAll(unreadNotifications);
+    }
+
+    @Deprecated
+    @Transactional
+    public void markAsRead(Long notificationId, Long userId) {
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new RuntimeException("Notification not found"));
+
+        // Verify ownership with both userId and userType
+        if (!notification.getReceiverUserId().equals(userId) ) {
+            throw new RuntimeException("Unauthorized access to notification");
+        }
+
+        notification.setIsRead(true);
+        notification.setReadAt(LocalDateTime.now());
+        notificationRepository.save(notification);
+    }
+
+    @Deprecated
     @Transactional
     public void markAllAsRead(Long userId) {
         List<Notification> unreadNotifications = notificationRepository

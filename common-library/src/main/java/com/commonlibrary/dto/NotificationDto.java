@@ -2,9 +2,7 @@ package com.commonlibrary.dto;
 
 import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
-import jakarta.persistence.Column;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import com.commonlibrary.entity.UserType;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -16,9 +14,20 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class NotificationDto {
+
+    // NEW FIELDS
+    private Long senderUserId;
+    private Long receiverUserId;
+    private UserType senderType;
+    private UserType receiverType;
+
     private Long id;
+
+    @Deprecated
     private Long senderId;
+    @Deprecated
     private Long receiverId;
+
     private NotificationType type;
     private String title;
     private String message;

@@ -4,6 +4,7 @@ import com.commonlibrary.exception.BusinessException;
 import com.doctorservice.dto.*;
 import com.doctorservice.entity.Doctor;
 import com.doctorservice.entity.DoctorDocument;
+import com.doctorservice.kafka.DoctorDocumentEventProducer;
 import com.doctorservice.repository.DoctorDocumentRepository;
 import com.doctorservice.repository.DoctorRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class DoctorDocumentService {
     private final DoctorDocumentRepository documentRepository;
     private final DoctorRepository doctorRepository;
     private final DoctorDocumentFileStorageService fileStorageService;
+    private final DoctorDocumentEventProducer documentEventProducer;
 
     /**
      * Upload a document for doctor verification
@@ -86,6 +88,17 @@ public class DoctorDocumentService {
 
             // Update doctor's profile completion
             updateProfileCompletion(doctor);
+
+            // **NEW: Send notification to admin about document upload**
+            documentEventProducer.sendDocumentUploadedNotification(
+                    doctor.getId(),
+                    doctor.getUserId(),
+                    doctor.getFullName(),
+                    doctor.getEmail(),
+                    documentType.name(),
+                    document.getFileName(),
+                    document.getId()
+            );
 
             log.info("Document uploaded successfully for doctor {} - Type: {}, File: {}", 
                     doctor.getId(), documentType, file.getOriginalFilename());
@@ -183,6 +196,11 @@ public class DoctorDocumentService {
         DoctorDocument document = documentRepository.findByIdAndDoctorId(documentId, doctor.getId())
                 .orElseThrow(() -> new BusinessException("Document not found or unauthorized", HttpStatus.NOT_FOUND));
 
+        boolean wasRejected = document.getVerifiedByAdmin() != null &&
+                !document.getVerifiedByAdmin() &&
+                document.getVerificationNotes() != null;
+        String documentType = document.getDocumentType().name();
+
         try {
             // Delete physical file
             fileStorageService.deleteFile(document.getFileUrl());
@@ -193,7 +211,11 @@ public class DoctorDocumentService {
             // Update profile completion (this saves the doctor, which triggers orphan removal)
             updateProfileCompletion(doctor);
 
-            log.info("Document deleted successfully - Doctor: {}, Document ID: {}", doctor.getId(), documentId);
+            log.info("Document deleted successfully - Doctor: {}, Document ID: {}, Was Rejected: {}",
+                    doctor.getId(), documentId, wasRejected);
+
+            // If this was a rejected document, next upload will be a re-upload
+            // Store this info in doctor metadata or handle in upload logic
 
         } catch (Exception e) {
             log.error("Failed to delete document {}: {}", documentId, e.getMessage(), e);
@@ -228,8 +250,14 @@ public class DoctorDocumentService {
 
         log.info("Doctor {} submitted {} documents for review", doctor.getId(), documentCount);
 
-        // TODO: Send notification to admin about new submission
-        // notificationService.notifyAdminAboutDocumentSubmission(doctor);
+        // **NEW: Send notification to admin about submission**
+        documentEventProducer.sendDocumentsSubmittedForReviewNotification(
+                doctor.getId(),
+                doctor.getUserId(),
+                doctor.getFullName(),
+                doctor.getEmail(),
+                (int) documentCount
+        );
 
         return SubmitDocumentsResponseDto.builder()
                 .success(true)
@@ -247,6 +275,10 @@ public class DoctorDocumentService {
         DoctorDocument document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new BusinessException("Document not found", HttpStatus.NOT_FOUND));
 
+        Doctor doctor = document.getDoctor();
+        String documentType = document.getDocumentType().name();
+        boolean wasVerified = verificationDto.getVerified();
+
         document.setVerifiedByAdmin(verificationDto.getVerified());
         document.setVerificationNotes(verificationDto.getVerificationNotes());
         document.setVerifiedBy(verificationDto.getVerifiedBy());
@@ -259,6 +291,31 @@ public class DoctorDocumentService {
 
         log.info("Document {} verification updated by admin {} - Verified: {}", 
                 documentId, verificationDto.getVerifiedBy(), verificationDto.getVerified());
+
+
+        // **NEW: Send notification to doctor about verification result**
+        if (wasVerified) {
+            documentEventProducer.sendDocumentVerifiedNotification(
+                    doctor.getId(),
+                    doctor.getUserId(),
+                    doctor.getFullName(),
+                    doctor.getEmail(),
+                    documentType,
+                    verificationDto.getVerificationNotes()
+            );
+        } else {
+            documentEventProducer.sendDocumentRejectedNotification(
+                    doctor.getId(),
+                    doctor.getUserId(),
+                    doctor.getFullName(),
+                    doctor.getEmail(),
+                    documentType,
+                    verificationDto.getVerificationNotes()
+            );
+        }
+
+        // **NEW: Check if all required documents are now verified**
+        checkAndNotifyAllDocumentsVerified(doctor);
     }
 
     // ============= PRIVATE HELPER METHODS =============
@@ -341,5 +398,41 @@ public class DoctorDocumentService {
                 .downloadUrl(fileStorageService.generateDownloadUrl(document.getId()))
                 .viewUrl(fileStorageService.generateFileUrl(document.getId()))
                 .build();
+    }
+
+    private void checkAndNotifyAllDocumentsVerified(Doctor doctor) {
+        try {
+            // Get all documents for this doctor
+            List<DoctorDocument> documents = documentRepository.findByDoctorId(doctor.getId());
+
+            // Check if all required documents (LICENSE and CERTIFICATE) are verified
+            boolean hasLicense = documents.stream()
+                    .anyMatch(d -> d.getDocumentType() == DoctorDocument.DocumentType.LICENSE);
+            boolean hasCertificate = documents.stream()
+                    .anyMatch(d -> d.getDocumentType() == DoctorDocument.DocumentType.CERTIFICATE);
+
+            if (hasLicense && hasCertificate) {
+                boolean allRequiredVerified = documents.stream()
+                        .filter(d -> d.getDocumentType() == DoctorDocument.DocumentType.LICENSE ||
+                                d.getDocumentType() == DoctorDocument.DocumentType.CERTIFICATE)
+                        .allMatch(DoctorDocument::getVerifiedByAdmin);
+
+                if (allRequiredVerified) {
+                    int totalDocs = documents.size();
+                    documentEventProducer.sendAllDocumentsVerifiedNotification(
+                            doctor.getId(),
+                            doctor.getUserId(),
+                            doctor.getFullName(),
+                            doctor.getEmail(),
+                            totalDocs
+                    );
+
+                    log.info("All required documents verified for doctor {}", doctor.getId());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error checking all documents verified status: {}", e.getMessage(), e);
+            // Don't throw - this is just for notifications
+        }
     }
 }

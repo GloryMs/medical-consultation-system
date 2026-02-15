@@ -3,11 +3,14 @@ package com.doctorservice.kafka;
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
+import com.doctorservice.entity.Doctor;
+import com.doctorservice.feign.PatientServiceClient;
+import com.doctorservice.repository.DoctorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
-
+import com.commonlibrary.entity.UserType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -19,16 +22,23 @@ import java.util.Map;
 public class DoctorEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final DoctorRepository doctorRepository;
+    private final PatientServiceClient patientServiceClient;
 
-    public void SendCaseScheduleUpdate(Long patientId, Long caseId,
+    public void SendCaseScheduleUpdate(Long doctorId, Long patientId, Long caseId,
                                        LocalDateTime appointmentTime, String doctorName) {
+
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new RuntimeException("Doctor not found"));
         // Send notification to notification service
         NotificationDto notification = NotificationDto.builder()
-                .senderId(0L) // System notification
-                .receiverId(patientId)
+                .senderUserId(0L)  // System/Admin
+                .receiverUserId(getPatientUserId(caseId, doctor.getId() ))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Appointment Scheduling")
                 .message("An appointment has been scheduled for your case# " + caseId +
-                        " at: " + appointmentTime +" with Doctor  " + doctorName )
+                        " at: " + appointmentTime +" ,with Doctor  " + doctorName )
                 .type(NotificationType.APPOINTMENT)
                 .sendEmail(true)
                 .build();
@@ -37,11 +47,18 @@ public class DoctorEventProducer {
         log.info("An appointment has been scheduled for your case# {}", caseId);
     }
 
-    public void SendRejectRescheduleRequest(Long patientId, Long caseId, String doctorName, String reason) {
+    public void SendRejectRescheduleRequest(Long doctorId, Long patientId,
+                                            Long caseId, String doctorName, String reason) {
         // Send notification to notification service
+
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new RuntimeException("Doctor not found"));
+
         NotificationDto notification = NotificationDto.builder()
-                .senderId(0L) // System notification
-                .receiverId(patientId)
+                .senderUserId(0L)  // System/Admin
+                .receiverUserId(getPatientUserId(caseId, doctor.getId() ))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Reschedule Request Rejection")
                 .message("Unfortunately Doctor: " + doctorName +
                         ", has rejected your re-schedule request for the case#  " + caseId
@@ -78,10 +95,15 @@ public class DoctorEventProducer {
             kafkaTemplate.send("case-fee-update-topic", feeEvent);
             log.info("Case fee update event sent for case: {} with fee: ${}", caseId, consultationFee);
 
+            Doctor doctor = doctorRepository.findById(doctorId)
+                    .orElseThrow(() -> new RuntimeException("Doctor not found"));
+
             // Send notification to patient about fee being set
             NotificationDto patientNotification = NotificationDto.builder()
-                    .senderId(doctorId)
-                    .receiverId(patientId)
+                    .senderUserId(doctor.getUserId())
+                    .receiverUserId(getPatientUserId(caseId, doctor.getId() ))
+                    .senderType(UserType.DOCTOR)
+                    .receiverType(UserType.PATIENT)
                     .title("Consultation Fee Set")
                     .message(String.format("Your doctor has set the consultation fee"+
                             " of $%.2f for your case: "+ caseId +
@@ -117,10 +139,14 @@ public class DoctorEventProducer {
             log.info("Appointment Cancellation event sent for case: {}, and patient {}",caseId,
                     patientId);
 
+            Doctor doctor = doctorRepository.findById(doctorId)
+                    .orElseThrow(() -> new RuntimeException("Doctor not found"));
             // Send notification to patient about appointment cancellation
             NotificationDto patientNotification = NotificationDto.builder()
-                    .senderId(doctorId)
-                    .receiverId(patientId)
+                    .senderUserId(doctor.getUserId())
+                    .receiverUserId(getPatientUserId(caseId, doctor.getId() ))
+                    .senderType(UserType.DOCTOR)
+                    .receiverType(UserType.PATIENT)
                     .title("Appointment Cancellation")
                     .message("Doctor "+ doctorId +" has cancelled the appointment that was scheduled for "+
                             " your case: "+ caseId +", on: " + appointmentTime +
@@ -170,10 +196,14 @@ public class DoctorEventProducer {
             kafkaTemplate.send("case-report-update-topic", reportExportedEvent);
             log.info("Case medical report update event sent for case: {} with pdf URL: ${}", caseId, pdfUrl);
 
+            Doctor doctor = doctorRepository.findById(doctorId)
+                    .orElseThrow(() -> new RuntimeException("Doctor not found"));
             // Send notification to patient about medical report being ready
             NotificationDto patientNotification = NotificationDto.builder()
-                    .senderId(doctorId)
-                    .receiverId(patientId)
+                    .senderUserId(doctor.getUserId())
+                    .receiverUserId(getPatientUserId(caseId, doctor.getId()))
+                    .senderType(UserType.DOCTOR)
+                    .receiverType(UserType.PATIENT)
                     .title("Medical Report is ready")
                     .message(String.format("Your doctor has finalized the medical report "+
                             " for your case: "+ caseId +
@@ -202,5 +232,15 @@ public class DoctorEventProducer {
             log.error("Error sending appointment reminder: {}", e.getMessage(), e);
             throw e; // Rethrow to allow retry logic
         }
+    }
+
+    private Long getPatientUserId(Long caseId, Long doctorId) {
+        Long patientId = null;
+        try{
+            patientId = patientServiceClient.getCustomPatientInfo( caseId, doctorId ).getBody().getData().getUserId();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return patientId;
     }
 }

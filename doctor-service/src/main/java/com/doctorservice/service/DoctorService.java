@@ -407,7 +407,7 @@ public class DoctorService {
         patientServiceClient.updateCaseStatus(dto.getCaseId(), "SCHEDULED", doctor.getId());
 
         //Send notification to Patient:
-        doctorEventProducer.SendCaseScheduleUpdate(dto.getPatientId(), dto.getCaseId(),
+        doctorEventProducer.SendCaseScheduleUpdate(doctor.getId(), dto.getPatientId(), dto.getCaseId(),
                 dto.getScheduledTime(), doctor.getFullName());
 
         return saved;
@@ -885,7 +885,7 @@ public class DoctorService {
         List<DashboardAppointmentDto> upcomingAppointments = getUpcomingAppointments(doctor.getId());
 
         // Get recent notifications (limit 3)
-        List<NotificationDto> recentNotifications = getMyNotifications(doctor.getId());
+        List<NotificationDto> recentNotifications = getMyNotifications(doctor.getUserId());
 
         return DoctorDashboardDto.builder()
                 .stats(stats)
@@ -944,10 +944,10 @@ public class DoctorService {
                 .build();
     }
 
-    public List<NotificationDto> getMyNotifications(Long patientId){
+    public List<NotificationDto> getMyNotifications(Long doctorUserId){
         List<NotificationDto> dtos = new ArrayList<>();
         try{
-            dtos = notificationServiceClient.getUserNotifications(patientId).getBody().getData().stream().
+            dtos = notificationServiceClient.getUserNotifications(doctorUserId, UserType.DOCTOR).getData().stream().
                     limit(3).collect(Collectors.toList());
         } catch (Exception e) {
             log.error(e.getMessage());
@@ -1156,7 +1156,7 @@ public class DoctorService {
         appointmentReminderService.cancelRemindersForAppointment(appointmentId);
 
         //Send notification to Patient:
-        doctorEventProducer.SendCaseScheduleUpdate(updated.getPatientId(), updated.getCaseId(),
+        doctorEventProducer.SendCaseScheduleUpdate(doctor.getId() ,updated.getPatientId(), updated.getCaseId(),
                 updated.getScheduledTime(), doctor.getFullName());
 
         return updated;
@@ -1282,7 +1282,7 @@ public class DoctorService {
         // ====================================================================
         try {
             //Send notification to Patient:
-                doctorEventProducer.SendCaseScheduleUpdate(updated.getPatientId(), updated.getCaseId(),
+                doctorEventProducer.SendCaseScheduleUpdate(doctor.getId(),updated.getPatientId(), updated.getCaseId(),
                     updated.getScheduledTime(), doctor.getFullName());
 
             log.info("Reschedule notification sent to patient [patientId={}]", appointment.getPatientId());
@@ -1523,6 +1523,9 @@ public class DoctorService {
         log.info("Doctor [userId={}] rejecting reschedule request [requestId={}]",
                 userId, rescheduleRequestId);
 
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("Doctor not found"));
+
         // ====================================================================
         // STEP 1: UPDATE REQUEST STATUS TO REJECTED IN PATIENT SERVICE (Via Feign)
         // ====================================================================
@@ -1543,7 +1546,8 @@ public class DoctorService {
 
         try{
             log.info("Send Kafka Event for Patient: {}", patientId);
-            doctorEventProducer.SendRejectRescheduleRequest(patientId, caseId, doctorName,rejectionReason);
+            doctorEventProducer.SendRejectRescheduleRequest(doctor.getId() ,patientId, caseId,
+                    doctorName,rejectionReason);
         }catch(Exception e){
             log.info("Failed to end Kafka Event for Patient: {}", patientId);
             e.printStackTrace();
@@ -2021,7 +2025,7 @@ public class DoctorService {
                 .orElseThrow(() -> new BusinessException("Doctor not found", HttpStatus.NOT_FOUND));
         List<NotificationDto> dtos = new ArrayList<>();
         try{
-            dtos = notificationServiceClient.getUserNotifications(doctor.getId()).getBody().getData();
+            dtos = notificationServiceClient.getUserNotifications(doctor.getUserId(), UserType.DOCTOR).getData();
         } catch (Exception e) {
             log.error(e.getMessage());
         }

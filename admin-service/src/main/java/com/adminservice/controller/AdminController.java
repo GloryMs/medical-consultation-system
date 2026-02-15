@@ -3,10 +3,7 @@ package com.adminservice.controller;
 import com.adminservice.dto.*;
 import com.adminservice.entity.Complaint;
 import com.adminservice.entity.SystemConfig;
-import com.adminservice.feign.AuthServiceClient;
-import com.adminservice.feign.CommonConfigClient;
-import com.adminservice.feign.DoctorServiceClient;
-import com.adminservice.feign.PaymentServiceClient;
+import com.adminservice.feign.*;
 import com.adminservice.service.AdminService;
 import com.adminservice.service.ComplaintService;
 import com.commonlibrary.dto.*;
@@ -38,6 +35,7 @@ public class AdminController {
     private final ComplaintService complaintService;
     private final PaymentServiceClient paymentServiceClient;
     private final DoctorServiceClient doctorServiceClient;
+    private final NotificationServiceClient notificationServiceClient;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardDto>> getDashboard() {
@@ -199,11 +197,93 @@ public class AdminController {
     }
 
 
-    @GetMapping ("/notifications/{userId}")
-    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long userId){
-        List<NotificationDto> notificationsDto = new ArrayList<>();
-        notificationsDto = adminService.getMyNotificationsByUserId(userId);
-        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+//    @GetMapping ("/notifications/{userId}")
+//    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotification(@PathVariable Long userId){
+//        List<NotificationDto> notificationsDto = new ArrayList<>();
+//        notificationsDto = adminService.getMyNotificationsByUserId(userId);
+//        return ResponseEntity.ok(ApiResponse.success(notificationsDto));
+//    }
+
+
+
+    // ==================== NOTIFICATION ENDPOINTS ====================
+
+    /**
+     * Get all notifications for admin
+     * Frontend calls: /api/admins/{userId}/notifications
+     */
+    @GetMapping("/{userId}/notifications")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getAdminNotifications(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        // Security check: ensure user can only access their own notifications
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized access to notifications", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Fetching notifications for admin userId: {}", userId);
+        List<NotificationDto> notifications = notificationServiceClient.getUserNotifications(userId, UserType.ADMIN).getData();
+        return ResponseEntity.ok(ApiResponse.success(notifications));
+    }
+
+    /**
+     * Get unread notifications for admin
+     * Frontend calls: /api/admins/{userId}/notifications/unread
+     */
+    @GetMapping("/{userId}/notifications/unread")
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUnreadNotifications(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized access",HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Fetching unread notifications for admin userId: {}", userId);
+        List<NotificationDto> notifications = notificationServiceClient.getUnreadNotifications(userId, UserType.ADMIN).getData();
+        return ResponseEntity.ok(ApiResponse.success(notifications));
+    }
+
+    /**
+     * Mark a specific notification as read
+     * Frontend calls: PUT /api/admins/notifications/{notificationId}/read
+     */
+    @PutMapping("/notifications/{notificationId}/read")
+    public ResponseEntity<ApiResponse<Void>> markNotificationAsRead(
+            @PathVariable Long notificationId,
+            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Marking notification {} as read for admin userId: {}", notificationId, userId);
+        notificationServiceClient.markAsRead(notificationId, userId, UserType.ADMIN);
+        return ResponseEntity.ok(ApiResponse.success(null, "Notification marked as read"));
+    }
+
+    /**
+     * Mark all notifications as read for admin
+     * Frontend calls: PUT /api/admins/{userId}/notifications/read-all
+     */
+    @PutMapping("/{userId}/notifications/read-all")
+    public ResponseEntity<ApiResponse<Void>> markAllNotificationsAsRead(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(ApiResponse.error("Unauthorized", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Marking all notifications as read for admin userId: {}", userId);
+        notificationServiceClient.markAllAsRead(userId, UserType.ADMIN);
+        return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
     }
 
     // 26. Get System Metrics - MISSING ENDPOINT

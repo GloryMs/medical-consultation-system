@@ -1,12 +1,17 @@
 package com.supervisorservice.kafka;
 
+import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationType;
+import com.commonlibrary.entity.UserType;
+import com.commonlibrary.exception.BusinessException;
 import com.supervisorservice.entity.MedicalSupervisor;
 import com.supervisorservice.entity.SupervisorCoupon;
 import com.supervisorservice.entity.SupervisorPatientAssignment;
+import com.supervisorservice.feign.DoctorServiceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +42,8 @@ public class SupervisorKafkaProducer {
     private static final String COUPON_EXPIRED = "coupon.expired";
     private static final String COUPON_CANCELLED = "coupon.cancelled";
     private static final String COUPON_EXPIRING_SOON = "coupon.expiring-soon";
+
+    private final DoctorServiceClient doctorService;
     
     /**
      * Send supervisor registered event
@@ -290,8 +297,10 @@ public class SupervisorKafkaProducer {
     public void sendScheduleConfirmationEvent(Long caseId, Long patientId, Long doctorId) {
         // Send notification to Doctor about appointment confirmation
         NotificationDto patientNotification = NotificationDto.builder()
-                .senderId(patientId != null ? patientId : 0L)
-                .receiverId(doctorId)
+                .senderUserId(0L) // System notification
+                .receiverUserId(getDoctorUserId(doctorId))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.DOCTOR)
                 .title("Case appointment Confirmation")
                 .message("Patient has confirmed the appointment for case #" + caseId )
                 .type(NotificationType.APPOINTMENT)
@@ -360,5 +369,20 @@ public class SupervisorKafkaProducer {
 
         kafkaTemplate.send("supervisor.payment.completed", event);
         log.info("Sent supervisor.payment.completed event for case {} amount {}", caseId, amount);
+    }
+
+    private Long getDoctorUserId(Long doctorId) {
+        Long doctorUserId = null;
+        try {
+            ApiResponse<?> response = doctorService.getDoctorById(doctorId).getBody();
+            if (response == null || response.getData() == null) {
+                throw new BusinessException("Doctor not found", HttpStatus.NOT_FOUND);
+            }
+            Map<String, Object> doctorData = (Map<String, Object>) response.getData();
+            doctorUserId = Long.parseLong(doctorData.get("userId").toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return doctorUserId;
     }
 }

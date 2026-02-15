@@ -1,14 +1,20 @@
 package com.patientservice.kafka;
 
+import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
+import com.commonlibrary.exception.BusinessException;
+import com.patientservice.entity.Patient;
+import com.patientservice.feign.DoctorServiceClient;
+import com.patientservice.repository.PatientRepository;
 import com.patientservice.service.SmartCaseAssignmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
-
+import com.commonlibrary.entity.UserType;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,13 +26,21 @@ import java.util.Set;
 public class PatientEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final PatientRepository patientRepository;
+    private final DoctorServiceClient doctorService;
 
     public void sendCaseStatusUpdateEvent(Long caseId, String oldStatus, String newStatus, 
                                         Long patientId, Long doctorId) {
+
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new RuntimeException("Patient not found"));
+
         // Send notification to patient
         NotificationDto patientNotification = NotificationDto.builder()
-                .senderId(doctorId != null ? doctorId : 0L)
-                .receiverId(patientId)
+                .senderUserId(0L)
+                .receiverUserId(patient.getUserId())
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Case Status Updated")
                 .message("Your case #" + caseId + " status has been updated to: " + newStatus)
                 .type(NotificationType.CASE)
@@ -49,9 +63,15 @@ public class PatientEventProducer {
     }
 
     public void sendSubscriptionCreatedEvent(Long patientId, String planType, Double amount) {
+
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new RuntimeException("Patient not found"));
+
         NotificationDto notification = NotificationDto.builder()
-                .senderId(0L)
-                .receiverId(patientId)
+                .senderUserId(0L)
+                .receiverUserId(patient.getUserId())
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Subscription Created")
                 .message("Your " + planType + " subscription has been created successfully for $" + amount)
                 .type(NotificationType.SUBSCRIPTION)
@@ -82,9 +102,15 @@ public class PatientEventProducer {
     }
 
     public void sendRescheduleRequestEvent(Long caseId, Long patientId, Long doctorId, String reason) {
+
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new RuntimeException("Patient not found"));
+
         NotificationDto doctorNotification = NotificationDto.builder()
-                .senderId(patientId)
-                .receiverId(doctorId)
+                .senderUserId(patient.getUserId())
+                .receiverUserId(getDoctorUserId(doctorId))
+                .senderType(UserType.PATIENT)
+                .receiverType(UserType.DOCTOR)
                 .title("Reschedule Request")
                 .message("Patient requested to reschedule case #" + caseId + ". Reason: " + reason)
                 .type(NotificationType.APPOINTMENT)
@@ -98,8 +124,10 @@ public class PatientEventProducer {
     public void sendAssignmentNotification(Long senderId, Long receiverId,
                                            Long caseId, String title, String message) {
         NotificationDto doctorNotification = NotificationDto.builder()
-                .senderId(senderId)
-                .receiverId(receiverId)
+                .senderUserId(0L)
+                .receiverUserId(getDoctorUserId(receiverId))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.DOCTOR)
                 .title(title)
                 .message(message)
                 .type(NotificationType.CASE)
@@ -112,9 +140,15 @@ public class PatientEventProducer {
 
     public void sendCreatePatientBySupervisorNotification(Long senderId, Long receiverId,
                                                           String email, String password) {
+
+        Patient patient = patientRepository.findById(receiverId)
+                .orElseThrow(() -> new RuntimeException("Patient not found"));
+
         NotificationDto doctorNotification = NotificationDto.builder()
-                .senderId(senderId)
-                .receiverId(receiverId)
+                .senderUserId(0L)
+                .receiverUserId(patient.getUserId())
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Account Created")
                 .message("Welcome to MediLink 24 platform, this notification is to inform your that your account with email: "+
                         email +", has been created with temp password: "+ password)
@@ -129,10 +163,12 @@ public class PatientEventProducer {
     public void sendScheduleConfirmationEvent(Long caseId, Long patientId, Long doctorId) {
         // Send notification to Doctor about appointment confirmation
         NotificationDto patientNotification = NotificationDto.builder()
-                .senderId(patientId != null ? patientId : 0L)
-                .receiverId(doctorId)
+                .senderUserId(0L)
+                .receiverUserId(getDoctorUserId(doctorId))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.DOCTOR)
                 .title("Case appointment Confirmation")
-                .message("Patient has confirmed the appointment for case #" + caseId )
+                .message("Patient has confirmed the appointment for case #" + caseId + ", and paid the fees." )
                 .type(NotificationType.APPOINTMENT)
                 .sendEmail(true)
                 .build();
@@ -198,8 +234,10 @@ public class PatientEventProducer {
             notification.put("timestamp", System.currentTimeMillis());
 
             NotificationDto assignmentReminder = NotificationDto.builder()
-                    .senderId(0L)
-                    .receiverId(doctorId)
+                    .senderUserId(0L)
+                    .receiverUserId(getDoctorUserId(doctorId))
+                    .senderType(UserType.SYSTEM)
+                    .receiverType(UserType.DOCTOR)
                     .title(title)
                     .message(message)
                     .type(NotificationType.CASE_ASSIGNMENT_REMINDER)
@@ -231,8 +269,10 @@ public class PatientEventProducer {
             notification.put("timestamp", System.currentTimeMillis());
 
             NotificationDto adminNotification = NotificationDto.builder()
-                    .senderId(0L)
-                    .receiverId(1L)
+                    .senderUserId(0L)
+                    .receiverUserId(1L)
+                    .senderType(UserType.SYSTEM)
+                    .receiverType(UserType.ADMIN)
                     .title(title)
                     .message(message)
                     .type(NotificationType.valueOf(notificationType))
@@ -266,5 +306,20 @@ public class PatientEventProducer {
         } catch (Exception e) {
             log.error("Failed to send patient created event for patientId {}: {}", patientId, e.getMessage());
         }
+    }
+
+    private Long getDoctorUserId(Long doctorId) {
+        Long doctorUserId = null;
+        try {
+            ApiResponse<?> response = doctorService.getDoctorById(doctorId).getBody();
+            if (response == null || response.getData() == null) {
+                throw new BusinessException("Doctor not found", HttpStatus.NOT_FOUND);
+            }
+            Map<String, Object> doctorData = (Map<String, Object>) response.getData();
+            doctorUserId = Long.parseLong(doctorData.get("userId").toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return doctorUserId;
     }
 }

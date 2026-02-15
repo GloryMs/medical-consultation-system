@@ -206,4 +206,7 @@ public interface DoctorServiceClient {
     ResponseEntity<ApiResponse<Void>> confirmAppointment(
             @RequestParam Long caseId, @RequestParam Long patientId, @RequestParam Long doctorId);
 
+    @GetMapping("/api/doctors-internal/{doctorId}")
+    ResponseEntity<ApiResponse<?>> getDoctorById(@PathVariable Long doctorId);
+
 }

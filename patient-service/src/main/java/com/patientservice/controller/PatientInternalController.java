@@ -155,6 +155,15 @@ public class PatientInternalController {
         return ResponseEntity.ok(ApiResponse.success(caseDetails));
     }
 
+    @GetMapping("/patient/{patientId}")
+    public ResponseEntity<ApiResponse<Long>> getPatientUserId(
+            @PathVariable Long patientId) {
+        Long patientUserId = null;
+        patientUserId = patientRepository.findById(patientId).isPresent() ?
+                patientRepository.findById(patientId).get().getUserId() : null;
+        return ResponseEntity.ok(ApiResponse.success(patientUserId));
+    }
+
     /**
      * Get case metrics for admin dashboard
      */

@@ -1,11 +1,12 @@
 package com.supervisorservice.controller;
 
 import com.commonlibrary.dto.NotificationDto;
+import com.commonlibrary.entity.UserType;
 import com.supervisorservice.dto.ApiResponse;
 import com.supervisorservice.dto.CreateSupervisorProfileRequest;
 import com.commonlibrary.dto.SupervisorProfileDto;
 import com.supervisorservice.dto.UpdateSupervisorProfileRequest;
-import com.supervisorservice.service.SupervisorNotificationService;
+import com.supervisorservice.feign.NotificationServiceClient;
 import com.supervisorservice.service.SupervisorProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,7 +33,7 @@ import java.util.List;
 public class SupervisorProfileController {
     
     private final SupervisorProfileService profileService;
-    private final SupervisorNotificationService notificationService;
+    private final NotificationServiceClient notificationServiceClient;
     
     /**
      * Create supervisor profile
@@ -124,26 +124,107 @@ public class SupervisorProfileController {
     //========== Notifications ==========
 
 
-    @GetMapping ("/notifications/{userId}")
-    public ResponseEntity<com.commonlibrary.dto.ApiResponse<List<NotificationDto>>> getNotification(
-            @PathVariable Long userId){
-        List<NotificationDto> notificationsDto = new ArrayList<>();
-        notificationsDto = notificationService.getMyNotifications(userId);
-        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(notificationsDto));
+//    @GetMapping ("/notifications/{userId}")
+//    public ResponseEntity<com.commonlibrary.dto.ApiResponse<List<NotificationDto>>> getNotification(
+//            @PathVariable Long userId){
+//        List<NotificationDto> notificationsDto = new ArrayList<>();
+//        notificationsDto = notificationService.getMyNotifications(userId);
+//        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(notificationsDto));
+//    }
+//
+//    @PutMapping("/notifications/{notificationId}/{userId}/read")
+//    public ResponseEntity<com.commonlibrary.dto.ApiResponse<Void>> markAsRead(
+//            @PathVariable Long notificationId,
+//            @PathVariable Long userId){
+//        notificationService.markAsRead(notificationId, userId);
+//        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(null, "Marked as read"));
+//    }
+//
+//    @PutMapping("/notifications/{userId}/read-all")
+//    public ResponseEntity<com.commonlibrary.dto.ApiResponse<Void>> markAllAsRead(
+//            @PathVariable  Long userId) {
+//        notificationService.markAllAsRead(userId);
+//        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(null, "All notifications marked as read"));
+//    }
+
+
+    // ==================== NOTIFICATION ENDPOINTS ====================
+
+    /**
+     * Get all notifications for supervisor
+     * Frontend calls: /api/supervisors/{userId}/notifications
+     */
+    @GetMapping("/{userId}/notifications")
+    public ResponseEntity<com.commonlibrary.dto.ApiResponse<List<NotificationDto>>> getSupervisorNotifications(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        // Security check: ensure user can only access their own notifications
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(com.commonlibrary.dto.ApiResponse.error("Unauthorized access to notifications", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Fetching notifications for supervisor userId: {}", userId);
+        List<NotificationDto> notifications = notificationServiceClient.getUserNotifications(userId, UserType.MEDICAL_SUPERVISOR).getData();
+        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(notifications));
     }
 
-    @PutMapping("/notifications/{notificationId}/{userId}/read")
-    public ResponseEntity<com.commonlibrary.dto.ApiResponse<Void>> markAsRead(
+    /**
+     * Get unread notifications for supervisor
+     * Frontend calls: /api/supervisors/{userId}/notifications/unread
+     */
+    @GetMapping("/{userId}/notifications/unread")
+    public ResponseEntity<com.commonlibrary.dto.ApiResponse<List<NotificationDto>>> getUnreadNotifications(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(com.commonlibrary.dto.ApiResponse.error("Unauthorized access",HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Fetching unread notifications for supervisor userId: {}", userId);
+        List<NotificationDto> notifications = notificationServiceClient.getUnreadNotifications(userId, UserType.MEDICAL_SUPERVISOR).getData();
+        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(notifications));
+    }
+
+    /**
+     * Mark a specific notification as read
+     * Frontend calls: PUT /api/supervisors/notifications/{notificationId}/read
+     */
+    @PutMapping("/notifications/{notificationId}/read")
+    public ResponseEntity<com.commonlibrary.dto.ApiResponse<Void>> markNotificationAsRead(
             @PathVariable Long notificationId,
-            @PathVariable Long userId){
-        notificationService.markAsRead(notificationId, userId);
-        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(null, "Marked as read"));
+            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(com.commonlibrary.dto.ApiResponse.error("Unauthorized", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Marking notification {} as read for supervisor userId: {}", notificationId, userId);
+        notificationServiceClient.markAsRead(notificationId, userId, UserType.MEDICAL_SUPERVISOR);
+        return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(null, "Notification marked as read"));
     }
 
-    @PutMapping("/notifications/{userId}/read-all")
-    public ResponseEntity<com.commonlibrary.dto.ApiResponse<Void>> markAllAsRead(
-            @PathVariable  Long userId) {
-        notificationService.markAllAsRead(userId);
+    /**
+     * Mark all notifications as read for supervisor
+     * Frontend calls: PUT /api/supervisors/{userId}/notifications/read-all
+     */
+    @PutMapping("/{userId}/notifications/read-all")
+    public ResponseEntity<com.commonlibrary.dto.ApiResponse<Void>> markAllNotificationsAsRead(
+            @PathVariable Long userId,
+            @RequestHeader("X-User-Id") Long requestUserId) {
+
+        if (!userId.equals(requestUserId)) {
+            return ResponseEntity.status(403)
+                    .body(com.commonlibrary.dto.ApiResponse.error("Unauthorized", HttpStatus.BAD_REQUEST));
+        }
+
+        log.info("Marking all notifications as read for supervisor userId: {}", userId);
+        notificationServiceClient.markAllAsRead(userId, UserType.MEDICAL_SUPERVISOR);
         return ResponseEntity.ok(com.commonlibrary.dto.ApiResponse.success(null, "All notifications marked as read"));
     }
 

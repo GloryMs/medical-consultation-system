@@ -14,10 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
+import com.commonlibrary.entity.UserType;
 
 /**
  * Kafka consumer for coupon events from admin-service.
@@ -39,8 +38,8 @@ public class AdminCouponEventConsumer {
     @KafkaListener(
             topics = CouponKafkaTopics.COUPON_DISTRIBUTED,
             groupId = CouponKafkaTopics.SUPERVISOR_SERVICE_GROUP,
-            containerFactory = "couponKafkaListenerContainerFactory"
-    )
+            containerFactory = "couponKafkaListenerContainerFactory")
+
     @Transactional
     public void handleCouponDistributed(CouponDistributionEvent event) {
         try {

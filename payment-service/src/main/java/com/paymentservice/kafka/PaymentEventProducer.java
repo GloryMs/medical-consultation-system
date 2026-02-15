@@ -2,8 +2,10 @@ package com.paymentservice.kafka;
 
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationType;
+import com.commonlibrary.entity.UserType;
 import com.paymentservice.entity.Payment;
 import com.paymentservice.entity.Subscription;
+import com.paymentservice.feign.PatientServiceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -31,13 +33,16 @@ public class PaymentEventProducer {
     private static final String CONSULTATION_FEE_UPDATED_TOPIC = "consultation-fee-updated";
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final PatientServiceClient patientServiceClient;
 
     public void sendPaymentCompletedEvent(Long patientId, Long doctorId, Long caseId,
                                           String paymentType, Double amount, String transactionId) {
         // Send notification to notification service
         NotificationDto notification = NotificationDto.builder()
-                .senderId(0L) // System notification
-                .receiverId(patientId)
+                .senderUserId(0L)
+                .receiverUserId(getPatientUserId(patientId))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Payment Successful")
                 .message("Your " + paymentType + " payment of $" + amount + " has been processed successfully. Transaction ID: " + transactionId)
                 .type(NotificationType.PAYMENT)
@@ -68,8 +73,10 @@ public class PaymentEventProducer {
 
         // Send notification to notification service
         NotificationDto notification = NotificationDto.builder()
-                .senderId(0L) // System notification
-                .receiverId(payment.getPatientId())
+                .senderUserId(0L)
+                .receiverUserId(getPatientUserId(payment.getPatientId()))
+                .senderType(UserType.SYSTEM)
+                .receiverType(UserType.PATIENT)
                 .title("Payment Successful")
                 .message("Your " + payment.getPaymentType().toString() + " payment of $" +
                         payment.getAmount() + " has been processed successfully. Transaction ID: " +
@@ -247,5 +254,15 @@ public class PaymentEventProducer {
 
         kafkaTemplate.send(CONSULTATION_FEE_UPDATED_TOPIC, event);
         log.info("Sent consultation fee updated event for specialization: {}", specialization);
+    }
+
+    private Long getPatientUserId(Long patientId) {
+        Long patientUserId = null;
+        try{
+            patientUserId = patientServiceClient.getPatientUserId( patientId ).getBody().getData().getUserId();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return patientUserId;
     }
 }

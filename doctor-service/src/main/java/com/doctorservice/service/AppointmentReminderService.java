@@ -1,11 +1,13 @@
 package com.doctorservice.service;
 
+import com.commonlibrary.entity.UserType;
 import com.doctorservice.config.AppointmentReminderConfig;
 import com.doctorservice.entity.Appointment;
 import com.doctorservice.entity.AppointmentReminder;
 import com.doctorservice.entity.AppointmentReminder.RecipientType;
 import com.doctorservice.entity.ReminderStatus;
 import com.doctorservice.entity.Doctor;
+import com.doctorservice.feign.PatientServiceClient;
 import com.doctorservice.kafka.DoctorEventProducer;
 import com.doctorservice.repository.AppointmentReminderRepository;
 import com.doctorservice.repository.AppointmentRepository;
@@ -33,6 +35,7 @@ public class AppointmentReminderService {
     private final DoctorRepository doctorRepository;
     private final DoctorEventProducer eventProducer;
     private final AppointmentReminderConfig config;
+    private final PatientServiceClient patientService;
 
     /**
      * Create reminders when appointment is confirmed
@@ -167,6 +170,10 @@ public class AppointmentReminderService {
     private void sendReminder(AppointmentReminder reminder) {
         Appointment appointment = reminder.getAppointment();
 
+        Long patientId = appointment.getPatientId();
+        Long doctorUserId = appointment.getDoctor().getUserId();
+        Long caseId = appointment.getCaseId();
+
         // Double-check appointment is still confirmed
         if (appointment.getStatus() != AppointmentStatus.CONFIRMED) {
             log.info("Appointment {} no longer confirmed, cancelling reminder {}", 
@@ -198,18 +205,27 @@ public class AppointmentReminderService {
             }
         }
 
+
         if (reminder.getRecipientType() == RecipientType.PATIENT) {
             message.append(String.format("\n👨‍⚕️ Doctor: Dr. %s\n", appointment.getDoctor().getFullName()));
-        } else {
+        }
+        else if (reminder.getRecipientType() == RecipientType.DOCTOR) {
+            message.append(String.format("\n👨👤️ Supervisor:  Supervisor N/A\n"));
+        }
+        else {
             message.append(String.format("\n👤 Patient ID: %d\n", appointment.getPatientId()));
         }
 
         message.append("\nPlease be ready 5 minutes before the scheduled time.");
 
+
         // Send via Kafka
         NotificationDto notification = NotificationDto.builder()
-                .senderId(0L) // System
-                .receiverId(reminder.getRecipientUserId())
+                .senderUserId(0L) // System
+                .receiverUserId(reminder.getRecipientType() == RecipientType.PATIENT?
+                        getPatientUserId(caseId, patientId): doctorUserId)
+                .senderType(UserType.ADMIN)
+                .receiverType(reminder.getRecipientType() == RecipientType.PATIENT? UserType.PATIENT : UserType.DOCTOR)
                 .title(String.format("Appointment Reminder - %s", timeUntil))
                 .message(message.toString())
                 .type(NotificationType.APPOINTMENT)
@@ -228,6 +244,16 @@ public class AppointmentReminderService {
 
         log.info("Sent reminder {} for appointment {} to {} ({})", 
                 reminder.getId(), appointment.getId(), recipientType, timeUntil);
+    }
+
+    private Long getPatientUserId(Long caseId, Long doctorId) {
+        Long patientId = null;
+        try{
+            patientId = patientService.getCustomPatientInfo( caseId, doctorId ).getBody().getData().getUserId();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return patientId;
     }
 
     /**

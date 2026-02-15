@@ -1,15 +1,19 @@
 // 1. AdminEventProducer class
 package com.adminservice.kafka;
 
+import com.adminservice.feign.DoctorServiceClient;
+import com.commonlibrary.dto.ApiResponse;
 import com.commonlibrary.dto.DoctorStatusEvent;
 import com.commonlibrary.dto.NotificationDto;
 import com.commonlibrary.entity.NotificationPriority;
 import com.commonlibrary.entity.NotificationType;
+import com.commonlibrary.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
-
+import com.commonlibrary.entity.UserType;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -19,23 +23,27 @@ import java.util.Map;
 public class AdminEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final DoctorServiceClient doctorService;
 
     /**
      * Send notification to admin when new doctor registers
      */
-    public void sendDoctorRegistrationNotification(Long doctorUserId, String doctorEmail, Long adminUserId) {
+    public void sendDoctorOrSupervisorRegistrationNotification(Long userId, String role,
+                                                               String email, Long adminUserId) {
         try {
             NotificationDto adminNotification = NotificationDto.builder()
-                    .senderId(0L) // System notification
-                    .receiverId(adminUserId)
-                    .title("New Doctor Registration - Action Required")
+                    .senderUserId(0L) // System notification
+                    .receiverUserId(1L)
+                    .senderType(UserType.SYSTEM)
+                    .receiverType(UserType.ADMIN)
+                    .title("New " + role +" Registration - Action Required")
                     .message(String.format(
-                        "A new doctor has registered and requires your review:\n\n" +
+                        "A new " + role +" has registered and requires your review:\n\n" +
                         "Email: %s\n" +
                         "User ID: %s\n\n" +
                         "Please review their credentials and verify their account to activate their profile.",
-                        doctorEmail,
-                        doctorUserId
+                            email,
+                            userId
                     ))
                     .type(NotificationType.DOCTOR_REGISTRATION)
                     .sendEmail(true)
@@ -43,11 +51,11 @@ public class AdminEventProducer {
                     .build();
 
             kafkaTemplate.send("notification-topic", adminNotification);
-            log.info("Doctor registration notification sent to admin {} for doctor: {}", 
-                    adminUserId, doctorEmail);
+            log.info( role +"  registration notification sent to admin {} for "+ role +": {}",
+                    adminUserId, email);
 
         } catch (Exception e) {
-            log.error("Error sending doctor registration notification: {}", e.getMessage(), e);
+            log.error("Error sending "+ role +" registration notification: {}", e.getMessage(), e);
         }
     }
 
@@ -58,8 +66,10 @@ public class AdminEventProducer {
                                              String doctorName, Long adminUserId) {
         try {
             NotificationDto reminderNotification = NotificationDto.builder()
-                    .senderId(0L)
-                    .receiverId(adminUserId)
+                    .senderUserId(0L) // System notification
+                    .receiverUserId(1L)
+                    .senderType(UserType.SYSTEM)
+                    .receiverType(UserType.ADMIN)
                     .title("Doctor Verification Reminder")
                     .message(String.format(
                         "Doctor profile is still pending verification:\n\n" +
@@ -91,8 +101,10 @@ public class AdminEventProducer {
                                                  String reason, Boolean approved) {
         try {
             NotificationDto statusNotification = NotificationDto.builder()
-                    .senderId(0L)
-                    .receiverId(doctorId) // Send to doctor
+                    .senderUserId(0L) // System notification
+                    .receiverUserId(getDoctorUserId(doctorId))
+                    .senderType(UserType.SYSTEM)
+                    .receiverType(UserType.DOCTOR)
                     .title("Account Status Update")
                     .message(String.format(
                         "Hello Dr. %s,\n\n" +
@@ -144,8 +156,10 @@ public class AdminEventProducer {
         try {
             NotificationType notificationType = NotificationType.valueOf(type);
             NotificationDto urgentNotification = NotificationDto.builder()
-                    .senderId(0L)
-                    .receiverId(adminUserId)
+                    .senderUserId(0L) // System notification
+                    .receiverUserId(1L)
+                    .senderType(UserType.SYSTEM)
+                    .receiverType(UserType.ADMIN)
                     .title(title)
                     .message(message)
                     .type(notificationType)
@@ -177,5 +191,20 @@ public class AdminEventProducer {
         } catch (Exception e) {
             log.error("Error sending admin system event: {}", e.getMessage(), e);
         }
+    }
+
+    private Long getDoctorUserId(Long doctorId) {
+        Long doctorUserId = null;
+        try {
+            ApiResponse<?> response = doctorService.getDoctorById(doctorId).getBody();
+            if (response == null || response.getData() == null) {
+                throw new BusinessException("Doctor not found", HttpStatus.NOT_FOUND);
+            }
+            Map<String, Object> doctorData = (Map<String, Object>) response.getData();
+            doctorUserId = Long.parseLong(doctorData.get("userId").toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return doctorUserId;
     }
 }

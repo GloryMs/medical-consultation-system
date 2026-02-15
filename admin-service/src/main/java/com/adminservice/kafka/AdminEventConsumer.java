@@ -1,7 +1,6 @@
 package com.adminservice.kafka;
 
 import com.adminservice.service.AdminService;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -28,9 +27,12 @@ public class AdminEventConsumer {
             
             log.info("New user registered: {}, role: {}", email, role);
             
-            // Send admin notification for new doctor registrations
+            // Send admin notification for new doctor/supervisor registrations
             if ("DOCTOR".equals(role)) {
-                adminService.notifyAdminOfNewDoctor(userId, email);
+                adminService.notifyAdminOfNewDoctorOrSupervisor(userId, role, email);
+            }
+            else if ("SUPERVISOR".equals(role)) {
+                adminService.notifyAdminOfNewDoctorOrSupervisor(userId, role, email);
             }
 
             

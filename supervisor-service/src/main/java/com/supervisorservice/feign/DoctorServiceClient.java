@@ -91,4 +91,7 @@ public interface DoctorServiceClient {
     ResponseEntity<ApiResponse<List<AppointmentDto>>> getPatientAppointmentsByStatus(
             @PathVariable("patientId") Long patientId,
             @PathVariable("status") AppointmentStatus status);
+
+    @GetMapping("/api/doctors-internal/{doctorId}")
+    ResponseEntity<ApiResponse<?>> getDoctorById(@PathVariable Long doctorId);
 }
