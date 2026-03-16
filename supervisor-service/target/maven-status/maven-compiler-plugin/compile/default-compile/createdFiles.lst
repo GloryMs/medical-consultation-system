@@ -115,7 +115,6 @@ com\supervisorservice\repository\CouponRedemptionRepository.class
 com\supervisorservice\repository\SupervisorPatientAssignmentRepository.class
 com\supervisorservice\dto\AppointmentFilterDto$AppointmentFilterDtoBuilder.class
 com\supervisorservice\dto\ApiResponse$ApiResponseBuilder.class
-com\supervisorservice\service\SupervisorNotificationService.class
 com\supervisorservice\exception\CouponExpiredException.class
 com\supervisorservice\repository\SupervisorSettingsRepository.class
 com\supervisorservice\controller\SupervisorSettingsController.class

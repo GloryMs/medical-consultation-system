@@ -99,13 +99,17 @@ services:
     container_name: medical-redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/var/lib/redis/data
     networks:
       - medical-network
+    command: redis-server --appendonly yes --requirepass ""
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
 #################################### Micro-Services #####################################
   # Service Discovery
@@ -418,6 +422,8 @@ services:
 # Volumes for persistent data
 volumes:
   kafka-data:
+    driver: local
+  redis-data:
     driver: local
 #  postgres_data_lib:
 #  pgadmin_data:
